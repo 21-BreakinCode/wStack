@@ -63,7 +63,8 @@ The argument is `--task <task_id>`. The task folder is `$vault/$tasks_dir/<task_
 |---|---|
 | `drafting`, `awaiting-approval` | Confirmation. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/confirmation.md` and follow it. |
 | `executing`, `waiting-user` | Execute. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/execute.md` and follow it. |
-| `verifying`, `awaiting-deliver-approval` | The Verify and Deliver stages are written in later reference files in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/`. If the file for the stage is not there, tell the user the stage is not available yet and stop. |
+| `verifying` | Verify. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` and follow it. |
+| `awaiting-deliver-approval` | The Deliver stage is not available yet. Tell the user and stop. |
 | `delivered`, `cancelled` | Tell the user the task is closed. Stop. |
 
 Change `status` only with `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" status <value>`.
