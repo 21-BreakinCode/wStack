@@ -30,7 +30,7 @@ fi
 # A listing page holds at most 1000 keys. Delete it and list again until the prefix is empty.
 previous_listing="" deleted_count=0
 for _round in $(seq 1 1000); do
-  keys_json="$(cf r2 objects list --bucket-name "$bucket" --prefix "$prefix" --per-page 1000 | jq -c --arg prefix "$prefix" '[.[].key | select(startswith($prefix))]')"
+  keys_json="$(cf r2 objects list --bucket-name "$bucket" --prefix "$prefix" --per-page 1000 | jq -c --arg prefix "$prefix" 'if type == "array" then [.[].key | select(startswith($prefix))] | .[:1000] else error("cf list output is not a JSON array") end')"
   if [ "$keys_json" = "[]" ]; then
     if [ "$deleted_count" = 0 ]; then echo "nothing found under $prefix"; else echo "deleted $deleted_count objects under $prefix"; fi
     exit 0

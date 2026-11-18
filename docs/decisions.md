@@ -117,6 +117,8 @@ Result:
 - `cf auth whoami` exits 0 in both states. Only the JSON field `.authenticated` tells the state. When logged in, it prints `"authenticated": true` (confirmed in Task 12).
 - `cf r2 buckets create` takes the bucket name as `--name`, not as a positional argument (confirmed in Task 12).
 - `cf r2 objects bulk-delete --bucket-name <bucket> --body '<JSON array of keys>'` sends the key list (confirmed with `--dry-run`). `cf r2 objects list` prints a JSON array, and `[]` when the prefix is empty.
+- Non-interactive `bulk-delete` aborts at a confirm prompt unless it gets `--force` (confirmed in a live run in Task 12).
+- `cf r2 objects list --per-page 1000` is accepted as a flag (confirmed with `--dry-run`). A real listing of 1000 keys is not confirmed. The live run listed one object.
 - cf real command words are plural only: `objects`, `buckets`. The singular forms `cf r2 object` and `cf r2 bucket` do not exist. cf has no `rm` or `remove` alias and no raw API command.
 - cf accepts global flags between command words, for example `cf --profile p r2 buckets delete --help` and `cf r2 --profile p buckets delete --help`.
 

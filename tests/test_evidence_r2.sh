@@ -75,4 +75,26 @@ fresh_log
 bash "$delete" --task-id "$task_id" --bucket bkt --dry-run >/dev/null
 assert "delete dry-run logs no call" '[ ! -s "$FAKE_LOG" ]'
 
+# delete safety branches
+one_key_listing="[{\"key\":\"evidence/$task_id/a.webp\"}]"
+fresh_log
+assert "delete fails when bulk-delete fails" '! FAKE_CF_LIST="$one_key_listing" FAKE_CF_BULK_FAIL=1 bash "$delete" --task-id "$task_id" --bucket bkt >/dev/null 2>&1'
+
+fresh_log
+assert "delete exits 1 when the same keys stay listed" '! FAKE_CF_LIST="$one_key_listing" FAKE_CF_LIST_EVERY_TIME=1 bash "$delete" --task-id "$task_id" --bucket bkt >/dev/null 2>&1'
+assert "same-keys case stops after one bulk-delete" '[ "$(grep -c "bulk-delete" "$FAKE_LOG")" = 1 ]'
+
+fresh_log
+assert "delete exits 1 when list output is not an array" '! FAKE_CF_LIST="{\"error\":1}" bash "$delete" --task-id "$task_id" --bucket bkt >/dev/null 2>&1'
+assert "non-array list: no bulk-delete" '! grep -q "bulk-delete" "$FAKE_LOG"'
+
+fresh_log
+page_one="$(jq -nc --arg p "evidence/$task_id/" '[range(1500) | {key: ($p + "f\(.).txt")}]')"
+page_two="$(jq -nc --arg p "evidence/$task_id/" '[range(1000; 1500) | {key: ($p + "f\(.).txt")}]')"
+multi_out="$(FAKE_CF_LISTS="$page_one"$'\n'"$page_two" bash "$delete" --task-id "$task_id" --bucket bkt)"
+assert "multi-round: two bulk-deletes" '[ "$(grep -c "bulk-delete" "$FAKE_LOG")" = 2 ]'
+assert "multi-round: every body holds at most 1000 keys" '[ "$(grep "bulk-delete" "$FAKE_LOG" | sed "s/.*--body \(.*\) --force$/\1/" | jq -s "map(length) | max")" = 1000 ]'
+assert "multi-round: first body is 1000 keys, second is 500" '[ "$(grep "bulk-delete" "$FAKE_LOG" | sed "s/.*--body \(.*\) --force$/\1/" | jq -sc "map(length)")" = "[1000,500]" ]'
+assert "multi-round: reports 1500 deleted" '[[ "$multi_out" == *"deleted 1500 objects"* ]]'
+
 finish
