@@ -32,7 +32,7 @@ The text log is the main evidence. The user reads the exact data from it.
 
 ### Web check
 
-1. Serve a local page with `python3 -m http.server --bind 127.0.0.1 <port>` in the build folder. Run it in the background and stop it when the check ends.
+1. Serve a local page with `python3 -m http.server --bind 127.0.0.1 <port>` in the build folder. Run it in the background and stop it when the check ends. Playwright CLI blocks `file://` URLs, so never open a file path directly.
 2. Open the page: `playwright-cli -s <slug> open <url>`.
 3. When the plan asks for phone width, run `playwright-cli -s <slug> resize 375 800`.
 4. Start the video: `playwright-cli -s <slug> video-start /tmp/wstack-evidence/<task_id>/raw/<name>.webm`.
@@ -40,7 +40,9 @@ The text log is the main evidence. The user reads the exact data from it.
 6. Stop the video: `playwright-cli -s <slug> video-stop`.
 7. Close the session: `playwright-cli -s <slug> close`.
 
-Use the task slug for `<slug>`, so parallel tasks do not share a browser.
+Use the task slug for `<slug>`, so parallel tasks do not share a browser. To read the page width, run `playwright-cli -s <slug> --raw eval "() => document.documentElement.scrollWidth"`. It prints the bare number.
+
+`video-start` needs the Playwright ffmpeg build. If it fails with "Executable doesn't exist ... ffmpeg", tell the user to run `npx playwright install ffmpeg`. Do not run it yourself.
 
 ### Terminal check
 
@@ -72,5 +74,3 @@ List every evidence file under `## Evidence` in `review.md`. Use one line for ea
 Every check has at least one line. A failed check keeps its line with `fail`.
 
 Done when each check in the verification plan has a file in the working folder and a line in `review.md`.
-
-<!-- verify against docs/decisions.md S2 -->
