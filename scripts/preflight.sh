@@ -88,8 +88,12 @@ check_r2() {
   if [ -z "$node_found" ] || ! node_accepted_by_cf "$node_found"; then
     echo "OLD node ${node_found:-unknown} (need $CF_NODE_RANGE): mise use -g node@26"; failed=1
   fi
-  if command -v cf >/dev/null 2>&1 && ! cf auth whoami >/dev/null 2>&1; then
-    missing 'cf auth' 'cf auth login'
+  if command -v cf >/dev/null 2>&1; then
+    # S4: logged-out `cf auth whoami` exits 0 and prints {"authenticated": false, ...}
+    local whoami_json authenticated
+    whoami_json="$(cf auth whoami 2>/dev/null || true)"
+    authenticated="$(printf '%s' "$whoami_json" | jq -r '.authenticated' 2>/dev/null || true)"
+    [ "$authenticated" = "true" ] || missing 'cf auth' 'cf auth login'
   fi
 }
 

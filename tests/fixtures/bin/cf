@@ -1,3 +1,12 @@
 #!/usr/bin/env bash
+# Fake cf. FAKE_CF_AUTH=loggedin|loggedout sets what "cf auth whoami" prints. Both exit 0, like real cf 1.0.0-rc.1.
 echo "cf $*" >> "${FAKE_LOG:-/dev/null}"
+case "$*" in
+  "--version") echo "1.0.0-rc.1" ;;
+  "auth whoami")
+    case "${FAKE_CF_AUTH:-}" in
+      loggedin) echo '{"authenticated": true, "profile": {"name": "default"}}' ;;
+      loggedout) echo '{"authenticated": false, "error": "Not logged in", "profile": {"name": "default"}}' ;;
+    esac ;;
+esac
 exit 0
