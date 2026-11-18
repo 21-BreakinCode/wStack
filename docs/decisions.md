@@ -142,23 +142,25 @@ Result:
 - `${user_config.vault_path}` is replaced in skill text when a value is set. It stays literal when no value is set.
 - `${CLAUDE_PLUGIN_ROOT}` is replaced in skill text.
 - `claude plugin eval` has no `--settings` flag and ignored the env var `CLAUDE_PLUGIN_OPTION_vault_path`. No mechanism found for plugin config in eval.
-- Env fallback test: result `env-blocked` for `WSTACK_VAULT_PATH`. See below.
+- Env route for eval: see the two runs below.
 
-Env fallback test (plugin `tests/spikes/eval-env`, skill `probe` runs `echo "VAULT=$..."` with Bash, grader checks the reply):
-```
-tests/spikes/clean-env.sh env WSTACK_VAULT_PATH=/tmp/wstack-env-probe claude plugin eval tests/spikes/eval-env --runs 1 --trust-plugin --no-publish --ablation none --allow-tools Bash --json out.json
--> reply "VAULT=" (empty), score 0     (without --allow-tools Bash the reply said Bash was gated)
-```
-Result: `env-blocked`. A variable set in the operator shell does not reach the eval child.
+Env test: plugin `tests/spikes/eval-env`, skill `probe` runs `echo "WSTACK=$WSTACK_VAULT_PATH EVAL=$EVAL_WSTACK_VAULT_PATH"` with Bash and replies with the line. Two committed cases: `shell-env` (no `env:` key) and `case-env` (`prompt.md` has `env: {EVAL_WSTACK_VAULT_PATH: /tmp/wstack-env-probe}`).
 
-What the eval child does receive: the case frontmatter key `env:` in `prompt.md`. The tool rejects other names: `case "probe" execution.env key "WSTACK_VAULT_PATH" is not allowed - only EVAL_* keys can be set from case.yaml`. With `env: {EVAL_VAULT_PATH: /tmp/wstack-env-probe}` and the skill echoing `$EVAL_VAULT_PATH`:
+Run 1, operator shell sets the variable:
 ```
-tests/spikes/clean-env.sh claude plugin eval tests/spikes/eval-env --runs 1 --trust-plugin --no-publish --ablation none --allow-tools Bash --json out.json
--> reply "VAULT=/tmp/wstack-env-probe", score 1
+tests/spikes/clean-env.sh env WSTACK_VAULT_PATH=/tmp/wstack-env-probe claude plugin eval tests/spikes/eval-env --case shell-env --runs 1 --trust-plugin --no-publish --ablation none --allow-tools Bash --json out.json
+-> reply "WSTACK= EVAL=", score 0
 ```
-`scaffold_script` is not a prompt.md key in this version, so I did not test it.
+Run 2, case `env:` key sets the variable:
+```
+tests/spikes/clean-env.sh claude plugin eval tests/spikes/eval-env --case case-env --runs 1 --trust-plugin --no-publish --ablation none --allow-tools Bash --json out.json
+-> reply "WSTACK= EVAL=/tmp/wstack-env-probe", score 1
+```
+An earlier attempt to put `WSTACK_VAULT_PATH` in the case `env:` key failed with: `execution.env key "WSTACK_VAULT_PATH" is not allowed - only EVAL_* keys can be set from case.yaml`.
 
-Effect on plan: In eval runs, `WSTACK_*` variables do not arrive. Skills read `WSTACK_VAULT_PATH` and `WSTACK_TASKS_DIR` first, then `EVAL_WSTACK_VAULT_PATH` and `EVAL_WSTACK_TASKS_DIR`. Eval cases set the `EVAL_*` names in the case `env:` block. I tested the `EVAL_*` route with the name `EVAL_VAULT_PATH`. The prefix rule in the error message covers the longer names.
+Result: `env-blocked` for a `WSTACK_*` variable set in the operator shell (run 1). The `EVAL_WSTACK_VAULT_PATH` name set in the case `env:` key reaches the eval child (run 2). I ran no `EVAL_WSTACK_TASKS_DIR` case.
+
+Effect on plan: Eval cases set `EVAL_WSTACK_VAULT_PATH` in the case `env:` block. Skills read `WSTACK_VAULT_PATH` first, then `EVAL_WSTACK_VAULT_PATH`. For `WSTACK_TASKS_DIR`, the same `EVAL_WSTACK_TASKS_DIR` route is untested. The first eval that needs it must confirm it.
 
 ## S10: Bare skill name
 
