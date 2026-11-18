@@ -10,7 +10,7 @@ Run the four steps in this order.
 
 1. Behavior check. Run each check in the spec's `## Verification plan`. For each check, run the evidence skill. It saves the evidence in `/tmp/wstack-evidence/<task_id>/` and writes one line per check under `## Evidence` in `review.md`: `- <check> → <file> → pass|fail`. A check whose only evidence is command output still gets a line. Save the output as a file in that folder. If a check fails, go to "A check fails".
 2. Rollback check. Find the undo method for the work type in the spec. Confirm that it works. Write the undo steps under `## Decisions` in `review.md`. If no working undo exists, treat it as a failed check.
-3. Final review. Start the reviewer agent in `${CLAUDE_PLUGIN_ROOT}/agents/reviewer.md`. It writes its findings into `review.md`. If the file is not there, stop with the reason `missing agents/reviewer.md`, as in "Stop for the user".
+3. Final review. Dispatch the `wstack:reviewer` agent defined in `${CLAUDE_PLUGIN_ROOT}/agents/reviewer.md`. Give it the task folder and the change (a diff file or a git range). It writes its findings into `review.md` and sets both finding counts. If the file is not there, stop with the reason `missing agents/reviewer.md`, as in "Stop for the user".
 4. Review page. Run the review-page skill to build `review.html` in the task folder. If the skill is not there, stop with the reason `missing review-page skill`, as in "Stop for the user".
 
 After step 3, set `blocking_findings` and `non_blocking_findings` in the `review.md` frontmatter to the counts. A blocking finding is a spec mismatch, a correctness bug, or a security problem. Go to "A check fails" for each open blocking finding. A non-blocking finding (design or test coverage) does not stop the task.
