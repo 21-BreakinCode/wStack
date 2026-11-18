@@ -4,8 +4,6 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]:-$0}")/lib/frontmatter.sh"
 
-status_values="drafting awaiting-approval executing waiting-user verifying awaiting-deliver-approval delivered cancelled"
-
 mode=set
 if [ "${1:-}" = "--append" ]; then mode=append; shift; fi
 if [ "$#" -ne 3 ]; then echo "usage: frontmatter-set.sh [--append] <file> <key> <value>" >&2; exit 2; fi
@@ -19,8 +17,8 @@ if [ "$mode" = append ]; then
 fi
 
 if [ "$key" = status ]; then
-  case " $status_values " in
-    *" $value "*) ;;
+  case "$value" in
+    drafting|awaiting-approval|executing|waiting-user|verifying|awaiting-deliver-approval|delivered|cancelled) ;;
     *) echo "invalid status: $value" >&2; exit 1 ;;
   esac
 fi

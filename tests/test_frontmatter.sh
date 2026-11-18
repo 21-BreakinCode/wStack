@@ -36,6 +36,8 @@ before="$(cat "$sample")"
 rc=0; bash "$repo_root/scripts/frontmatter-set.sh" "$sample" status done 2>/dev/null || rc=$?
 assert "set script rejects bad status" '[ "$rc" = "1" ]'
 assert "file unchanged after bad status" '[ "$(cat "$sample")" = "$before" ]'
+rc=0; bash "$repo_root/scripts/frontmatter-set.sh" "$sample" status "drafting awaiting-approval" 2>/dev/null || rc=$?
+assert "set script rejects multi-word status" '[ "$rc" = "1" ] && [ "$(cat "$sample")" = "$before" ]'
 rc=0; bash "$repo_root/scripts/frontmatter-set.sh" "$sample" status verifying || rc=$?
 assert "set script accepts good status" '[ "$rc" = "0" ] && [ "$(fm_get "$sample" status)" = "verifying" ]'
 bash "$repo_root/scripts/frontmatter-set.sh" --append "$sample" stopped_for_user '{"at":"x","reason":"y"}'
