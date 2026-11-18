@@ -55,10 +55,19 @@ worktree create: .result.workspace.workspace_id = "w2"
                  .result.worktree.branch        = "wstack/spike"
 workspace create: .result.workspace.workspace_id = "w3", .result.root_pane.pane_id = "w3:p1"
                   (keys: root_pane, tab, type, workspace)
-agent prompt: .result.agent.agent_status = "done"; the pane showed "OK"
+agent prompt: .result.agent.agent_status = "done", and the pane showed "OK"
 agent start --remote-control: argv ["claude","--remote-control","wstack-rc-spike"], pane showed "/remote-control is active"
 pane run w3:p1 'echo TASK=$WSTACK_TASK_ID'  ->  TASK=x
 ```
+
+Trust prompt, from the first `agent start spike --kind claude --pane w2:p1 -- --name spike` in the new worktree:
+```
+{"error":{"code":"agent_not_ready","message":"agent spike is blocked during startup and is not ready for prompts"},"id":"cli:agent:start"}
+herdr agent read spike --source recent-unwrapped --lines 40   ->   "Is this a project you created or one you trust?"  "> No, exit"  "Yes, I trust this folder"
+herdr pane send-keys w2:p1 Down Enter
+herdr agent list   ->   "agent_status":"idle","interactive_ready":true,"name":"spike"   (about 6 seconds later)
+```
+The agent name stays registered after the error.
 
 Result:
 - Ids: workspace `.result.workspace.workspace_id`, root pane `.result.root_pane.pane_id`, worktree path `.result.worktree.path` (also `.result.workspace.worktree.checkout_path`). Both `worktree create` and `workspace create` return `root_pane`.
@@ -66,11 +75,11 @@ Result:
 - `agent start` accepts `--remote-control <name>` after `--`. The flag passes through to claude.
 - `--session wstack-test` works for the workspace, worktree, agent, and pane subcommands.
 - Surprise 1: the worktree lands in `~/.herdr/worktrees/<repo>/<branch-with-dash>`, not next to the repo.
-- Surprise 2: in a folder claude has not trusted yet, `agent start` fails with `agent_not_ready: agent spike is blocked during startup`. The trust prompt is the cause. The agent name stays registered. Send `herdr pane send-keys <pane> Down Enter` to accept, then the agent works. Launch scripts must handle this first-run prompt.
+- Surprise 2: the first `agent start` in an untrusted folder fails. See the trust prompt block in Output.
 - `herdr worktree remove --workspace <id> --force` removed the worktree. It only accepts the worktree workspace (the workspace made by `workspace create` gives `not_linked_worktree`).
 - A fresh named session lists no workspace. The first TUI attach adds `w1`.
 
-Effect on plan: Launch scripts take ids from the JSON paths above. Scripts call herdr through a wrapper that adds `--session "$WSTACK_HERDR_SESSION"` when that variable is set. Scripts must handle the trust prompt.
+Effect on plan: Launch scripts take ids from the JSON paths above. Scripts call herdr through a wrapper that adds `--session "$WSTACK_HERDR_SESSION"` when that variable is set. launch-task.sh: after `agent start` returns `agent_not_ready`, run `herdr agent read <name> --source recent-unwrapped --lines 40`. If the text shows "Yes, I trust this folder", run `herdr pane send-keys <pane> Down Enter`, then poll `herdr agent list` until the agent shows `"interactive_ready":true`. I did not test `herdr agent wait` for the polling step.
 
 ## S6: herdr persistence
 
@@ -112,25 +121,44 @@ Command:
 ```
 tests/spikes/clean-env.sh claude -p "/start-task" --plugin-dir tests/spikes/cfg-plugin \
   --settings '{"pluginConfigs":{"wstack":{"options":{"vault_path":"/tmp/vault-A"}}}}'
-tests/spikes/clean-env.sh claude plugin eval . --runs 1 --no-publish --trust-plugin   (inside tests/spikes/cfg-plugin)
+tests/spikes/clean-env.sh claude plugin eval tests/spikes/cfg-plugin --runs 1 --no-publish --trust-plugin --ablation none --json eval1.json
+CLAUDE_PLUGIN_OPTION_vault_path=/tmp/envv tests/spikes/clean-env.sh claude plugin eval tests/spikes/cfg-plugin --runs 1 --no-publish --trust-plugin --ablation none --json eval2.json
+tests/spikes/clean-env.sh claude -p "/start-task" --plugin-dir tests/spikes/cfg-plugin </dev/null
+tests/spikes/clean-env.sh claude plugin eval --help   (lists no --settings option)
 ```
+The eval case (`tests/spikes/cfg-plugin/evals/s9`) sends `/start-task`. I read the reply from the `--json` file. Line 3 of the output below came from the `-p` command with no settings. Lines 4 and 5 came from the first and second eval commands.
 
 Output:
 ```
 with --settings: VAULT=/tmp/vault-A
                  ROOT=/Users/.../tests/spikes/cfg-plugin
-without settings: VAULT=${user_config.vault_path}
-plugin eval (no settings flag exists): VAULT=${user_config.vault_path}
-plugin eval with env CLAUDE_PLUGIN_OPTION_vault_path=/tmp/envv: VAULT=${user_config.vault_path}
+without settings (-p): VAULT=${user_config.vault_path}
+plugin eval, no settings flag exists (first eval command): VAULT=${user_config.vault_path}
+plugin eval with env CLAUDE_PLUGIN_OPTION_vault_path=/tmp/envv (second eval command): VAULT=${user_config.vault_path}
 ```
 
 Result:
 - `claude -p --plugin-dir`: `--settings '{"pluginConfigs":{"<plugin name>":{"options":{...}}}}'` works. It writes nothing to the user's settings.
 - `${user_config.vault_path}` is replaced in skill text when a value is set. It stays literal when no value is set.
 - `${CLAUDE_PLUGIN_ROOT}` is replaced in skill text.
-- `claude plugin eval` has no `--settings` flag and ignored the env var `CLAUDE_PLUGIN_OPTION_vault_path`. No mechanism found for eval.
+- `claude plugin eval` has no `--settings` flag and ignored the env var `CLAUDE_PLUGIN_OPTION_vault_path`. No mechanism found for plugin config in eval.
+- Env fallback test: result `env-blocked` for `WSTACK_VAULT_PATH`. See below.
 
-Effect on plan: Use the fallback for eval runs. Skills read `WSTACK_VAULT_PATH` and `WSTACK_TASKS_DIR` first, and tests set them. I did not test whether these variables reach the eval child process. Task authors must check that when they write the first eval.
+Env fallback test (plugin `tests/spikes/eval-env`, skill `probe` runs `echo "VAULT=$..."` with Bash, grader checks the reply):
+```
+tests/spikes/clean-env.sh env WSTACK_VAULT_PATH=/tmp/wstack-env-probe claude plugin eval tests/spikes/eval-env --runs 1 --trust-plugin --no-publish --ablation none --allow-tools Bash --json out.json
+-> reply "VAULT=" (empty), score 0     (without --allow-tools Bash the reply said Bash was gated)
+```
+Result: `env-blocked`. A variable set in the operator shell does not reach the eval child.
+
+What the eval child does receive: the case frontmatter key `env:` in `prompt.md`. The tool rejects other names: `case "probe" execution.env key "WSTACK_VAULT_PATH" is not allowed - only EVAL_* keys can be set from case.yaml`. With `env: {EVAL_VAULT_PATH: /tmp/wstack-env-probe}` and the skill echoing `$EVAL_VAULT_PATH`:
+```
+tests/spikes/clean-env.sh claude plugin eval tests/spikes/eval-env --runs 1 --trust-plugin --no-publish --ablation none --allow-tools Bash --json out.json
+-> reply "VAULT=/tmp/wstack-env-probe", score 1
+```
+`scaffold_script` is not a prompt.md key in this version, so I did not test it.
+
+Effect on plan: In eval runs, `WSTACK_*` variables do not arrive. Skills read `WSTACK_VAULT_PATH` and `WSTACK_TASKS_DIR` first, then `EVAL_WSTACK_VAULT_PATH` and `EVAL_WSTACK_TASKS_DIR`. Eval cases set the `EVAL_*` names in the case `env:` block. I tested the `EVAL_*` route with the name `EVAL_VAULT_PATH`. The prefix rule in the error message covers the longer names.
 
 ## S10: Bare skill name
 
@@ -138,7 +166,7 @@ Command: `tests/spikes/clean-env.sh claude -p "/start-task" --plugin-dir tests/s
 
 Output: both printed the skill's lines.
 
-Result: `bare-works`. I tested in `-p` mode only, not in an interactive session. A bare name could clash with another plugin's skill of the same name.
+Result: `bare-works`. I tested in `-p` mode only, not in an interactive session. A bare name can clash with another plugin's skill of the same name.
 
 Effect on plan: Docs can show `/start-task`. The `wstack:` prefix stays valid.
 
@@ -150,4 +178,4 @@ Output: the fetched Cloudflare pages state no user count. The search summary say
 
 Result: 50 users. Source: https://www.cloudflare.com/plans/zero-trust-services/ (the pricing page, confirmed only through a search summary, not read directly). ASSUME: the limit is still 50 today. Confirm in the Cloudflare dashboard before relying on it.
 
-Effect on plan: Spec section 17 item 7 can say 50 users. A solo or small-team setup stays well under it.
+Effect on plan: Spec section 17 item 7 reads "50 users (unconfirmed: from a search summary, the pricing page returned 403)".
