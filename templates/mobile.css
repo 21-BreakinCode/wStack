@@ -24,6 +24,6 @@
 }
 .wstack-nav a:hover { text-decoration: underline; }
 @media (max-width: 420px) { .wstack-nav a { font-size: 14px; padding: 0 4px; } }
-h2[id] { scroll-margin-top: 56px; }
+h2[id] { scroll-margin-top: 100px; }
 /* The toolbar (Theme, Mode, Reply) sits at top: 12px in the nav's corner. Move it below the nav so nothing covers Reply. */
 body .am-toolbar { top: 56px; }

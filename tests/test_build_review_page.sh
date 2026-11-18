@@ -25,7 +25,7 @@ page_probe() {  # <page> <width> <js arrow function> [screenshot png]
   server_pid=$!
   for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fs -o /dev/null "http://127.0.0.1:$port/$(basename "$page")" && break; sleep 0.5; done
   playwright-cli -s "$session" open "http://127.0.0.1:$port/$(basename "$page")" >/dev/null 2>&1 || true
-  playwright-cli -s "$session" resize "$width" 800 >/dev/null 2>&1 || true
+  playwright-cli -s "$session" resize "$width" 500 >/dev/null 2>&1 || true
   result="$(playwright-cli -s "$session" --raw eval "$js" 2>&1 || true)"
   [ -z "$shot" ] || playwright-cli -s "$session" screenshot --filename "$shot" >/dev/null 2>&1 || true
   playwright-cli -s "$session" close >/dev/null 2>&1 || true
@@ -36,6 +36,9 @@ page_probe() {  # <page> <width> <js arrow function> [screenshot png]
 nav_problems_js='(width) => [...document.querySelectorAll(".wstack-nav a")].filter(a => a.getBoundingClientRect().right > width || !document.getElementById(a.getAttribute("href").slice(1))).length'
 # JS: count toolbar buttons in view whose center point is covered by another layer. Reply must be in view and uncovered.
 covered_js='() => { const inView = (r) => r.left >= 0 && r.right <= innerWidth; const topAt = (el) => { const r = el.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return hit === el || el.contains(hit); }; const reply = document.querySelector(".am-toolbar [data-am=reply]"); const replyBad = reply && inView(reply.getBoundingClientRect()) && topAt(reply) ? 0 : 1; return replyBad + [...document.querySelectorAll(".am-toolbar > *")].filter(el => { const r = el.getBoundingClientRect(); return r.width >= 4 && inView(r) && !topAt(el); }).length; }'
+
+# JS: after each nav jump, count headings that sit above the toolbar's bottom edge or under another layer.
+jump_problems_js='() => { document.documentElement.style.scrollBehavior = "auto"; const toolbar = document.querySelector(".am-toolbar"); return [...document.querySelectorAll(".wstack-nav a")].filter(a => { location.hash = a.getAttribute("href"); const heading = document.getElementById(a.getAttribute("href").slice(1)); const r = heading.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + 4, r.top + r.height / 2); return r.top < toolbar.getBoundingClientRect().bottom || !(hit && (hit === heading || heading.contains(hit))); }).length; }'
 
 # a broken diagram needs no browser
 make_task broken code yes
@@ -86,6 +89,10 @@ if curl -fs -m 20 -r 0-0 -o /dev/null "https://cdn.jsdelivr.net/npm/@excalidraw/
     covered="$(page_probe "$page" "$width" "$covered_js" "$work_root/shot-$width.png")"
     assert "no layer covers a toolbar button at $width px" '[ "$covered" = "0" ]'
   done
+  for width in 375 1280; do
+    jump_problems="$(page_probe "$page" "$width" "$jump_problems_js")"
+    assert "nav jumps land below the toolbar at $width px" '[ "$jump_problems" = "0" ]'
+  done
   nav_problems="$(page_probe "$page" 375 "() => ($nav_problems_js)(375)")"
   assert "every nav link fits at 375 px and has a target id" '[ "$nav_problems" = "0" ]'
   if [ -n "${WSTACK_TEST_SCREENSHOT_DIR:-}" ]; then cp "$work_root"/shot-*.png "$WSTACK_TEST_SCREENSHOT_DIR/"; fi
@@ -94,6 +101,10 @@ if curl -fs -m 20 -r 0-0 -o /dev/null "https://cdn.jsdelivr.net/npm/@excalidraw/
   bash "$build" --task-dir "$work_root/blog/vault task" --work-dir "$work_root/blog/work" >/dev/null 2>&1 || true
   blog_page="$work_root/blog/vault task/review.html"
   blog_nav_problems="$(page_probe "$blog_page" 375 "() => ($nav_problems_js)(375)")"
+  for width in 375 1280; do
+    blog_jump_problems="$(page_probe "$blog_page" "$width" "$jump_problems_js")"
+    assert "blog nav jumps land below the toolbar at $width px" '[ "$blog_jump_problems" = "0" ]'
+  done
   assert "blog nav fits at 375 px and has target ids" '[ "$blog_nav_problems" = "0" ]'
   assert "blog task has Before and after as the fifth section" 'grep -q "<h2[^>]*>Before and after" "$blog_page" && ! grep -q "<h2[^>]*>Guided diff" "$blog_page"'
 else
