@@ -3,7 +3,12 @@
 # usage: pr-attach.sh --task-id <id> --title <t> --body-file <f> --max-mb <n> [--base <branch>] [--allow-ghes] <evidence files...>
 # Copies go to $WSTACK_EVIDENCE_ROOT/<id>/gh/ (WSTACK_EVIDENCE_ROOT defaults to /tmp/wstack-evidence; tests override it).
 # Not github.com and no --allow-ghes: creates the PR without attachments, prints "attachments skipped: not github.com".
-# `gh pr create` fails but prints a URL: prints the URL and "attachment upload failed", exits 0.
+# A file that cannot be compressed (or fit under --max-mb) is skipped; the PR is still created,
+# and "attachment upload failed: <file>" is printed for it.
+# `gh pr create` fails but prints a URL (partial upload): prints the URL and "attachment upload failed", exits 0.
+# '#' in a file name is replaced by '_' in the gh copy, because gh reads '#' as alt text.
+# Exit codes: 0 PR created (attachments may have failed), 1 bad input, 2 usage,
+# 3 PR not created (gh failed without printing a URL; no retry, to avoid a duplicate PR).
 set -euo pipefail
 
 usage() { echo "usage: pr-attach.sh --task-id <id> --title <t> --body-file <f> --max-mb <n> [--base <b>] [--allow-ghes] <files...>" >&2; exit 2; }
@@ -36,20 +41,40 @@ case "$repo_url" in
   *) attach_ok="$allow_ghes" ;;
 esac
 
+failed_files=()
 if [ "$attach_ok" -eq 1 ]; then
   for evidence_file in "$@"; do
-    gh_copy="$(bash "$script_dir/compress-media.sh" --target gh --max-mb "$max_mb" "$evidence_file" "$gh_dir" | tail -n 1)"
-    create_args+=(--attach "$gh_copy")
+    source_file="$evidence_file"
+    safe_name="$(basename "$evidence_file")"
+    safe_name="${safe_name//#/_}"
+    if [ "$safe_name" != "$(basename "$evidence_file")" ]; then
+      mkdir -p "$gh_dir/src"
+      source_file="$gh_dir/src/$safe_name"
+      cp "$evidence_file" "$source_file"
+    fi
+    if gh_copy="$(bash "$script_dir/compress-media.sh" --target gh --max-mb "$max_mb" "$source_file" "$gh_dir" | tail -n 1)" && [ -n "$gh_copy" ]; then
+      create_args+=(--attach "$gh_copy")
+    else
+      failed_files+=("$evidence_file")
+    fi
   done
 else
   echo "attachments skipped: not github.com"
 fi
 
+error_file="$(mktemp)"
+trap 'rm -f "$error_file"' EXIT
 status=0
-output="$(gh pr create "${create_args[@]}")" || status=$?
+output="$(gh pr create "${create_args[@]}" 2>"$error_file")" || status=$?
 echo "$output"
+pr_url="$(printf '%s\n' "$output" | grep -Eo 'https?://[^ ]+' | tail -n 1 || true)"
+if [ "$status" -ne 0 ] && [ -z "$pr_url" ]; then
+  echo "pull request not created: $(cat "$error_file")" >&2
+  exit 3
+fi
+for failed_file in ${failed_files[@]+"${failed_files[@]}"}; do
+  echo "attachment upload failed: $failed_file"
+done
 if [ "$status" -ne 0 ]; then
-  pr_url="$(printf '%s\n' "$output" | grep -Eo 'https?://[^ ]+' | tail -n 1 || true)"
-  [ -n "$pr_url" ] || exit "$status"
   echo "attachment upload failed"
 fi
