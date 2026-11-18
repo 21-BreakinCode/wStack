@@ -43,10 +43,11 @@ else
   create_args=(workspace create --cwd "$cwd" --label "$slug" --no-focus)
 fi
 created="$(herdr_cmd "${create_args[@]}" 2>&1)" || fail "could not create workspace: $created" 6
-[ "${create_args[0]}" != worktree ] || cwd="$(jq -r '.result.worktree.path' <<<"$created")"
-workspace_id="$(jq -r '.result.workspace.workspace_id' <<<"$created")"
-pane_id="$(jq -r '.result.root_pane.pane_id' <<<"$created")"
-fm_set "$task_dir/spec.md" workspace_cwd "$cwd"
+workspace_id="$(json_field "$created" '.result.workspace.workspace_id')" || fail "unexpected herdr output: $created" 6
+pane_id="$(json_field "$created" '.result.root_pane.pane_id')" || fail "unexpected herdr output: $created" 6
+if [ "${create_args[0]}" = worktree ]; then
+  cwd="$(json_field "$created" '.result.worktree.path')" || fail "unexpected herdr output: $created" 6
+fi
 
 cli="$(herdr_cli_prefix)"
 abort_with_cleanup_hint() {  # <reason>
@@ -62,6 +63,7 @@ abort_with_cleanup_hint() {  # <reason>
   exit 5
 }
 
+fm_set "$task_dir/spec.md" workspace_cwd "$cwd" || abort_with_cleanup_hint "could not write workspace_cwd"
 herdr_start_claude "$slug" "$pane_id" || abort_with_cleanup_hint "agent $slug did not start"
 prompt="/wstack:start-task --task $task_id"
 [ "$mobile" = false ] || prompt="$prompt --mobile"

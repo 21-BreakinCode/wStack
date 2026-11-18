@@ -36,4 +36,8 @@ rc=0; FAKE_NOT_READY=other bash "$script" --task-dir "$task_dir" >/dev/null 2>"$
 assert "exit 5 prints workspace id and close command" '[ "$rc" = 5 ] && grep -q "herdr --session wstack-test workspace close w3" "$work_dir/err"'
 rc=0; FAKE_CREATE_FAIL=1 bash "$script" --task-dir "$task_dir" >/dev/null 2>"$work_dir/err" || rc=$?
 assert "create failure exits 6" '[ "$rc" = 6 ] && grep -q "could not create workspace: herdr: boom" "$work_dir/err"'
+rc=0; FAKE_AGENT_EXISTS=1 FAKE_FOCUS_FAIL=1 bash "$script" --task-dir "$task_dir" >/dev/null 2>"$work_dir/err" || rc=$?
+assert "live path focus failure exits 5" '[ "$rc" = 5 ] && grep -q "could not focus workspace w9" "$work_dir/err"'
+rc=0; FAKE_NOT_READY= FAKE_FOCUS_FAIL=1 bash "$script" --task-dir "$task_dir" >/dev/null 2>"$work_dir/err" || rc=$?
+assert "restart path focus failure exits 5 with cleanup" '[ "$rc" = 5 ] && grep -q "workspace close w3" "$work_dir/err"'
 finish

@@ -10,6 +10,14 @@ herdr_cli_prefix() {  # the herdr command a user types to reach the same session
   if [ -n "${WSTACK_HERDR_SESSION:-}" ]; then echo "herdr --session $WSTACK_HERDR_SESSION"; else echo herdr; fi
 }
 
+# Prints one field of herdr JSON. Fails when jq fails or the field is missing, so callers can handle it.
+json_field() {  # <json> <jq path>
+  local value
+  value="$(jq -r "$2" <<<"$1")" || return 1
+  [ -n "$value" ] && [ "$value" != null ] || return 1
+  printf '%s\n' "$value"
+}
+
 # The one place that defines the claude flags of a task session. One flag per line.
 claude_task_flags() {  # <slug>
   printf '%s\n' --remote-control "$1" --name "$1" --permission-mode bypassPermissions
