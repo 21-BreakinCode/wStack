@@ -25,6 +25,8 @@ set -f  # word splitting below must not glob
 
 start='(^|[^[:alnum:]_./-])'
 space='[[:space:]]+'
+# cf accepts global flags (with an optional value) between any two command words
+cf_flags='([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*'
 
 default_branch="$(git -C "$cwd" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)"
 default_branch="${default_branch#origin/}"
@@ -80,10 +82,12 @@ judge_segment() {
     reason="a pull request close with a remote branch delete"
   elif [[ "$segment" =~ ${start}gh${space}repo${space}delete ]]; then
     reason="a repository delete"
-  elif [[ "$segment" =~ ${start}cf${space}r2${space}objects${space}[a-z-]*delete ]]; then
+  elif [[ "$segment" =~ ${start}cf${cf_flags}${space}r2${cf_flags}${space}objects${cf_flags}${space}[a-z-]*delete ]]; then
     reason="an R2 object delete"
-  elif [[ "$segment" =~ ${start}cf${space}r2${space}buckets${space}delete ]]; then
+  elif [[ "$segment" =~ ${start}cf${cf_flags}${space}r2${cf_flags}${space}buckets${cf_flags}${space}delete ]]; then
     reason="an R2 bucket delete"
+  elif [[ "$segment" =~ ${start}cf${cf_flags}${space}r2${cf_flags}${space}buckets${cf_flags}${space}jobs${cf_flags}${space}create ]]; then
+    reason="an R2 bucket job (a prefixDelete job deletes objects or empties the bucket)"
   else
     for deploy_command in "npm publish" "gh release create" "docker push" "terraform apply" \
       "kubectl apply" "helm install" "helm upgrade" "vercel --prod" "vercel deploy --prod" \
