@@ -6,6 +6,10 @@ herdr_cmd() {
   if [ -n "${WSTACK_HERDR_SESSION:-}" ]; then herdr --session "$WSTACK_HERDR_SESSION" "$@"; else herdr "$@"; fi
 }
 
+herdr_cli_prefix() {  # the herdr command a user types to reach the same session
+  if [ -n "${WSTACK_HERDR_SESSION:-}" ]; then echo "herdr --session $WSTACK_HERDR_SESSION"; else echo herdr; fi
+}
+
 # The one place that defines the claude flags of a task session. One flag per line.
 claude_task_flags() {  # <slug>
   printf '%s\n' --remote-control "$1" --name "$1" --permission-mode bypassPermissions

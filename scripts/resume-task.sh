@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Usage: resume-task.sh --task-dir <abs>
 # Prints "focused" if the task agent is live, "restarted" if it started a new one.
-# Exit: 1 working directory gone or bad input, 5 agent not ready.
+# Exit: 1 working directory gone or bad input, 5 agent did not start (workspace stays open,
+# stderr prints the cleanup command), 6 herdr could not create the workspace.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -24,8 +25,13 @@ fi
 
 cwd="$(fm_get "$task_dir/spec.md" workspace_cwd)"
 [ -n "$cwd" ] && [ -d "$cwd" ] || fail "working directory $cwd is gone; start a new task"
-created="$(herdr_cmd workspace create --cwd "$cwd" --label "$slug" --no-focus)"
+created="$(herdr_cmd workspace create --cwd "$cwd" --label "$slug" --no-focus 2>&1)" || fail "could not create workspace: $created" 6
 workspace_id="$(jq -r '.result.workspace.workspace_id' <<<"$created")"
-herdr_start_claude "$slug" "$(jq -r '.result.root_pane.pane_id' <<<"$created")" --continue || exit $?
-herdr_cmd workspace focus "$workspace_id" >/dev/null
+abort_with_cleanup_hint() {  # <reason>
+  echo "resume-task: $1" >&2
+  echo "workspace $workspace_id is still open. To clean up: $(herdr_cli_prefix) workspace close $workspace_id" >&2
+  exit 5
+}
+herdr_start_claude "$slug" "$(jq -r '.result.root_pane.pane_id' <<<"$created")" --continue || abort_with_cleanup_hint "agent $slug did not start"
+herdr_cmd workspace focus "$workspace_id" >/dev/null || abort_with_cleanup_hint "could not focus workspace $workspace_id"
 echo restarted
