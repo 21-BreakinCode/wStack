@@ -1,0 +1,25 @@
+/* Sticky top navbar for the review page (spec 10.1). answer-me-with-html has none (decision S7). */
+.wstack-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 0 16px;
+  background: Canvas;
+  color: CanvasText;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+}
+.wstack-nav a {
+  flex: none;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  color: inherit;
+  font-size: 16px;
+  text-decoration: none;
+}
+.wstack-nav a:hover { text-decoration: underline; }
+h2[id] { scroll-margin-top: 56px; }

@@ -314,3 +314,11 @@ Decision: every task file starts with frontmatter between two `---` lines. Each 
 Reason: this format is valid YAML, and jq parses it. Bash scripts read and write it with `scripts/lib/frontmatter.sh`, with no YAML library.
 
 Effect on plan: the spec section 6.1 examples show `# ...` comments. The template files leave them out. Scripts reject nothing else, so a status change goes through `scripts/frontmatter-set.sh`, which accepts only the eight status values.
+
+## D-NAV: Sticky top navbar and diagram render
+
+Decision: `scripts/build-review-page.sh` adds the sticky top navbar after the render. It gives each section heading an `id`, inserts a `<nav class="wstack-nav">` after `<body>`, and inserts `templates/mobile.css` as a `<style>` before `</head>`. It then runs `check-page-width.sh` at 375 px on the final page.
+
+Reason: answer-me-with-html has no sticky top navbar (decision S7), and `references/settings.md` of that plugin lists no setting that adds CSS or HTML. Spec section 10.1 requires the navbar.
+
+Diagram render: `scripts/render-excalidraw.sh` opens `about:blank`. The module import of `@excalidraw/utils` 0.1.8 works there, so it needs no local server. It exits 1 for a broken scene and 2 for a network or browser failure. On exit 2 the build writes `Diagram not rendered: <reason>` in the Diagram section, prints a warning, and still builds the page. `WSTACK_EXCALIDRAW_BUNDLE_URL` points the bundle at another URL. Tests use it to simulate a network failure.
