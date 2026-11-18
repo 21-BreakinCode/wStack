@@ -97,4 +97,12 @@ assert "multi-round: every body holds at most 1000 keys" '[ "$(grep "bulk-delete
 assert "multi-round: first body is 1000 keys, second is 500" '[ "$(grep "bulk-delete" "$FAKE_LOG" | sed "s/.*--body \(.*\) --force$/\1/" | jq -sc "map(length)")" = "[1000,500]" ]'
 assert "multi-round: reports 1500 deleted" '[[ "$multi_out" == *"deleted 1500 objects"* ]]'
 
+fresh_log
+many_listings="$(jq -nr --arg p "evidence/$task_id/" 'range(1001) | [{key: ($p + "f\(.).txt")}] | tojson')"
+cap_status=0
+cap_out="$(FAKE_CF_LISTS="$many_listings" bash "$delete" --task-id "$task_id" --bucket bkt 2>&1)" || cap_status=$?
+assert "round cap: exit 1" '[ "$cap_status" = 1 ]'
+assert "round cap: says too many delete rounds" '[[ "$cap_out" == *"too many delete rounds"* ]]'
+assert "round cap: exactly 1000 bulk-deletes" '[ "$(grep -c "bulk-delete" "$FAKE_LOG")" = 1000 ]'
+
 finish
