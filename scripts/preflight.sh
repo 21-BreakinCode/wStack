@@ -81,6 +81,19 @@ check_video() {
   done
 }
 
+check_playwright() {
+  local check_output ffmpeg_dry_run ffmpeg_dir
+  check_output="$(check playwright-cli 'playwright-cli --version' '' 'npm i -g @playwright/cli@0.1.24')"
+  printf '%s\n' "$check_output"
+  case "$check_output" in OK*) ;; *) failed=1; return 0 ;; esac
+  # S2: video needs Playwright's own ffmpeg, which the dry run locates without downloading
+  ffmpeg_dry_run="$(playwright-cli install-browser ffmpeg --dry-run 2>/dev/null || true)"
+  ffmpeg_dir="$(printf '%s\n' "$ffmpeg_dry_run" | sed -n 's/^ *Install location: *//p' | head -1)"
+  if [ -n "$ffmpeg_dir" ] && [ -d "$ffmpeg_dir" ]; then echo "OK playwright ffmpeg"
+  else missing 'playwright ffmpeg' 'playwright-cli install-browser ffmpeg'
+  fi
+}
+
 check_r2() {
   local node_found cf_install='npm i -g cf@1.0.0-rc.1, then cf auth login'
   check cf 'cf --version' '' "$cf_install"
@@ -99,7 +112,7 @@ check_r2() {
 
 check_need() {
   case "$1" in
-    web|diagram) check playwright-cli 'playwright-cli --version' '' 'npm i -g @playwright/cli@0.1.24' ;;
+    web|diagram) check_playwright ;;
     video) check_video ;;
     webp) check cwebp 'cwebp -version' '' 'brew install webp' ;;
     terminal) check vhs 'vhs --version' '' 'brew install vhs' ;;

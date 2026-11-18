@@ -23,12 +23,13 @@ fresh_bin() {  # system utilities the script needs, plus stubs for every tool
   make_stub node 'echo "v26.13.1"'
   make_stub claude 'if [ "$1" = "plugin" ]; then echo "answer-me-with-html@answer-me-with-html  enabled"; else echo "2.1.327 (Claude Code)"; fi'
   make_stub herdr 'echo "herdr 0.5.0"'
-  make_stub playwright-cli 'echo "0.1.24"'
+  make_stub playwright-cli 'if [ "$1" = "install-browser" ]; then printf "FFmpeg (playwright ffmpeg v1013)\n  Install location:    %s\n  Download url:        https://example.invalid/x.zip\n" "$FAKE_FFMPEG_DIR"; else echo "0.1.24"; fi'
   make_stub ffmpeg 'if [ "$1" = "-encoders" ]; then echo " V....D libx264"; echo " V....D libx265"; else echo "ffmpeg version 7.1"; fi'
   make_stub cwebp 'echo "1.5.0"'
   make_stub vhs 'echo "vhs version 0.9.0"'
   ln -s "$repo_root/tests/fixtures/bin/cf" "$stub_bin/cf"
   export FAKE_CF_AUTH=loggedin
+  mkdir -p "$work_dir/ffmpeg-1013"; export FAKE_FFMPEG_DIR="$work_dir/ffmpeg-1013"
 }
 
 run_preflight() {  # sets output and rc
@@ -94,6 +95,26 @@ assert "video without libx265 exits 1" '[ "$rc" = "1" ]'
 fresh_bin; rm "$stub_bin/playwright-cli"
 run_preflight plan diagram
 assert "diagram needs playwright-cli" '[ "$rc" = "1" ] && echo "$output" | grep -q "^MISSING playwright-cli: npm i -g @playwright/cli@0.1.24"'
+
+fresh_bin
+run_preflight plan web
+assert "web with ffmpeg installed exits 0" '[ "$rc" = "0" ]'
+assert "web prints OK playwright ffmpeg" 'echo "$output" | grep -qx "OK playwright ffmpeg"'
+
+fresh_bin; export FAKE_FFMPEG_DIR="$work_dir/not-installed"
+run_preflight plan web
+assert "web without ffmpeg dir exits 1" '[ "$rc" = "1" ]'
+assert "web without ffmpeg dir names the install command" 'echo "$output" | grep -qx "MISSING playwright ffmpeg: playwright-cli install-browser ffmpeg"'
+run_preflight plan diagram
+assert "diagram shares the ffmpeg check" '[ "$rc" = "1" ] && echo "$output" | grep -q "^MISSING playwright ffmpeg"'
+
+fresh_bin; make_stub playwright-cli 'if [ "$1" = "install-browser" ]; then echo "no location here"; else echo "0.1.24"; fi'
+run_preflight plan web
+assert "dry run without Install location line is MISSING" '[ "$rc" = "1" ] && echo "$output" | grep -q "^MISSING playwright ffmpeg"'
+
+fresh_bin; make_stub playwright-cli 'if [ "$1" = "install-browser" ]; then exit 1; else echo "0.1.24"; fi'
+run_preflight plan web
+assert "failing dry run is MISSING" '[ "$rc" = "1" ] && echo "$output" | grep -q "^MISSING playwright ffmpeg"'
 
 fresh_bin
 run_preflight plan web video webp terminal r2 diagram
