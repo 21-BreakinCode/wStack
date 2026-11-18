@@ -6,7 +6,7 @@ Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontma
 
 ## Start
 
-1. Set `status` to `executing` if it is `waiting-user`.
+1. If `status` is `waiting-user`, read the last item of `stopped_for_user` in `run-log.md`. Tell the user its step and reason. Ask for a yes or no, end the reply, and wait. On a yes, set `status` to `executing`, log a `step` line, and run the stopped step with the prefix `WSTACK_APPROVED=1`. On a no, keep the status and ask what to change.
 2. If `started_at` in `run-log.md` is empty, set it once to `date -u +%Y-%m-%dT%H:%M:%SZ`: `bash "$scripts/frontmatter-set.sh" "$task_dir/run-log.md" started_at <time>`. Never set it again.
 3. For a code task, work in `workspace_cwd`. Run `git switch -c wstack/<slug>`, or `git switch wstack/<slug>` if the branch exists. `<slug>` is the task id without its date prefix. Commit only on that branch. Never commit to the default branch.
 
@@ -26,9 +26,9 @@ Iterate on your own. Test your work as you go.
 
 A non-undoable step is one the spec lists under `## Non-undoable steps`. A merge, a push to the default branch, a force push, a delete, and a deploy are always non-undoable.
 
-Exception: the spec lists `open a pull request` under `## Deliver targets`. That approval covers pushing `wstack/<slug>` and creating that one pull request. Do those two without a stop. Leave them to the Deliver stage if it is available.
+Execute never pushes `wstack/<slug>` and never opens the pull request. The Deliver stage does both. When the spec lists `open a pull request` under `## Deliver targets`, the user's approval of the spec removes the stop of Deliver for those two actions. A merge always asks. If the Deliver stage is not available, the router says so and the task stays at `verifying`.
 
-Before any other non-undoable step, stop:
+Before a non-undoable step, stop:
 
 1. Write a `stop` line in `run-log.md` with the reason.
 2. Run `bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","reason":"<reason>"}'`.
@@ -37,13 +37,13 @@ Before any other non-undoable step, stop:
 
 If the guard hook asks or denies a command, treat it as a non-undoable step and stop the same way.
 
-Add the prefix `WSTACK_APPROVED=1` to a command only after the user says yes in this session. Never add it before. When the user says yes, set `status` to `executing`, log a `step` line, and run the command with the prefix.
+Add the prefix `WSTACK_APPROVED=1` to a command only after the user says yes in this session. Never add it before.
 
 Stop also when the spec is wrong or unclear. Set `status` to `waiting-user` and ask the user.
 
 ## Retry
 
-When a try fails, write a `retry` line, add 1 to `retries` in `run-log.md`, and try again. Read `retry_limit` from the plugin config. If it is not set, use 3. After `retry_limit` failed tries, stop as above.
+When a try fails, write a `retry` line, read `retries` from `run-log.md`, add 1, and set it with `frontmatter-set.sh`. Then try again. Take the retry limit from the Config list in `SKILL.md`. After that many failed tries, stop as above.
 
 ## Thinking and ops work
 

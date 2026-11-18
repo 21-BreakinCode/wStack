@@ -20,8 +20,9 @@ Resolve each value in this order. Take the first one that is set and is not a li
 
 - Vault path: the shell variable `WSTACK_VAULT_PATH`, then `EVAL_WSTACK_VAULT_PATH`, then `${user_config.vault_path}`.
 - Tasks folder: `WSTACK_TASKS_DIR`, then `EVAL_WSTACK_TASKS_DIR`, then `${user_config.tasks_dir}`, then `Workflow/Tasks`.
+- Retry limit: `WSTACK_RETRY_LIMIT`, then `EVAL_WSTACK_RETRY_LIMIT`, then `${user_config.retry_limit}`, then `3`.
 
-Read the shell variables with `echo "${WSTACK_VAULT_PATH:-}" "${EVAL_WSTACK_VAULT_PATH:-}"`. If no vault path is set, ask the user for it and stop.
+Read the shell variables with `echo "${WSTACK_VAULT_PATH:-}" "${EVAL_WSTACK_VAULT_PATH:-}"`. Read the other shell variables the same way. If no vault path is set, ask the user for it and stop.
 
 If a value is a relative path, make it absolute with `cd <value> && pwd`.
 
