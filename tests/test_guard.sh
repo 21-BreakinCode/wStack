@@ -78,6 +78,13 @@ assert "git -C main repo bare push: ask" '[ "$(decide_in "$feature_repo" Bash "g
 assert "git -C feature repo bare push from main cwd: pass" '[ "$(decide_in "$main_repo" Bash "git -C $feature_repo push")" = "pass" ]'
 assert "bare git push on main: ask" '[ "$(decide_in "$main_repo" Bash "git push")" = "ask" ]'
 assert "git push origin on main: ask" '[ "$(decide_in "$main_repo" Bash "git push origin")" = "ask" ]'
+check ask  'bash /p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
+check ask  '/p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
+check ask  'bash "/Users/me/.claude/plugins/wstack/scripts/evidence-delete.sh" --task-id 2000-01-02-x --bucket b'
+check ask  'cd x && bash scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
+check pass 'bash /p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b --dry-run'
+check pass 'WSTACK_APPROVED=1 bash /p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
+check pass 'bash /p/scripts/evidence-upload.sh --task-id 2000-01-02-x --dir d'
 assert "tool Write: pass" '[ "$(decide_in "$feature_repo" Write "gh pr merge 1")" = "pass" ]'
 
 deny_output="$(jq -n --arg cwd "$feature_repo" '{tool_name:"Bash",tool_input:{command:"gh pr merge 1"},cwd:$cwd}' \

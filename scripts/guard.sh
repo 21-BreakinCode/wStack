@@ -25,6 +25,7 @@ set -f  # word splitting below must not glob
 
 start='(^|[^[:alnum:]_./-])'
 space='[[:space:]]+'
+optional_quote='["'"'"'"'"'"']?'
 # cf accepts global flags (with an optional value) between any two command words
 cf_flags='([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*'
 
@@ -88,6 +89,8 @@ judge_segment() {
     reason="an R2 bucket delete"
   elif [[ "$segment" =~ ${start}cf${cf_flags}${space}r2${cf_flags}${space}buckets${cf_flags}${space}jobs${cf_flags}${space}create ]]; then
     reason="an R2 bucket job (a prefixDelete job deletes objects or empties the bucket)"
+  elif [[ "$segment" =~ ${start}[^[:space:]]*evidence-delete\.sh${optional_quote}([[:space:]]|$) && "$segment" != *"--dry-run"* ]]; then
+    reason="an R2 evidence delete (evidence-delete.sh runs cf delete commands)"
   else
     for deploy_command in "npm publish" "gh release create" "docker push" "terraform apply" \
       "kubectl apply" "helm install" "helm upgrade" "vercel --prod" "vercel deploy --prod" \

@@ -8,5 +8,9 @@ case "$*" in
       loggedin) echo '{"authenticated": true, "profile": {"name": "default"}}' ;;
       loggedout) echo '{"authenticated": false, "error": "Not logged in", "profile": {"name": "default"}}' ;;
     esac ;;
+  "r2 objects list "*)
+    # FAKE_CF_LIST (a JSON array) is the first listing. Later listings are empty, like a prefix after a delete.
+    listed_marker="${FAKE_LOG:-/dev/null}.listed"
+    if [ -n "${FAKE_CF_LIST:-}" ] && [ ! -e "$listed_marker" ]; then touch "$listed_marker"; echo "$FAKE_CF_LIST"; else echo '[]'; fi ;;
 esac
 exit 0

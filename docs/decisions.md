@@ -114,7 +114,9 @@ Result:
 - List by prefix: `cf r2 objects list --bucket-name <bucket> --prefix <prefix>`. Page with `--per-page`, `--cursor`, `--start-after`.
 - `bulk-delete` takes a list of keys (a JSON array of 1 to 1000 keys in the request body). It does not take a prefix. Its `--prefix` flag is deprecated. With `--prefix`, the body is ignored and a prefix-delete job starts. An empty prefix empties the bucket.
 - Prefix delete, the supported way: `cf r2 buckets jobs create <bucket> --job-type prefixDelete --prefix <prefix>/`. A non-empty prefix must end in `/`. An empty prefix empties the bucket. `cf r2 buckets jobs get <job-id>` polls it.
-- `cf auth whoami` exits 0 when logged out. Only the JSON field `.authenticated` tells the state. I did not see the logged-in output, so `true` is assumed from the field name.
+- `cf auth whoami` exits 0 in both states. Only the JSON field `.authenticated` tells the state. When logged in, it prints `"authenticated": true` (confirmed in Task 12).
+- `cf r2 buckets create` takes the bucket name as `--name`, not as a positional argument (confirmed in Task 12).
+- `cf r2 objects bulk-delete --bucket-name <bucket> --body '<JSON array of keys>'` sends the key list (confirmed with `--dry-run`). `cf r2 objects list` prints a JSON array, and `[]` when the prefix is empty.
 - cf real command words are plural only: `objects`, `buckets`. The singular forms `cf r2 object` and `cf r2 bucket` do not exist. cf has no `rm` or `remove` alias and no raw API command.
 - cf accepts global flags between command words, for example `cf --profile p r2 buckets delete --help` and `cf r2 --profile p buckets delete --help`.
 
