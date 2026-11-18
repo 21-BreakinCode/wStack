@@ -10,9 +10,11 @@ Record one evidence set for each check in the spec's verification plan. Do this 
 
 ## Working folder
 
-Save all files in `/tmp/wstack-evidence/<task_id>/`. Run `mkdir -p` on it first. Never save media in the Obsidian vault.
+Save all files in `/tmp/wstack-evidence/<task_id>/`. Run `mkdir -p` on it and on its `raw/` and `gh/` folders first. Never save media in the Obsidian vault.
 
-Name each file after its check, for example `check-1.webp` or `check-2-flow.webm`.
+Name each file after its check, for example `check-1` or `check-2-flow`.
+
+Capture raw screenshots and videos into `/tmp/wstack-evidence/<task_id>/raw/`. `compress-media.sh` exits 1 when its output path equals its input path, so never compress a file into its own folder.
 
 ## Capture by check kind
 
@@ -33,8 +35,8 @@ The text log is the main evidence. The user reads the exact data from it.
 1. Serve a local page with `python3 -m http.server --bind 127.0.0.1 <port>` in the build folder. Run it in the background and stop it when the check ends.
 2. Open the page: `playwright-cli -s <slug> open <url>`.
 3. When the plan asks for phone width, run `playwright-cli -s <slug> resize 375 800`.
-4. Start the video: `playwright-cli -s <slug> video-start /tmp/wstack-evidence/<task_id>/<name>.webm`.
-5. Take the screenshot: `playwright-cli -s <slug> screenshot --filename=/tmp/wstack-evidence/<task_id>/<name>.webp`.
+4. Start the video: `playwright-cli -s <slug> video-start /tmp/wstack-evidence/<task_id>/raw/<name>.webm`.
+5. Take the screenshot: `playwright-cli -s <slug> screenshot --filename=/tmp/wstack-evidence/<task_id>/raw/<name>.webp`.
 6. Stop the video: `playwright-cli -s <slug> video-stop`.
 7. Close the session: `playwright-cli -s <slug> close`.
 
@@ -42,11 +44,11 @@ Use the task slug for `<slug>`, so parallel tasks do not share a browser.
 
 ### Terminal check
 
-Record the session with VHS. Save the recording as `.gif` or `.webm` in the working folder.
+Record the session with VHS. Save the recording as `.gif` or `.webm` in the `raw/` folder.
 
 ## Compress
 
-Make two copies of each image and video. Put the R2 copies in the working folder and the GitHub copies in `gh/`.
+Make two copies of each image and video. Compress from `raw/`. Put the R2 copies in the working folder and the GitHub copies in `gh/`.
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/compress-media.sh" --target r2 <input> /tmp/wstack-evidence/<task_id>

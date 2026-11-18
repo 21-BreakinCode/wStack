@@ -31,4 +31,17 @@ status=0
 message="$(bash "$script" --target gh --max-mb 0.001 "$work_dir/clip.webm" "$gh_dir" 2>&1)" || status=$?
 assert "too large exits 1" '[ "$status" -eq 1 ]'
 assert "too large message" '[[ "$message" == *"cannot fit"* ]]'
+
+# Output equal to input: exit 1, clear message, input intact.
+same_dir="$work_dir/same"; mkdir -p "$same_dir"
+cp "$r2_video" "$same_dir/in.mp4"; cp "$r2_image" "$same_dir/in.webp"
+before_mp4="$(cksum < "$same_dir/in.mp4")"; before_webp="$(cksum < "$same_dir/in.webp")"
+for name in in.mp4 in.webp; do
+  status=0
+  message="$(bash "$script" --target r2 "$same_dir/$name" "$same_dir" 2>&1)" || status=$?
+  assert "$name same-folder exits 1" '[ "$status" -eq 1 ]'
+  assert "$name same-folder message" '[[ "$message" == *"would overwrite input"* ]]'
+done
+assert "mp4 input intact" '[ "$(cksum < "$same_dir/in.mp4")" = "$before_mp4" ]'
+assert "webp input intact" '[ "$(cksum < "$same_dir/in.webp")" = "$before_webp" ]'
 finish

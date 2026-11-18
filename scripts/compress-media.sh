@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Compress one evidence file for R2 (WebP, H.265) or GitHub (JPEG, H.264). Prints the output path.
+# If the output path equals the input path (for example a .webp or .mp4 input
+# compressed into its own folder), it exits 1 and leaves the input untouched.
 set -euo pipefail
 
 usage() { echo "usage: compress-media.sh --target r2|gh [--max-mb <n>] <input> <out-dir>" >&2; exit 2; }
@@ -30,19 +32,29 @@ is_too_large() {  # <file>; false when no --max-mb is set
   awk -v size="$size_bytes" -v max="$max_mb" 'BEGIN { exit !(size > max * 1048576) }'
 }
 
+fail_if_output_is_input() {  # <output>
+  if [ "$1" -ef "$input" ]; then
+    echo "output would overwrite input: $1 (use a different out-dir)" >&2
+    exit 1
+  fi
+}
+
 case "$extension" in
   png|jpg|jpeg|webp|gif)
     if [ "$target" = "r2" ]; then
       output="$out_dir/$base_name.webp"
+      fail_if_output_is_input "$output"
       cwebp -quiet -q 80 "$input" -o "$output"
     else
       output="$out_dir/$base_name.jpg"
+      fail_if_output_is_input "$output"
       sips -s format jpeg "$input" --out "$output" >/dev/null
     fi
     echo "$output"
     ;;
   webm|mov|mp4)
     output="$out_dir/$base_name.mp4"
+    fail_if_output_is_input "$output"
     if [ "$target" = "r2" ]; then
       ffmpeg -y -loglevel error -i "$input" -c:v libx265 -preset veryfast -crf 28 -tag:v hvc1 "$output"
       echo "$output"
