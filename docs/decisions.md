@@ -24,15 +24,112 @@ Note: the first start in a new folder shows a trust prompt ("Is this a project y
 
 ## S2: Playwright CLI basics
 
-Result: pending (tool not installed yet)
+Command (every call used the named session `s2`, with PATH set to Node 26.13.1):
+```
+playwright-cli -s s2 open file://$PWD/tests/spikes/page.html
+python3 -m http.server --bind 127.0.0.1 18771 --directory tests/spikes
+playwright-cli -s s2 goto http://127.0.0.1:18771/page.html
+playwright-cli -s s2 resize 375 800
+playwright-cli -s s2 --raw eval "() => document.documentElement.scrollWidth"
+playwright-cli -s s2 screenshot --filename=tests/tmp/s2/s.webp
+playwright-cli -s s2 video-start tests/tmp/s2/v.webm
+playwright-cli -s s2 video-stop
+playwright-cli -s s2 close
+```
+
+Output (trimmed):
+```
+open file://...      ### Error  Access to "file:" protocol is blocked. Attempted URL: "file:///.../page.html"
+--raw eval           375
+screenshot           - [Screenshot of viewport](tests/tmp/s2/s.webp)     (file is RIFF WebP, 37 KB)
+video-start (cache)  ### Error  Executable doesn't exist at ~/Library/Caches/ms-playwright/ffmpeg-1013/ffmpeg-mac
+                     Video rendering requires ffmpeg binary. ... Please run: npx playwright install ffmpeg
+video-start (temp cache with ffmpeg-1013 linked to system ffmpeg)
+                     Video recording started.  ->  video-stop: - [Video](tests/tmp/s2/v.webm)   (VP9, 11 KB)
+```
+
+Result:
+- `file://` fails. Playwright CLI blocks the `file:` protocol. Serve the page with `python3 -m http.server --bind 127.0.0.1 <port>`.
+- The cached Chromium is reused. `open` needed no download.
+- `--raw eval` prints the bare number `375` and exits 0. I ran `--raw` before the command name only.
+- `screenshot --filename=<path>` writes a real WebP file at the path. The extension picks the format.
+- `video-start <path>` and `video-stop` write the video exactly at the path you gave. The path may be relative to the folder where you run the command.
+- BLOCKED on this machine: `video-start` needs `ffmpeg-1013` in `~/Library/Caches/ms-playwright`. Only `ffmpeg-1011` is cached. Playwright prints `npx playwright install ffmpeg` as the fix. I did not run it, because I may not download anything.
+- Workaround with no download: set `PLAYWRIGHT_BROWSERS_PATH` to a temp folder that links the cached browsers and holds `ffmpeg-1013/ffmpeg-mac` linked to the system `ffmpeg`. The linked `ffmpeg-1011` did not work: the video file was never written. The system ffmpeg worked. `tests/test_evidence_capture.sh` builds this temp folder when `ffmpeg-1013` is missing.
+- Each page load of a fixture without a favicon logs one console error (404 for `/favicon.ico`). It is harmless.
+
+Effect on plan: Tasks 6 to 10 serve pages over `http://127.0.0.1` and never open `file://`. Task 10 reads the page width with `--raw eval` and compares it to the number 375. Video capture needs `npx playwright install ffmpeg` once. Preflight does not check for it yet. The user must run that command, or evidence capture falls back to screenshots.
 
 ## S3: Excalidraw to SVG
 
-Result: pending (tool not installed yet)
+Command: `bash tests/spikes/render-excalidraw.sh tests/spikes/sample.excalidraw tests/tmp/s3/sample.svg http://127.0.0.1:18772/page.html` (a local http server serves `tests/spikes/`). The script runs:
+```
+playwright-cli -s excalidraw-spike open <page url>
+playwright-cli -s excalidraw-spike --raw run-code "<async (page) => { page.addScriptTag(...); page.evaluate(...) }>" | jq -r . > out.svg
+playwright-cli -s excalidraw-spike close
+```
+The injected module script is `import * as U from 'https://cdn.jsdelivr.net/npm/@excalidraw/utils@0.1.8/dist/prod/index.js'; window.__U = U`. The evaluate step calls `window.__U.exportScene({ type: 'svg', data: { elements, appState, files } })` and returns `svg.outerHTML`.
+
+Output: an SVG of 4347 bytes: `viewBox="0 0 400 125"`, 1 `<rect>`, 5 `<path>`, 7 `<g>`, and `<text ...>wStack</text>`. `xmllint --noout` reports it valid.
+
+Result:
+- Bundle source: `https://cdn.jsdelivr.net/npm/@excalidraw/utils@0.1.8/dist/prod/index.js` (`@excalidraw/utils` 0.1.8, `latest` on jsDelivr on 2026-11-18). It is an ES module of 19 MB, so I did not vendor it. Load it with `addScriptTag({type: 'module', content: "import ..."})` on a page served over http.
+- The 0.1.8 API has no `exportToSvg`. Its exports are `MIME_TYPES, elementsOverlappingBBox, exportScene, exportToClipboard, getCommonBounds`. Use `exportScene({type: 'svg', ...})`.
+- The SVG contains the text label as a real `<text>` element. The Virgil font is embedded as a base64 `@font-face`.
+- `run-code` runs in a sandbox with no `require`, so it cannot read files. Pass the scene as inline JSON in the code string. `--raw` prints the result as a JSON string, so pipe it through `jq -r .`.
+- The render needs network access to cdn.jsdelivr.net at build time. The sample scene has 4 elements.
+
+Effect on plan: Task 10 renders `diagram.excalidraw` with `tests/spikes/render-excalidraw.sh` as the model: open any local page, inject the pinned module, call `exportScene`, decode with `jq -r .`. It pins version 0.1.8 in the URL. It treats a missing network as a build error.
 
 ## S4: cf R2 object commands
 
-Result: pending (tool not installed yet)
+Command (PATH set to Node 26.13.1, cf 1.0.0-rc.1, not logged in):
+```
+cf r2 objects --help
+cf schema r2 objects put
+cf schema r2 objects bulk-delete
+cf cli search "delete objects by prefix"
+cf r2 objects put|delete|bulk-delete|list --help
+cf r2 buckets --help ; cf r2 buckets delete --help ; cf r2 buckets jobs create --help
+cf schema r2 objects list ; cf schema r2 buckets jobs create
+cf auth whoami
+```
+
+Output (trimmed):
+```
+cf r2 objects: bulk-delete | delete <object-key> | get <object-key> | list | put <object-key>
+put options:   --bucket-name (required) --content-type --content-length --cf-r2-storage-class --cf-r2-jurisdiction --body <string> --file <path> --dry-run
+put schema:    PUT /accounts/{account_id}/r2/buckets/{bucket_name}/objects/{object_key}   (object-key is positional)
+bulk-delete:   DELETE .../objects   options: --bucket-name --prefix (deprecated) --force --dry-run; body = JSON array of 1 to 1000 keys
+list schema:   GET .../objects   query: --prefix --delimiter --per-page --cursor --start-after
+cf cli search: cf r2 objects bulk-delete "Delete Objects" is the first match
+cf auth whoami (logged out): exit 0, stdout {"authenticated": false, "error": "Not logged in", "profile": {...}}
+cf r2 object ...        -> Error Unknown command: r2 object
+cf r2 bucket delete ... -> Error Unknown command: r2 bucket delete
+cf r2 objects rm|remove -> Error Unknown command
+```
+
+Result:
+- Upload: `cf r2 objects put <object-key> --bucket-name <bucket> --file <path> --content-type <mime>`. The key is positional and may hold slashes. `--body <string>` is the inline alternative. `--dry-run` validates without sending.
+- List by prefix: `cf r2 objects list --bucket-name <bucket> --prefix <prefix>`. Page with `--per-page`, `--cursor`, `--start-after`.
+- `bulk-delete` takes a list of keys (a JSON array of 1 to 1000 keys in the request body). It does not take a prefix. Its `--prefix` flag is deprecated. With `--prefix`, the body is ignored and a prefix-delete job starts. An empty prefix empties the bucket.
+- Prefix delete, the supported way: `cf r2 buckets jobs create <bucket> --job-type prefixDelete --prefix <prefix>/`. A non-empty prefix must end in `/`. An empty prefix empties the bucket. `cf r2 buckets jobs get <job-id>` polls it.
+- `cf auth whoami` exits 0 when logged out. Only the JSON field `.authenticated` tells the state. I did not see the logged-in output, so `true` is assumed from the field name.
+- cf real command words are plural only: `objects`, `buckets`. The singular forms `cf r2 object` and `cf r2 bucket` do not exist. cf has no `rm` or `remove` alias and no raw API command.
+- cf accepts global flags between command words, for example `cf --profile p r2 buckets delete --help` and `cf r2 --profile p buckets delete --help`.
+
+Real cf commands that delete R2 data:
+1. `cf r2 objects delete <object-key> --bucket-name <bucket>` deletes one object.
+2. `cf r2 objects bulk-delete --bucket-name <bucket>` deletes up to 1000 listed keys. With `--prefix` it deletes by prefix.
+3. `cf r2 buckets jobs create <bucket> --job-type prefixDelete --prefix <prefix>` deletes by prefix or empties the bucket.
+4. `cf r2 buckets delete <bucket-name>` deletes an empty bucket.
+`cf r2 buckets lifecycle update` can set expiry rules. It is not a direct delete and the guard does not cover it.
+
+Guard coverage: before this task `scripts/guard.sh` covered forms 1, 2, and 4 when the words were adjacent. It missed form 3, and it missed global flags between words (`cf --profile p r2 buckets delete b`). I added both, with tests in `tests/test_guard.sh`. I added no singular forms, because cf rejects them.
+
+Preflight bug (R13): `scripts/preflight.sh` treated exit 0 from `cf auth whoami` as logged in, so it never printed `MISSING cf auth`. It now counts cf as logged in only when stdout parses with jq and `.authenticated` is `true`. The fake `tests/fixtures/bin/cf` prints either state with `FAKE_CF_AUTH=loggedin|loggedout`.
+
+Effect on plan: Task 12 uploads with `cf r2 objects put <key> --bucket-name <bucket> --file <path> --content-type <mime>`. It deletes one object with `objects delete` and a prefix with `buckets jobs create ... --job-type prefixDelete --prefix <prefix>/`. It never uses `bulk-delete --prefix`, which is deprecated. Every delete form asks the user first through the guard.
 
 ## S5: herdr launch sequence
 
@@ -97,7 +194,35 @@ Effect on plan: Background task panes live on when the user closes the herdr win
 
 ## S7: answer-me-with-html
 
-Result: pending (tool not installed yet)
+Command (answer-me-with-html 0.6.1, PATH set to Node 26.13.1):
+```
+AMJS=~/.claude/plugins/cache/answer-me-with-html/answer-me-with-html/0.6.1/answer-me-with-html/scripts/am.mjs
+node $AMJS --help
+node $AMJS config
+AM_HOME=$PWD/tests/tmp/s7/am-home node $AMJS render tests/spikes/review-sample.md -o tests/tmp/s7/page2.html --no-open
+AM_HOME=$PWD/tests/tmp/s7/am-home node $AMJS render tests/spikes/review-sample.md --template doc -o tests/tmp/s7/doc.html --no-open
+playwright-cli -s s7 open http://127.0.0.1:18773/<page>.html ; resize 375 800 ; --raw eval "() => document.documentElement.scrollWidth"
+```
+`tests/spikes/review-sample.md` has the five headings (`## Findings`, `## Decisions`, `## Evidence`, `## Diagram`, `## Guided diff`), a `<!-- wstack:diagram -->` line, and an `<svg>`.
+
+Output (trimmed):
+```
+am config: open on, theme auto, mode auto, style 80, scale 1, ... (no value changed; config file ~/.answer-me-with-html/config.json does not exist yet)
+render with a bare <svg> line in the draft:
+  html 5 warnings: "<svg> is shown as text; raw markup belongs in an html fence"
+render with the svg inside a ```svg fence:  ✓ .../tests/tmp/s7/page2.html   sheet · blueprint · 5 panels   STE ✓ 0 warnings
+page2.html: scrollWidth at 375 px = 452     doc.html (--template doc): scrollWidth at 375 px = 375
+```
+
+Result:
+- Render command: `node "$AMJS" render <draft.md> -o <path>.html --no-open [--template doc]`. `-o` names an HTML file and the CLI creates missing parent folders. It writes to the chosen path.
+- A bare inline `<svg>` in the draft does not survive. It shows as text. Put the SVG inside a fenced ```` ```svg ```` block. Then it is embedded as a real `<svg>`.
+- The HTML comment `<!-- wstack:diagram -->` survives as a real comment inside the panel body (`<div class="am-md"><!-- wstack:diagram --></div>`). It also sits escaped in the hidden source copy. Note that the comment ends up before the svg's own container, not inside it. Task 10 should replace the fenced svg block in the draft with the rendered SVG, or replace the comment in the page after the render. Replacing in the draft before render is the tested path.
+- No sticky top navbar. Both templates have a fixed floating toolbar (Theme, Mode, Reply and similar buttons, `position: fixed; top: 12px`). The `doc` template with 3 or more sections adds a sticky outline rail (`nav.am-toc`, `top: 72px`) that shows as small ticks on the right. It has no heading text at 375 px.
+- Width at 375 px: the default `sheet` template overflows (`scrollWidth` 452, over 375). The overflow comes from `.am-col` and `.am-panel` at 452 px. The `doc` template fits (375).
+- Default output folder is `~/.answer-me-with-html/pages/`. With `-o`, the page goes to the chosen path. The CLI still wrote `state.json` into the data directory. I set `AM_HOME` to a temp folder (`tests/tmp/s7/am-home`) so nothing was written under `~/.answer-me-with-html`. I ran no `config set`.
+
+Effect on plan: Task 10 renders with `--template doc -o <task-dir>/review.html --no-open`, puts the diagram in a ```` ```svg ```` fence, and checks `scrollWidth` at 375 px with S2's method. `doc` passes at 375 without extra CSS. If a real page still overflows (a wide table, a wide diagram), Task 10 writes `templates/mobile.css`. The sheet template needs that CSS.
 
 ## S8: Session token count
 
