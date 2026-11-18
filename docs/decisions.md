@@ -181,3 +181,11 @@ Output: the fetched Cloudflare pages state no user count. The search summary say
 Result: 50 users. Source: https://www.cloudflare.com/plans/zero-trust-services/ (the pricing page, confirmed only through a search summary, not read directly). ASSUME: the limit is still 50 today. Confirm in the Cloudflare dashboard before relying on it.
 
 Effect on plan: Spec section 17 item 7 reads "50 users (unconfirmed: from a search summary, the pricing page returned 403)".
+
+## D-FM: Frontmatter format
+
+Decision: every task file starts with frontmatter between two `---` lines. Each line is `key: value`. A line has no inline comment. A list value is one-line JSON, for example `stopped_for_user: []` and `targets: [{"target":"pr","url":"...","undo":"..."}]`.
+
+Reason: this format is valid YAML, and jq parses it. Bash scripts read and write it with `scripts/lib/frontmatter.sh`, with no YAML library.
+
+Effect on plan: the spec section 6.1 examples show `# ...` comments. The template files leave them out. Scripts reject nothing else, so a status change goes through `scripts/frontmatter-set.sh`, which accepts only the eight status values.
