@@ -1,0 +1,1 @@
+{"name":"wstack","version":"0.0.1","description":"spike S9 S10","userConfig":{"vault_path":{"type":"string","title":"Vault path","description":"Path to the vault","required":false}}}
