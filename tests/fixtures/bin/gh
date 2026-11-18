@@ -1,3 +1,12 @@
 #!/usr/bin/env bash
+# Fake gh. Logs arguments to $FAKE_LOG.
+# FAKE_REPO_URL: what `gh repo view` prints (default https://github.com/o/r).
+# FAKE_PR_FAIL=1: `gh pr create` prints a URL then exits 1.
 echo "gh $*" >> "${FAKE_LOG:-/dev/null}"
+case "${1:-} ${2:-}" in
+  "repo view") echo "${FAKE_REPO_URL:-https://github.com/o/r}" ;;
+  "pr create")
+    echo "https://github.com/o/r/pull/1"
+    [ -z "${FAKE_PR_FAIL:-}" ] || exit 1 ;;
+esac
 exit 0
