@@ -1,8 +1,8 @@
 ---
 task_id: 2026-11-18-add-is-adult
 result:
-blocking_findings: 0
-non_blocking_findings: 0
+blocking_findings: 9
+non_blocking_findings: 9
 evidence_location:
 ---
 
