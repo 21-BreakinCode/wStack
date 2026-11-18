@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Fake herdr. Logs its arguments, prints canned JSON in the shapes of decision S5.
+# Switches: FAKE_AGENT_EXISTS=1 (agent get succeeds), FAKE_NOT_READY=trust|other (agent start fails once),
+#           FAKE_NEVER_READY=1 (agent list never shows interactive_ready).
+echo "$*" >> "${FAKE_LOG:-/dev/null}"
+args=("$@")
+[ "${args[0]:-}" = "--session" ] && args=("${args[@]:2}")
+case "${args[0]:-} ${args[1]:-}" in
+  "worktree create") echo '{"result":{"workspace":{"workspace_id":"w2"},"root_pane":{"pane_id":"w2:p1"},"worktree":{"path":"/fake/worktrees/wstack-branch"}}}' ;;
+  "workspace create") echo '{"result":{"workspace":{"workspace_id":"w3"},"root_pane":{"pane_id":"w3:p1"}}}' ;;
+  "agent get")
+    if [ "${FAKE_AGENT_EXISTS:-}" = 1 ]; then echo '{"result":{"agent":{"name":"x","workspace_id":"w9"}}}'
+    else echo '{"error":{"code":"agent_not_found"}}'; exit 1; fi ;;
+  "agent start")
+    if [ -n "${FAKE_NOT_READY:-}" ] && [ ! -e "${FAKE_LOG}.started" ]; then
+      touch "${FAKE_LOG}.started"
+      echo '{"error":{"code":"agent_not_ready"}}'; exit 1
+    fi
+    echo '{"result":{}}' ;;
+  "agent read")
+    if [ "${FAKE_NOT_READY:-}" = trust ]; then echo '"Is this a project you trust?" "Yes, I trust this folder"'
+    else echo 'something else is blocking'; fi ;;
+  "agent list")
+    if [ "${FAKE_NEVER_READY:-}" = 1 ]; then echo '{"result":{"agents":[{"name":"x","interactive_ready":false}]}}'
+    else echo '{"result":{"agents":[{"agent_status":"idle","interactive_ready":true,"name":"'"${FAKE_AGENT_NAME:-}"'"}]}}'; fi ;;
+  *) echo '{"result":{}}' ;;
+esac
