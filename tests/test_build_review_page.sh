@@ -16,6 +16,27 @@ make_task() {  # <name> <work type> <with diagram: yes|no>
 }
 line_of() { grep -n "$2" "$1" | head -n 1 | cut -d: -f1; }
 
+# Opens a built page at a width and prints the result of a JS function. Test-only server and session.
+page_probe() {  # <page> <width> <js arrow function> [screenshot png]
+  local page="$1" width="$2" js="$3" shot="${4:-}" port session server_pid result
+  port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+  session="wstack-test-probe-$$-$width"
+  python3 -m http.server --bind 127.0.0.1 --directory "$(dirname "$page")" "$port" >/dev/null 2>&1 &
+  server_pid=$!
+  for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fs -o /dev/null "http://127.0.0.1:$port/$(basename "$page")" && break; sleep 0.5; done
+  playwright-cli -s "$session" open "http://127.0.0.1:$port/$(basename "$page")" >/dev/null 2>&1 || true
+  playwright-cli -s "$session" resize "$width" 800 >/dev/null 2>&1 || true
+  result="$(playwright-cli -s "$session" --raw eval "$js" 2>&1 || true)"
+  [ -z "$shot" ] || playwright-cli -s "$session" screenshot --filename "$shot" >/dev/null 2>&1 || true
+  playwright-cli -s "$session" close >/dev/null 2>&1 || true
+  kill "$server_pid" 2>/dev/null || true
+  echo "$result"
+}
+# JS: count nav links that are cut off at the right edge or whose target id is missing.
+nav_problems_js='(width) => [...document.querySelectorAll(".wstack-nav a")].filter(a => a.getBoundingClientRect().right > width || !document.getElementById(a.getAttribute("href").slice(1))).length'
+# JS: count toolbar buttons in view whose center point is covered by another layer. Reply must be in view and uncovered.
+covered_js='() => { const inView = (r) => r.left >= 0 && r.right <= innerWidth; const topAt = (el) => { const r = el.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return hit === el || el.contains(hit); }; const reply = document.querySelector(".am-toolbar [data-am=reply]"); const replyBad = reply && inView(reply.getBoundingClientRect()) && topAt(reply) ? 0 : 1; return replyBad + [...document.querySelectorAll(".am-toolbar > *")].filter(el => { const r = el.getBoundingClientRect(); return r.width >= 4 && inView(r) && !topAt(el); }).length; }'
+
 # a broken diagram needs no browser
 make_task broken code yes
 echo '{}' > "$work_root/broken/vault task/diagram.excalidraw"
@@ -60,9 +81,20 @@ if curl -fs -m 20 -r 0-0 -o /dev/null "https://cdn.jsdelivr.net/npm/@excalidraw/
   bash "$repo_root/scripts/check-page-width.sh" "$page" 375 >/dev/null 2>&1 || fit_exit=$?
   assert "page fits at 375" '[ "$fit_exit" -eq 0 ]'
 
+
+  for width in 375 1280; do
+    covered="$(page_probe "$page" "$width" "$covered_js" "$work_root/shot-$width.png")"
+    assert "no layer covers a toolbar button at $width px" '[ "$covered" = "0" ]'
+  done
+  nav_problems="$(page_probe "$page" 375 "() => ($nav_problems_js)(375)")"
+  assert "every nav link fits at 375 px and has a target id" '[ "$nav_problems" = "0" ]'
+  if [ -n "${WSTACK_TEST_SCREENSHOT_DIR:-}" ]; then cp "$work_root"/shot-*.png "$WSTACK_TEST_SCREENSHOT_DIR/"; fi
+
   make_task blog blog yes
   bash "$build" --task-dir "$work_root/blog/vault task" --work-dir "$work_root/blog/work" >/dev/null 2>&1 || true
   blog_page="$work_root/blog/vault task/review.html"
+  blog_nav_problems="$(page_probe "$blog_page" 375 "() => ($nav_problems_js)(375)")"
+  assert "blog nav fits at 375 px and has target ids" '[ "$blog_nav_problems" = "0" ]'
   assert "blog task has Before and after as the fifth section" 'grep -q "<h2[^>]*>Before and after" "$blog_page" && ! grep -q "<h2[^>]*>Guided diff" "$blog_page"'
 else
   echo "SKIP diagram cases: cdn.jsdelivr.net not reachable"

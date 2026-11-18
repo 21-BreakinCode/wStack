@@ -29,8 +29,8 @@ mkdir -p "$work_dir"
 # The fifth section depends on the work type (spec 10.3).
 work_type=""
 [ ! -f "$task_dir/spec.md" ] || work_type="$(fm_get "$task_dir/spec.md" work_type)"
-fifth_heading="Guided diff"
-case "$work_type" in blog|video) fifth_heading="Before and after" ;; esac
+fifth_heading="Guided diff" fifth_label="Diff"
+case "$work_type" in blog|video) fifth_heading="Before and after" fifth_label="Before/after" ;; esac
 draft="$work_dir/review-draft.md"
 sed "s/^## Guided diff\$/## $fifth_heading/" "$task_dir/review.md" > "$draft"
 
@@ -67,10 +67,11 @@ nav_file="$work_dir/nav.html"
 sed_ids=()
 {
   printf '<nav class="wstack-nav" aria-label="Sections">'
-  for heading in Findings Decisions Evidence Diagram "$fifth_heading"; do
+  for heading_and_label in Findings:Findings Decisions:Decisions Evidence:Evidence Diagram:Diagram "$fifth_heading:$fifth_label"; do
+    heading="${heading_and_label%%:*}" label="${heading_and_label#*:}"
     anchor="$(tr '[:upper:] ' '[:lower:]-' <<<"$heading")"
     sed_ids+=(-e "s|<h2>$heading|<h2 id=\"$anchor\">$heading|")
-    printf '<a href="#%s">%s</a>' "$anchor" "$heading"
+    printf '<a href="#%s">%s</a>' "$anchor" "$label"
   done
   printf '</nav>\n'
 } > "$nav_file"
