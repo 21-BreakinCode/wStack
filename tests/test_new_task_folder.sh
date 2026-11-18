@@ -19,7 +19,7 @@ assert "no placeholder left" '! grep -rq "{{" "$folder"'
 assert "status drafting" '[ "$(fm_get "$folder/spec.md" status)" = "drafting" ]'
 assert "mobile false" '[ "$(fm_get "$folder/spec.md" mobile)" = "false" ]'
 assert "work_type default code" '[ "$(fm_get "$folder/spec.md" work_type)" = "code" ]'
-assert "created_at format" '[[ "$(fm_get "$folder/spec.md" created_at)" =~ ^2026-11-18T[0-9:]{8}[+-][0-9]{2}:[0-9]{2}$ ]]'
+assert "created_at format" '[[ "$(fm_get "$folder/spec.md" created_at)" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}[+-][0-9]{2}:[0-9]{2}$ ]]'
 
 second="$(bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --slug test-idea --date 2026-11-18 | tail -n 1)"
 assert "collision suffix" '[ "$second" = "$vault/Workflow/Tasks/2026-11-18-test-idea-2" ]'
