@@ -23,9 +23,24 @@ mv "$stage_dir/plugin.json" "$stage_dir/plugin/.claude-plugin/plugin.json"
 mkdir -p "$stage_dir/plugin/answer-me-with-html-copy"
 cp -R "$install_path/answer-me-with-html/." "$stage_dir/plugin/answer-me-with-html-copy/"
 amjs="$stage_dir/plugin/answer-me-with-html-copy/scripts/am.mjs"
-# The sandbox also blocks binding a local port, so check-page-width.sh gets a stub that prints 375.
-printf '#!/usr/bin/env bash\necho 375\n' > "$stage_dir/plugin/scripts/check-page-width.sh"
-printf '#!/usr/bin/env bash\necho "OK preflight stubbed for evals"\n' > "$stage_dir/plugin/scripts/preflight.sh"
+# The sandbox also blocks binding a local port, so check-page-width.sh gets a stub. It prints 375, unless the
+# case env sets EVAL_WSTACK_STUB_WIDTH_FIRST: then the first call per page prints that width and exits 1.
+cat > "$stage_dir/plugin/scripts/check-page-width.sh" <<'STUB'
+#!/usr/bin/env bash
+call_marker="$(dirname "$1")/.width-check-called"
+if [ -n "${EVAL_WSTACK_STUB_WIDTH_FIRST:-}" ] && [ ! -e "$call_marker" ]; then
+  touch "$call_marker"; echo "$EVAL_WSTACK_STUB_WIDTH_FIRST"; exit 1
+fi
+echo 375
+STUB
+# preflight.sh stub: base prints OK. With EVAL_WSTACK_STUB_PLAN_MISSING set, plan reports a missing tool.
+cat > "$stage_dir/plugin/scripts/preflight.sh" <<'STUB'
+#!/usr/bin/env bash
+if [ "${1:-}" = plan ] && [ -n "${EVAL_WSTACK_STUB_PLAN_MISSING:-}" ]; then
+  echo "MISSING playwright-cli: npm i -g @playwright/cli@0.1.24"; exit 1
+fi
+echo "OK preflight stubbed for evals"
+STUB
 for prompt_file in "$stage_dir"/plugin/evals/*/prompt.md; do
   sed -i '' -e "s|__AMJS__|$amjs|g" "$prompt_file"
 done

@@ -27,7 +27,7 @@ Status stays `drafting` until the page exists.
 6. Run `bash "$scripts/render-page.sh" "$draft" "$task_dir/spec.html"`.
    - Exit 0: the page fits at 375 px.
    - Exit 1: the page is too wide. Shorten wide tables and long lines in the draft, and run it again. Stop after 3 tries and tell the user the width.
-   - Exit 2: print the message. It names the install command. Set `status` to `waiting-user` and stop.
+   - Exit 2: print the stderr of the script as it is. It names the cause and the fix. Set `status` to `waiting-user` and stop.
 7. If `mobile` is `true` in the frontmatter, also publish `spec.html` as a Claude artifact.
 8. Set `status` to `awaiting-approval`. Tell the user the path of `spec.html`, and ask for approval. End the reply. Wait.
 

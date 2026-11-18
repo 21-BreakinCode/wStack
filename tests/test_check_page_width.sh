@@ -25,4 +25,7 @@ assert "wide page prints a width above 375" '[ "$wide_output" -gt 375 ]'
 missing_exit=0
 bash "$repo_root/scripts/check-page-width.sh" "$work_dir/none.html" >/dev/null 2>&1 || missing_exit=$?
 assert "missing page exits 2" '[ "$missing_exit" -eq 2 ]'
+nopw_exit=0
+nopw_output="$(PATH="/usr/bin:/bin" /bin/bash "$repo_root/scripts/check-page-width.sh" "$work_dir/narrow.html" 2>&1)" || nopw_exit=$?
+assert "missing playwright-cli exits 2 and names the install line" '[ "$nopw_exit" -eq 2 ] && [[ "$nopw_output" == *"npm i -g @playwright/cli@0.1.24"* ]]'
 finish
