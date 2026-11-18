@@ -8,20 +8,20 @@ Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontma
 
 Run the four steps in this order.
 
-1. Behavior check. Run each check in the spec's `## Verification plan`. Under `## Evidence` in `review.md`, write one line per check: the check, the command or output you saw, and `pass` or `fail`. If a check fails, go to "A check fails".
+1. Behavior check. Run each check in the spec's `## Verification plan`. For each check, run the evidence skill. It saves the evidence in `/tmp/wstack-evidence/<task_id>/` and writes one line per check under `## Evidence` in `review.md`: `- <check> → <file> → pass|fail`. A check whose only evidence is command output still gets a line. Save the output as a file in that folder. If a check fails, go to "A check fails".
 2. Rollback check. Find the undo method for the work type in the spec. Confirm that it works. Write the undo steps under `## Decisions` in `review.md`. If no working undo exists, treat it as a failed check.
-3. Final review. Start the reviewer agent in `${CLAUDE_PLUGIN_ROOT}/agents/reviewer.md`. It writes its findings into `review.md`. If the file is not there, tell the user the reviewer is not available yet and stop.
-4. Review page. Run the review-page skill to build `review.html` in the task folder. If the skill is not there, tell the user it is not available yet and stop.
+3. Final review. Start the reviewer agent in `${CLAUDE_PLUGIN_ROOT}/agents/reviewer.md`. It writes its findings into `review.md`. If the file is not there, stop with the reason `missing agents/reviewer.md`, as in "Stop for the user".
+4. Review page. Run the review-page skill to build `review.html` in the task folder. If the skill is not there, stop with the reason `missing review-page skill`, as in "Stop for the user".
 
 After step 3, set `blocking_findings` and `non_blocking_findings` in the `review.md` frontmatter to the counts. A blocking finding is a spec mismatch, a correctness bug, or a security problem. Go to "A check fails" for each open blocking finding. A non-blocking finding (design or test coverage) does not stop the task.
 
-When all four steps pass, set `result` to `pass` in `review.md`. Write a `step` line in `run-log.md`. Then go on to Deliver. If the Deliver stage is not available, tell the user and stop. The status stays `verifying`.
+When all four steps pass, set `result` to `pass` in `review.md`. Write a `step` line in `run-log.md`. Then go on to Deliver. If `deliver.md` is not in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/`, stop with the reason `missing deliver.md`, as in "Stop for the user".
 
 ## A check fails
 
 First decide who is wrong.
 
-- The spec is wrong or unclear when the plan contradicts the goal. A check that the goal asks for and the work cannot meet is a failed try, not a wrong spec. Set `result` to `waiting` in `review.md`. Set `status` to `drafting`. Name the contradiction to the user. Make the last line of the reply one question about which side is right. Write nothing after it. Confirmation takes over. A wrong spec does not count as a retry.
+- The spec is wrong or unclear when the plan contradicts the goal. A check that the goal asks for and the work cannot meet is a failed try, not a wrong spec. Set `result` to `waiting` in `review.md`. Set `retries` to `0` and `status` to `drafting`, so the new spec gets a fresh run of tries. Name the contradiction to the user. Make the last line of the reply one question about which side is right. Write nothing after it. Confirmation takes over. A wrong spec does not count as a retry.
 - The work is wrong in every other case. Set `result` to `fail` in `review.md`. Count the failed try as below.
 
 ## Count the try
@@ -33,19 +33,28 @@ Execute and Verify share one counter, `retries` in `run-log.md`. A failed try in
 3. Take the retry limit from the Config list in `SKILL.md`. If `retries` is less than the limit, set `status` to `executing`, fix the work, set `status` back to `verifying`, and run the order again from step 1.
 4. If `retries` reached the limit, stop as below.
 
-Never ask the user between tries. If you find no fix inside the spec's scope, run the order again anyway, so the next failure counts. Never end a reply while `status` is `executing` or `verifying`. Only the retry-limit stop or the wrong-spec path ends the loop.
+Never ask the user between tries. If you find no fix inside the spec's scope, run the order again anyway, so the next failure counts. Never end a reply while `status` is `executing` or `verifying`. Every reply ends through a stop below, the wrong-spec path, or a change to the next stage.
 
-## Stop at the retry limit
+## Stop for the user
+
+Use this stop for the retry limit and for a missing stage file. Execute uses it too, with `"stage":"execute"`.
 
 1. Write a `stop` line in `run-log.md`.
-2. Run `bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","reason":"retry_limit reached: <failed check>"}'`.
+2. Run `bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","stage":"verify","reason":"<reason>"}'`. For the retry limit, the reason is `retry_limit reached: <failed check>`.
 3. Set `result` to `waiting` in `review.md`. Set `status` to `waiting-user` in `spec.md`.
-4. Tell the user which check keeps failing and how many tries you made. Offer three choices: try again with their direction, change the spec, or cancel. End the reply. Wait.
+4. Tell the user the reason. For the retry limit, name the check that keeps failing and the number of tries, and offer three choices: try again with their direction, change the spec, or cancel. For a missing file, ask the user to confirm when it is there. End the reply. Wait.
 
-## After the user answers a retry-limit stop
+## After the user answers a stop
 
-This rule runs the same way in the same session and in a resumed task. In a resumed task, `SKILL.md` sends `waiting-user` to `execute.md`, which sends you here when the last stop reason holds `retry_limit`.
+This rule runs the same way in the same session and in a resumed task. In a resumed task, `SKILL.md` sends `waiting-user` to `execute.md`, which sends you here when the last stop item has `"stage":"verify"` or a reason that holds `retry_limit`. Resume the stage that the item names in `stage`.
 
-- Try again: set `retries` to `0`, set `status` to `executing`, write a `step` line with the user's direction, and fix the work. Then run Verify again.
-- Change the spec: set `status` to `drafting` and follow `confirmation.md`.
+Retry-limit stop:
+
+- Try again: set `retries` to `0`, set `status` to `executing`, and write a `step` line with the user's direction. Fix the work. If `stage` is `verify`, set `status` to `verifying` and run the Order again from step 1. If `stage` is `execute`, go on with Execute.
+- Change the spec: set `retries` to `0` and `status` to `drafting`. Then follow `confirmation.md`.
+- Cancel: set `status` to `cancelled`.
+
+Missing-file stop:
+
+- The file is there: set `status` to `verifying` and run the Order again from the step that stopped.
 - Cancel: set `status` to `cancelled`.

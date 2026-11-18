@@ -6,7 +6,7 @@ Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontma
 
 ## Start
 
-1. If `status` is `waiting-user`, read the last item of `stopped_for_user` in `run-log.md`. Tell the user its step and reason. If the reason holds `retry_limit`, follow "After the user answers a retry-limit stop" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` instead. Otherwise ask for a yes or no, end the reply, and wait. Then follow "After the user answers a stop".
+1. If `status` is `waiting-user`, read the last item of `stopped_for_user` in `run-log.md`. Tell the user its step and reason. If the item has `"stage":"verify"` or its reason holds `retry_limit`, follow "After the user answers a stop" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` instead. Otherwise ask for a yes or no, end the reply, and wait. Then follow "After the user answers a stop".
 2. If `started_at` in `run-log.md` is empty, set it once to `date -u +%Y-%m-%dT%H:%M:%SZ`: `bash "$scripts/frontmatter-set.sh" "$task_dir/run-log.md" started_at <time>`. Never set it again.
 3. For a code task, work in `workspace_cwd`. Run `git switch -c wstack/<slug>`, or `git switch wstack/<slug>` if the branch exists. `<slug>` is the task id without its date prefix. Commit only on that branch. Never commit to the default branch.
 
@@ -31,7 +31,7 @@ Execute never pushes `wstack/<slug>` and never opens the pull request. The Deliv
 Before a non-undoable step, stop:
 
 1. Write a `stop` line in `run-log.md` with the reason.
-2. Run `bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","reason":"<reason>"}'`.
+2. Run `bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","stage":"execute","reason":"<reason>"}'`.
 3. Set `status` to `waiting-user` in `spec.md`.
 4. Tell the user the step and the reason. Ask for a yes or no. End the reply. Wait.
 
@@ -50,7 +50,7 @@ Stop also when the spec is wrong or unclear. Set `status` to `waiting-user` and 
 
 ## Retry
 
-When a try fails, write a `retry` line, read `retries` from `run-log.md`, add 1, and set it with `frontmatter-set.sh`. Then try again. Execute and Verify share this one counter, as `verify.md` says. Take the retry limit from the Config list in `SKILL.md`. When `retries` reaches the limit, stop with the reason `retry_limit reached`.
+When a try fails, write a `retry` line, read `retries` from `run-log.md`, add 1, and set it with `frontmatter-set.sh`. Then try again. Execute and Verify share this one counter, as `verify.md` says. Take the retry limit from the Config list in `SKILL.md`. When `retries` reaches the limit, stop as above with the reason `retry_limit reached`.
 
 ## Thinking and ops work
 

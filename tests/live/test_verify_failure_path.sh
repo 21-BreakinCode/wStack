@@ -15,10 +15,10 @@ export FAKE_LOG="$work_dir/gh.log"
 mkdir -p "$vault"
 : > "$FAKE_LOG"
 
-# run_fixture <slug> <goal> <verification plan> <retry limit>
+# run_fixture <slug> <goal> <verification plan> <retry limit> <retries before the run>
 # Sets task_dir and reply_text. Runs the work mode once on a task at status verifying.
 run_fixture() {
-  local slug="$1" goal="$2" plan="$3" retry_limit="$4"
+  local slug="$1" goal="$2" plan="$3" retry_limit="$4" start_retries="$5"
   task_dir="$(bash "$plugin_root/scripts/new-task-folder.sh" --vault "$vault" --tasks-dir "$tasks_dir" \
     --slug "$slug" --date 2026-11-18 --work-type thinking | tail -1)"
   local task_id; task_id="$(basename "$task_dir")"
@@ -27,6 +27,7 @@ run_fixture() {
   bash "$set_field" "$task_dir/spec.md" approved_at 2026-11-18T00:00:00Z
   bash "$set_field" "$task_dir/spec.md" status verifying
   bash "$set_field" "$task_dir/run-log.md" started_at 2026-11-18T00:01:00Z
+  bash "$set_field" "$task_dir/run-log.md" retries "$start_retries"
   awk 'NR==1&&$0=="---"{f=1} {print} f&&NR>1&&$0=="---"{exit}' "$task_dir/spec.md" > "$work_dir/frontmatter"
   {
     cat "$work_dir/frontmatter"
@@ -46,7 +47,7 @@ run_fixture() {
 
 echo "== Fixture 1: a check that can never pass, retry limit 2"
 run_fixture never-passes "Write one short note about tea in the vault. The task is done only when the file /nonexistent exists." \
-  "Check: the file /nonexistent exists. Pass rule: test -f /nonexistent exits 0. Evidence: the exit code." 2
+  "Check: the file /nonexistent exists. Pass rule: test -f /nonexistent exits 0. Evidence: the exit code." 2 0
 retries_value="$(sed -n 's/^retries: *//p' "$task_dir/run-log.md")"
 status_value="$(sed -n 's/^status: *//p' "$task_dir/spec.md")"
 stops_json="$(sed -n 's/^stopped_for_user: *//p' "$task_dir/run-log.md")"
@@ -55,12 +56,15 @@ rc=0; [ "$status_value" = waiting-user ] || rc=1; check "status is waiting-user 
 rc=0; [ "$(printf '%s' "$stops_json" | jq 'length')" = 1 ] || rc=1; check "stopped_for_user has one item" "$rc"
 rc=0; [ "$(printf '%s' "$stops_json" | jq -r '.[0].reason | contains("retry_limit")')" = true ] || rc=1
 check "stop reason contains retry_limit" "$rc"
+rc=0; [ "$(printf '%s' "$stops_json" | jq -r '.[0].stage')" = verify ] || rc=1; check "stop item stage is verify" "$rc"
 
 echo "== Fixture 2: the verification plan contradicts the goal"
 run_fixture spec-wrong "Write a note of about 300 words about tea in the vault." \
-  "Check: the note has fewer than 50 words. Pass rule: wc -w of the note is below 50. Evidence: the word count." 3
+  "Check: the note has fewer than 50 words. Pass rule: wc -w of the note is below 50. Evidence: the word count." 3 1
 status_value="$(sed -n 's/^status: *//p' "$task_dir/spec.md")"
 rc=0; [ "$status_value" = drafting ] || rc=1; check "status is drafting (was: $status_value)" "$rc"
+retries_value="$(sed -n 's/^retries: *//p' "$task_dir/run-log.md")"
+rc=0; [ "$retries_value" = 0 ] || rc=1; check "retries was reset to 0 (was: $retries_value)" "$rc"
 reply_lower="$(printf '%s' "$reply_text" | tr '[:upper:]' '[:lower:]')"
 rc=1
 case "$reply_lower" in *contradict*|*conflict*|*inconsisten*) rc=0 ;; esac
