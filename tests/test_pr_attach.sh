@@ -18,10 +18,10 @@ cp "$work_dir/shot.png" "$work_dir/issue#12.png"
 
 : > "$FAKE_LOG"
 out="$(run --base main)"
-assert "jpg attached" 'grep -qE -- "--attach [^ ]+/gh/shot\.jpg" "$FAKE_LOG"'
-assert "mp4 attached" 'grep -qE -- "--attach [^ ]+/gh/clip\.mp4" "$FAKE_LOG"'
+assert "jpg attached" 'grep -qE -- "--attach [^ ]+/gh/01-shot\.jpg" "$FAKE_LOG"'
+assert "mp4 attached" 'grep -qE -- "--attach [^ ]+/gh/02-clip\.mp4" "$FAKE_LOG"'
 assert "base passed" 'grep -q -- "--base main" "$FAKE_LOG"'
-assert "gh copies exist" '[ -f "$WSTACK_EVIDENCE_ROOT/t1/gh/shot.jpg" ] && [ -f "$WSTACK_EVIDENCE_ROOT/t1/gh/clip.mp4" ]'
+assert "gh copies exist" '[ -f "$WSTACK_EVIDENCE_ROOT/t1/gh/01-shot.jpg" ] && [ -f "$WSTACK_EVIDENCE_ROOT/t1/gh/02-clip.mp4" ]'
 assert "pr url printed" '[[ "$out" == *"/pull/1"* ]]'
 
 : > "$FAKE_LOG"
@@ -57,4 +57,23 @@ status=0
 err="$(FAKE_PR_FAIL=nourl run 2>&1 >/dev/null)" || status=$?
 assert "no-url failure exits 3" '[ "$status" -eq 3 ]'
 assert "no-url failure message" '[[ "$err" == *"pull request not created: fatal: branch not pushed"* ]]'
+
+mkdir -p "$work_dir/c"
+cp "$work_dir/shot.png" "$work_dir/c/a#1.png"
+ffmpeg -loglevel error -f lavfi -i testsrc2=duration=1:size=320x180:rate=1 -frames:v 1 "$work_dir/c/a_1.png"
+cwebp -quiet "$work_dir/shot.png" -o "$work_dir/c/a.webp"
+cp "$work_dir/c/a_1.png" "$work_dir/c/a.png"
+attach_paths() { grep -o -- '--attach [^ ]*' "$FAKE_LOG" | sed 's/--attach //'; }
+
+: > "$FAKE_LOG"
+bash "$script" --task-id t3 --title T --body-file "$work_dir/body.md" --max-mb 5 "$work_dir/c/a#1.png" "$work_dir/c/a_1.png" >/dev/null
+first_copy="$(attach_paths | sed -n 1p)"; second_copy="$(attach_paths | sed -n 2p)"
+assert "a#1 and a_1 copies have different paths" '[ -n "$first_copy" ] && [ "$first_copy" != "$second_copy" ]'
+assert "a#1 and a_1 copies hold different bytes" '! cmp -s "$first_copy" "$second_copy"'
+
+: > "$FAKE_LOG"
+bash "$script" --task-id t4 --title T --body-file "$work_dir/body.md" --max-mb 5 "$work_dir/c/a.png" "$work_dir/c/a.webp" >/dev/null
+first_copy="$(attach_paths | sed -n 1p)"; second_copy="$(attach_paths | sed -n 2p)"
+assert "a.png and a.webp copies have different paths" '[ -n "$first_copy" ] && [ "$first_copy" != "$second_copy" ]'
+assert "a.png and a.webp copies both exist" '[ -f "$first_copy" ] && [ -f "$second_copy" ]'
 finish

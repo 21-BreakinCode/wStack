@@ -6,7 +6,8 @@
 # A file that cannot be compressed (or fit under --max-mb) is skipped; the PR is still created,
 # and "attachment upload failed: <file>" is printed for it.
 # `gh pr create` fails but prints a URL (partial upload): prints the URL and "attachment upload failed", exits 0.
-# '#' in a file name is replaced by '_' in the gh copy, because gh reads '#' as alt text.
+# Each run starts with a fresh gh/ folder. Every gh copy gets a per-index prefix (01-, 02-, ...)
+# so two inputs never share an output path. '#' in a name becomes '_' (gh reads '#' as alt text).
 # Exit codes: 0 PR created (attachments may have failed), 1 bad input, 2 usage,
 # 3 PR not created (gh failed without printing a URL; no retry, to avoid a duplicate PR).
 set -euo pipefail
@@ -42,16 +43,16 @@ case "$repo_url" in
 esac
 
 failed_files=()
+copy_index=0
 if [ "$attach_ok" -eq 1 ]; then
+  rm -rf "$gh_dir"
+  mkdir -p "$gh_dir/src"
   for evidence_file in "$@"; do
-    source_file="$evidence_file"
-    safe_name="$(basename "$evidence_file")"
+    copy_index=$((copy_index + 1))
+    safe_name="$(printf '%02d-%s' "$copy_index" "$(basename "$evidence_file")")"
     safe_name="${safe_name//#/_}"
-    if [ "$safe_name" != "$(basename "$evidence_file")" ]; then
-      mkdir -p "$gh_dir/src"
-      source_file="$gh_dir/src/$safe_name"
-      cp "$evidence_file" "$source_file"
-    fi
+    source_file="$gh_dir/src/$safe_name"
+    cp "$evidence_file" "$source_file"
     if gh_copy="$(bash "$script_dir/compress-media.sh" --target gh --max-mb "$max_mb" "$source_file" "$gh_dir" | tail -n 1)" && [ -n "$gh_copy" ]; then
       create_args+=(--attach "$gh_copy")
     else
