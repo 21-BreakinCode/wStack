@@ -42,7 +42,7 @@ The text log is the main evidence. The user reads the exact data from it.
 
 Use the task slug for `<slug>`, so parallel tasks do not share a browser. To read the page width, run `playwright-cli -s <slug> --raw eval "() => document.documentElement.scrollWidth"`. It prints the bare number.
 
-`video-start` needs the Playwright ffmpeg build. If it fails with "Executable doesn't exist ... ffmpeg", tell the user to run `npx playwright install ffmpeg`. Do not run it yourself.
+`video-start` needs the Playwright ffmpeg build. If it fails with "Executable doesn't exist ... ffmpeg", tell the user to run `playwright-cli install-browser ffmpeg`. Do not run it yourself.
 
 ### Terminal check
 

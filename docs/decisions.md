@@ -43,22 +43,22 @@ open file://...      ### Error  Access to "file:" protocol is blocked. Attempted
 --raw eval           375
 screenshot           - [Screenshot of viewport](tests/tmp/s2/s.webp)     (file is RIFF WebP, 37 KB)
 video-start (cache)  ### Error  Executable doesn't exist at ~/Library/Caches/ms-playwright/ffmpeg-1013/ffmpeg-mac
-                     Video rendering requires ffmpeg binary. ... Please run: npx playwright install ffmpeg
+                     Video rendering requires ffmpeg binary. ... Please run: playwright-cli install-browser ffmpeg
 video-start (temp cache with ffmpeg-1013 linked to system ffmpeg)
                      Video recording started.  ->  video-stop: - [Video](tests/tmp/s2/v.webm)   (VP9, 11 KB)
 ```
 
 Result:
 - `file://` fails. Playwright CLI blocks the `file:` protocol. Serve the page with `python3 -m http.server --bind 127.0.0.1 <port>`.
-- The cached Chromium is reused. `open` needed no download.
+- No browser download happened, and the browser is not the cached Chromium. `playwright-cli` launched the system Google Chrome. Evidence: `navigator.userAgent` was `HeadlessChrome/157.0.0.0`, and `ps` showed `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` (version 157.0.8103.79) running headless for the session. The bundled playwright-core wants chromium revision 1254, and the cache never held it. So the later tasks need Google Chrome installed, not a Playwright Chromium. Preflight does not check for Chrome.
 - `--raw eval` prints the bare number `375` and exits 0. I ran `--raw` before the command name only.
 - `screenshot --filename=<path>` writes a real WebP file at the path. The extension picks the format.
 - `video-start <path>` and `video-stop` write the video exactly at the path you gave. The path may be relative to the folder where you run the command.
-- BLOCKED on this machine: `video-start` needs `ffmpeg-1013` in `~/Library/Caches/ms-playwright`. Only `ffmpeg-1011` is cached. Playwright prints `npx playwright install ffmpeg` as the fix. I did not run it, because I may not download anything.
-- Workaround with no download: set `PLAYWRIGHT_BROWSERS_PATH` to a temp folder that links the cached browsers and holds `ffmpeg-1013/ffmpeg-mac` linked to the system `ffmpeg`. The linked `ffmpeg-1011` did not work: the video file was never written. The system ffmpeg worked. `tests/test_evidence_capture.sh` builds this temp folder when `ffmpeg-1013` is missing.
+- `video-start` needs `ffmpeg-1013` in `~/Library/Caches/ms-playwright`. At first only `ffmpeg-1011` was cached, and `video-start` failed with the error shown above. The controller then ran `playwright-cli install-browser ffmpeg`, and the video steps work with the real cache. `playwright-cli install-browser ffmpeg --dry-run` downloads nothing and prints `Install location:` with the path to check.
+- Do not install ffmpeg through npx. It can fetch another Playwright version with another ffmpeg revision. Before the install, a temp `PLAYWRIGHT_BROWSERS_PATH` that linked the system ffmpeg as `ffmpeg-1013` also worked, and linking `ffmpeg-1011` did not. The tests no longer use that shim.
 - Each page load of a fixture without a favicon logs one console error (404 for `/favicon.ico`). It is harmless.
 
-Effect on plan: Tasks 6 to 10 serve pages over `http://127.0.0.1` and never open `file://`. Task 10 reads the page width with `--raw eval` and compares it to the number 375. Video capture needs `npx playwright install ffmpeg` once. Preflight does not check for it yet. The user must run that command, or evidence capture falls back to screenshots.
+Effect on plan: Tasks 6 to 10 serve pages over `http://127.0.0.1` and never open `file://`. Task 10 reads the page width with `--raw eval` and compares it to the number 375. Video capture needs `playwright-cli install-browser ffmpeg` once. `scripts/preflight.sh plan web` checks for it and prints `MISSING playwright ffmpeg: playwright-cli install-browser ffmpeg` when it is absent. Without it, evidence capture falls back to screenshots.
 
 ## S3: Excalidraw to SVG
 
