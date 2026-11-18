@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$repo_root/tests/_assert.sh"
+work_dir="$(mktemp -d)"
+trap 'rm -rf "$work_dir"' EXIT
+stub_bin="$work_dir/bin"
+preflight="$repo_root/scripts/preflight.sh"
+
+make_stub() {  # <name> <script body>
+  printf '#!/bin/bash\n%s\n' "$2" > "$stub_bin/$1"
+  chmod +x "$stub_bin/$1"
+}
+
+fresh_bin() {  # system utilities the script needs, plus stubs for every tool
+  rm -rf "$stub_bin"; mkdir -p "$stub_bin"
+  for util in dirname basename sed grep head tr cut sort cat; do
+    ln -s "$(command -v "$util")" "$stub_bin/$util"
+  done
+  make_stub git 'echo "git version 2.50.1"'
+  make_stub gh 'echo "gh version 2.104.0 (2026-01-01)"'
+  make_stub node 'echo "v26.13.1"'
+  make_stub jq 'echo "jq-1.7.1"'
+  make_stub claude 'if [ "$1" = "plugin" ]; then echo "answer-me-with-html@answer-me-with-html  enabled"; else echo "2.1.327 (Claude Code)"; fi'
+  make_stub herdr 'echo "herdr 0.5.0"'
+  make_stub playwright-cli 'echo "0.1.24"'
+  make_stub ffmpeg 'if [ "$1" = "-encoders" ]; then echo " V....D libx264"; echo " V....D libx265"; else echo "ffmpeg version 7.1"; fi'
+  make_stub cwebp 'echo "1.5.0"'
+  make_stub vhs 'echo "vhs version 0.9.0"'
+  make_stub cf 'if [ "$1" = "auth" ]; then exit 0; else echo "1.0.0-rc.1"; fi'
+}
+
+run_preflight() {  # sets output and rc
+  rc=0; output="$(PATH="$stub_bin" "$BASH" "$preflight" "$@" 2>&1)" || rc=$?
+}
+
+fresh_bin
+run_preflight base
+assert "base all present exits 0" '[ "$rc" = "0" ]'
+assert "base prints OK gh" 'echo "$output" | grep -q "^OK gh 2.104.0"'
+
+fresh_bin; rm "$stub_bin/jq"
+run_preflight base
+assert "missing jq exits 1" '[ "$rc" = "1" ]'
+assert "missing jq line" 'echo "$output" | grep -qx "MISSING jq: brew install jq"'
+
+fresh_bin; make_stub gh 'echo "gh version 2.98.0 (2026-01-01)"'
+run_preflight base
+assert "old gh exits 1" '[ "$rc" = "1" ]'
+assert "old gh line" 'echo "$output" | grep -q "^OLD gh 2.98.0 (need 2.99.0): brew upgrade gh"'
+
+fresh_bin; make_stub claude 'if [ "$1" = "plugin" ]; then echo "other-plugin"; else echo "2.1.327 (Claude Code)"; fi'
+run_preflight base
+assert "missing plugin exits 1" '[ "$rc" = "1" ]'
+assert "missing plugin line" 'echo "$output" | grep -q "^MISSING answer-me-with-html plugin: claude plugin marketplace add"'
+
+fresh_bin; rm "$stub_bin/herdr"
+run_preflight base
+assert "no herdr still exits 0" '[ "$rc" = "0" ]'
+assert "no herdr warns" 'echo "$output" | grep -q "^WARN herdr"'
+
+fresh_bin; make_stub node 'echo "v25.1.0"'
+run_preflight plan r2
+assert "r2 with node 25 exits 1" '[ "$rc" = "1" ]'
+assert "r2 with node 25 names mise" 'echo "$output" | grep -q "mise use -g node@26"'
+
+fresh_bin
+run_preflight plan r2
+assert "r2 all fine exits 0" '[ "$rc" = "0" ]'
+
+fresh_bin; make_stub cf 'if [ "$1" = "auth" ]; then exit 1; else echo "1.0.0-rc.1"; fi'
+run_preflight plan r2
+assert "r2 not logged in exits 1" '[ "$rc" = "1" ] && echo "$output" | grep -q "cf auth login"'
+
+fresh_bin; make_stub ffmpeg 'if [ "$1" = "-encoders" ]; then echo " V....D libx264"; else echo "ffmpeg version 7.1"; fi'
+run_preflight plan video
+assert "video without libx265 exits 1" '[ "$rc" = "1" ]'
+
+fresh_bin; rm "$stub_bin/playwright-cli"
+run_preflight plan diagram
+assert "diagram needs playwright-cli" '[ "$rc" = "1" ] && echo "$output" | grep -q "^MISSING playwright-cli: npm i -g @playwright/cli@0.1.24"'
+
+fresh_bin
+run_preflight plan web video webp terminal r2 diagram
+assert "all needs satisfied exits 0" '[ "$rc" = "0" ]'
+
+run_preflight plan bogus
+assert "unknown need exits 2" '[ "$rc" = "2" ]'
+finish
