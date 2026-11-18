@@ -14,7 +14,7 @@ make_stub() {  # <name> <script body>
 
 fresh_bin() {  # system utilities the script needs, plus stubs for every tool
   rm -rf "$stub_bin"; mkdir -p "$stub_bin"
-  for util in dirname basename sed grep head tr cut sort cat; do
+  for util in dirname basename sed grep head tr cut sort cat yes; do
     ln -s "$(command -v "$util")" "$stub_bin/$util"
   done
   make_stub git 'echo "git version 2.50.1"'
@@ -83,6 +83,21 @@ assert "diagram needs playwright-cli" '[ "$rc" = "1" ] && echo "$output" | grep 
 fresh_bin
 run_preflight plan web video webp terminal r2 diagram
 assert "all needs satisfied exits 0" '[ "$rc" = "0" ]'
+
+fresh_bin; make_stub playwright-cli 'echo "0.1.24"; exit 1'
+run_preflight plan web terminal
+assert "failing version command still gives OK" 'echo "$output" | grep -q "^OK playwright-cli 0.1.24"'
+assert "checks after a failing version command still run" 'echo "$output" | grep -q "^OK vhs"'
+
+fresh_bin
+make_stub claude 'if [ "$1" = "plugin" ]; then echo "answer-me-with-html@answer-me-with-html enabled"; yes "filler plugin line" | head -c 300000; else echo "2.1.327 (Claude Code)"; fi'
+make_stub ffmpeg 'if [ "$1" = "-encoders" ]; then echo " V....D libx264"; echo " V....D libx265"; yes " V....D filler" | head -c 300000; else echo "ffmpeg version 7.1"; fi'
+for repeat in 1 2 3; do
+  run_preflight base
+  assert "large plugin list still OK (run $repeat)" '[ "$rc" = "0" ] && echo "$output" | grep -q "^OK answer-me-with-html plugin"'
+  run_preflight plan video
+  assert "large encoder list still OK (run $repeat)" '[ "$rc" = "0" ]'
+done
 
 run_preflight plan bogus
 assert "unknown need exits 2" '[ "$rc" = "2" ]'

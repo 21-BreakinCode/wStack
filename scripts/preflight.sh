@@ -27,7 +27,7 @@ missing() { echo "MISSING $1: $2"; failed=1; }
 check() {
   local tool="$1" version_command="$2" min="$3" install="$4" found
   command -v "$tool" >/dev/null 2>&1 || { missing "$tool" "$install"; return; }
-  found="$(eval "$version_command" 2>&1 | first_version)"
+  found="$(eval "$version_command" 2>&1 | first_version || true)"
   if [ -n "$min" ] && ! version_ge "${found:-0}" "$min"; then
     echo "OLD $tool ${found:-unknown} (need $min): $install"; failed=1; return
   fi
@@ -52,12 +52,13 @@ check_base() {
   check jq 'jq --version' '' 'brew install jq'
   check claude 'claude --version' 2.1.51 'claude update'
   local plugin_install='claude plugin marketplace add QingYunA/answer-me-with-html && claude plugin install answer-me-with-html@answer-me-with-html'
-  if command -v claude >/dev/null 2>&1 && claude plugin list 2>/dev/null | grep -q 'answer-me-with-html'; then
-    echo "OK answer-me-with-html plugin"
-  else
-    missing 'answer-me-with-html plugin' "$plugin_install"
-  fi
-  command -v herdr >/dev/null 2>&1 && echo "OK herdr $(herdr --version 2>&1 | first_version)" \
+  local plugin_list=""
+  command -v claude >/dev/null 2>&1 && plugin_list="$(claude plugin list 2>/dev/null || true)"
+  case "$plugin_list" in
+    *answer-me-with-html*) echo "OK answer-me-with-html plugin" ;;
+    *) missing 'answer-me-with-html plugin' "$plugin_install" ;;
+  esac
+  command -v herdr >/dev/null 2>&1 && echo "OK herdr $(herdr --version 2>&1 | first_version || true)" \
     || echo "WARN herdr: not found, panes fall back to the current terminal: brew install herdr"
 }
 
@@ -67,7 +68,10 @@ check_video() {
   local encoders encoder
   encoders="$(ffmpeg -encoders 2>/dev/null || true)"
   for encoder in libx264 libx265; do
-    echo "$encoders" | grep -q "$encoder" || missing "ffmpeg $encoder" 'brew install ffmpeg'
+    case "$encoders" in
+      *"$encoder"*) ;;
+      *) missing "ffmpeg $encoder" 'brew install ffmpeg' ;;
+    esac
   done
 }
 
