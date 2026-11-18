@@ -25,9 +25,12 @@ missing() { echo "MISSING $1: $2"; failed=1; }
 
 # check <tool> <version command> <min version or empty> <install command>
 check() {
-  local tool="$1" version_command="$2" min="$3" install="$4" found
+  local tool="$1" version_command="$2" min="$3" install="$4" found version_output version_ran=1
   command -v "$tool" >/dev/null 2>&1 || { missing "$tool" "$install"; return; }
-  found="$(eval "$version_command" 2>&1 | first_version || true)"
+  version_output="$(eval "$version_command" 2>&1)" || version_ran=0
+  found="$(printf '%s\n' "$version_output" | first_version)"
+  # a printed version wins; a nonzero exit with no version means a broken binary
+  [ "$version_ran" = "1" ] || [ -n "$found" ] || { missing "$tool" "$install"; return; }
   if [ -n "$min" ] && ! version_ge "${found:-0}" "$min"; then
     echo "OLD $tool ${found:-unknown} (need $min): $install"; failed=1; return
   fi
@@ -58,8 +61,11 @@ check_base() {
     *answer-me-with-html*) echo "OK answer-me-with-html plugin" ;;
     *) missing 'answer-me-with-html plugin' "$plugin_install" ;;
   esac
-  command -v herdr >/dev/null 2>&1 && echo "OK herdr $(herdr --version 2>&1 | first_version || true)" \
-    || echo "WARN herdr: not found, panes fall back to the current terminal: brew install herdr"
+  local herdr_version=""
+  command -v herdr >/dev/null 2>&1 && herdr_version="$(herdr --version 2>&1 | first_version || true)"
+  if [ -n "$herdr_version" ]; then echo "OK herdr $herdr_version"
+  else echo "WARN herdr: not found or broken, panes fall back to the current terminal: brew install herdr"
+  fi
 }
 
 check_video() {

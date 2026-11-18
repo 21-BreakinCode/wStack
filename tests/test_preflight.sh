@@ -99,6 +99,15 @@ for repeat in 1 2 3; do
   assert "large encoder list still OK (run $repeat)" '[ "$rc" = "0" ]'
 done
 
+fresh_bin; make_stub jq 'exit 1'
+run_preflight base
+assert "broken jq exits 1" '[ "$rc" = "1" ]'
+assert "broken jq reported as MISSING" 'echo "$output" | grep -qx "MISSING jq: brew install jq"'
+
+fresh_bin; make_stub herdr 'exit 1'
+run_preflight base
+assert "broken herdr only warns" '[ "$rc" = "0" ] && echo "$output" | grep -q "^WARN herdr"'
+
 run_preflight plan bogus
 assert "unknown need exits 2" '[ "$rc" = "2" ]'
 finish
