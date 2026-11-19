@@ -26,7 +26,20 @@ Resolve each value in this order. Take the first one that is set and is not a li
 - Local-only evidence repos: `WSTACK_LOCAL_EVIDENCE_ONLY_REPOS`, then `EVAL_WSTACK_LOCAL_EVIDENCE_ONLY_REPOS`, then `${user_config.local_evidence_only_repos}`, then empty. The value is a comma list of `owner/repo`.
 - Pull request media limit in MB: `WSTACK_PR_MEDIA_MAX_MB`, then `EVAL_WSTACK_PR_MEDIA_MAX_MB`, then `${user_config.pr_media_max_mb}`, then `10`.
 
-Read the shell variables with `echo "${WSTACK_VAULT_PATH:-}" "${EVAL_WSTACK_VAULT_PATH:-}"`. Read the other shell variables the same way. If no vault path is set, ask the user for it and stop.
+Print every config shell variable in one call:
+
+```sh
+printf '%s\n' \
+  "VAULT_PATH WSTACK=${WSTACK_VAULT_PATH:-} EVAL=${EVAL_WSTACK_VAULT_PATH:-}" \
+  "TASKS_DIR WSTACK=${WSTACK_TASKS_DIR:-} EVAL=${EVAL_WSTACK_TASKS_DIR:-}" \
+  "RETRY_LIMIT WSTACK=${WSTACK_RETRY_LIMIT:-} EVAL=${EVAL_WSTACK_RETRY_LIMIT:-}" \
+  "R2_BUCKET WSTACK=${WSTACK_R2_BUCKET:-} EVAL=${EVAL_WSTACK_R2_BUCKET:-}" \
+  "EVIDENCE_DOMAIN WSTACK=${WSTACK_EVIDENCE_DOMAIN:-} EVAL=${EVAL_WSTACK_EVIDENCE_DOMAIN:-}" \
+  "LOCAL_EVIDENCE_ONLY_REPOS WSTACK=${WSTACK_LOCAL_EVIDENCE_ONLY_REPOS:-} EVAL=${EVAL_WSTACK_LOCAL_EVIDENCE_ONLY_REPOS:-}" \
+  "PR_MEDIA_MAX_MB WSTACK=${WSTACK_PR_MEDIA_MAX_MB:-} EVAL=${EVAL_WSTACK_PR_MEDIA_MAX_MB:-}"
+```
+
+Use the printed values in the order above. If no vault path is set, ask the user for it and stop.
 
 If a value is a relative path, make it absolute with `cd <value> && pwd`.
 
