@@ -25,6 +25,10 @@ check() {  # <expected> <command>
   expected="$1"; actual="$(decide "$2")"
   assert "$1: $2" '[ "$actual" = "$expected" ]'
 }
+check_deny() {  # <expected> <command>, with the guard in deny mode
+  expected="$1"; actual="$(export WSTACK_GUARD_MODE=deny; decide "$2")"
+  assert "deny mode $1: $2" '[ "$actual" = "$expected" ]'
+}
 
 check ask  'gh pr merge 12 --merge'
 check ask  'cd repo && gh pr merge 1'
@@ -56,7 +60,7 @@ check pass 'cf r2 buckets get b'
 check ask  'npm publish'
 check ask  'docker push img:1 && echo done'
 check pass 'npm test'
-check pass 'WSTACK_APPROVED=1 gh pr merge 12 --merge'
+check ask  'WSTACK_APPROVED=1 gh pr merge 12 --merge'
 
 check ask  'git push origin refs/heads/main'
 check ask  'git push origin +wstack/x:main'
@@ -70,8 +74,8 @@ check ask  'true && git push origin main'
 check ask  'git -C /x push origin main'
 check ask  'git -C /x push --force'
 check ask  'git -c user.name=a push origin HEAD:main'
-check pass 'WSTACK_APPROVED=1 gh pr merge 1'
-check pass 'true && WSTACK_APPROVED=1 gh pr merge 1'
+check ask  'WSTACK_APPROVED=1 gh pr merge 1'
+check ask  'true && WSTACK_APPROVED=1 gh pr merge 1'
 check pass 'git push origin wstack/x && git push origin wstack/y'
 check pass 'git -C /x push -u origin wstack/x'
 assert "git -C main repo bare push: ask" '[ "$(decide_in "$feature_repo" Bash "git -C $main_repo push")" = "ask" ]'
@@ -83,8 +87,28 @@ check ask  '/p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
 check ask  'bash "/Users/me/.claude/plugins/wstack/scripts/evidence-delete.sh" --task-id 2000-01-02-x --bucket b'
 check ask  'cd x && bash scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
 check pass 'bash /p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b --dry-run'
-check pass 'WSTACK_APPROVED=1 bash /p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
+check ask  'WSTACK_APPROVED=1 bash /p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
 check pass 'bash /p/scripts/evidence-upload.sh --task-id 2000-01-02-x --dir d'
+# I5: forms the first word walk missed
+check ask  'PATH=~/.local/git/bin:$PATH git push -f origin x'
+check ask  'GIT_SSH_COMMAND="ssh -i ~/.ssh/github" git push --force origin main'
+check ask  'gh pr -R o/r merge 1'
+check ask  'gh pr --repo o/r merge 1'
+check ask  'git push --mirror'
+check ask  'git push origin :wstack/x'
+check ask  'gh pr close 1 -d'
+check pass 'git push origin HEAD'
+check pass 'gh pr -R o/r list'
+check pass 'gh pr close 1'
+assert "git push origin HEAD on main: ask" '[ "$(decide_in "$main_repo" Bash "git push origin HEAD")" = "ask" ]'
+assert "git push origin @ on main: ask" '[ "$(decide_in "$main_repo" Bash "git push origin @")" = "ask" ]'
+
+# R32: the prefix lets a command through only in deny mode
+check_deny deny 'gh pr merge 1'
+check_deny pass 'WSTACK_APPROVED=1 gh pr merge 12 --merge'
+check_deny pass 'true && WSTACK_APPROVED=1 gh pr merge 1'
+check_deny pass 'WSTACK_APPROVED=1 bash /p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
+check_deny deny 'WSTACK_APPROVED=1 true && gh pr merge 1'
 assert "tool Write: pass" '[ "$(decide_in "$feature_repo" Write "gh pr merge 1")" = "pass" ]'
 
 deny_output="$(jq -n --arg cwd "$feature_repo" '{tool_name:"Bash",tool_input:{command:"gh pr merge 1"},cwd:$cwd}' \

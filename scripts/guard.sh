@@ -35,7 +35,7 @@ if [ -n "$default_branch" ]; then default_branches=("$default_branch"); else def
 
 # Judges the words of one "git ... push ..." segment. Returns 0 when risky.
 push_is_risky() {  # <words...>, starting at the word "git"
-  local word bare repo_dir="$cwd" current positional=0 seen_push=0 skip_next=""
+  local word bare repo_dir="$cwd" current positional=0 seen_push=0 skip_next="" refspec_is_current=0
   shift  # drop "git"
   for word in "$@"; do
     word="${word//[\'\"]/}"
@@ -54,16 +54,17 @@ push_is_risky() {  # <words...>, starting at the word "git"
       continue
     fi
     case "$word" in
-      --force*|--delete|-d|-f|+*) return 0 ;;
+      --force*|--delete|--mirror|-d|-f|+*|:*) return 0 ;;
       -*) [[ "$word" =~ ^-[a-zA-Z]*[fd][a-zA-Z]*$ ]] && return 0; continue ;;
     esac
     positional=$((positional + 1))
+    [ "$positional" -ge 2 ] && case "$word" in HEAD|@) refspec_is_current=1 ;; esac
     for bare in "${default_branches[@]}"; do
       case "$word" in "$bare"|"refs/heads/$bare"|*":$bare"|*":refs/heads/$bare") return 0 ;; esac
     done
   done
   [ "$seen_push" = 1 ] || return 1
-  if [ "$positional" -le 1 ]; then  # no refspec: pushes the current branch
+  if [ "$positional" -le 1 ] || [ "$refspec_is_current" = 1 ]; then  # no refspec, HEAD, or @: pushes the current branch
     case "$repo_dir" in /*) ;; *) repo_dir="$cwd/$repo_dir" ;; esac
     current="$(git -C "$repo_dir" symbolic-ref --short HEAD 2>/dev/null || true)"
     for bare in "${default_branches[@]}"; do [ "$current" = "$bare" ] && return 0; done
@@ -73,13 +74,14 @@ push_is_risky() {  # <words...>, starting at the word "git"
 
 # Sets $reason for one command segment.
 judge_segment() {
-  local segment="$1" words word deploy_command
-  [[ "$segment" =~ ^[[:space:]]*WSTACK_APPROVED=1([[:space:]]|$) ]] && return 0
-  if [[ "$segment" =~ ${start}gh${space}pr${space}merge ]]; then
+  local segment="$1" deploy_command
+  # R32: the prefix replaces the prompt only in deny mode (design 5.2). In ask mode the guard always asks.
+  [ "$mode" = deny ] && [[ "$segment" =~ ^[[:space:]]*WSTACK_APPROVED=1([[:space:]]|$) ]] && return 0
+  if [[ "$segment" =~ ${start}gh${cf_flags}${space}pr${cf_flags}${space}merge ]]; then
     reason="a pull request merge"
   elif [[ "$segment" =~ ${start}gh${space}api.*pulls/[^[:space:]]+/merge ]]; then
     reason="a pull request merge through the API"
-  elif [[ "$segment" =~ ${start}gh${space}pr${space}close.*--delete-branch ]]; then
+  elif [[ "$segment" =~ ${start}gh${cf_flags}${space}pr${cf_flags}${space}close.*([[:space:]]-d([[:space:]]|$)|--delete-branch) ]]; then
     reason="a pull request close with a remote branch delete"
   elif [[ "$segment" =~ ${start}gh${space}repo${space}delete ]]; then
     reason="a repository delete"
@@ -100,13 +102,14 @@ judge_segment() {
         return 0
       fi
     done
-    for word in $segment; do
-      if [ "${word//[\'\"]/}" = "git" ]; then
-        words="${segment#*"$word"}"
-        # shellcheck disable=SC2086
-        push_is_risky git $words && reason="a git push to the default branch, a force push, or a remote delete"
+    # shellcheck disable=SC2086
+    set -- $segment
+    while [ "$#" -gt 0 ]; do
+      if [ "${1//[\'\"]/}" = "git" ] && push_is_risky "$@"; then
+        reason="a git push to the default branch, a force push, or a remote delete"
         break
       fi
+      shift
     done
   fi
   return 0
