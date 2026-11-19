@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Usage: collect-week.sh --vault <abs> --tasks-dir <rel> [--days 7] [--today YYYY-MM-DD]
-# Prints a JSON array, one object per task folder dated within the last --days days (frontmatter only).
+# Prints a JSON array, one object per task folder dated today or in the --days - 1 days before (frontmatter only).
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -21,9 +21,9 @@ while [ "$#" -gt 0 ]; do
 done
 
 [[ "$vault" = /* ]] && [ -d "$vault/$tasks_dir" ] || fail "tasks folder not found: $vault/$tasks_dir"
-[[ "$days" =~ ^[0-9]+$ ]] || fail "bad days: $days"
+[[ "$days" =~ ^[1-9][0-9]*$ ]] || fail "bad days: $days"
 [[ "$today" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || fail "bad today: $today"
-cutoff="$(date -j -v-"${days}"d -f %Y-%m-%d "$today" +%Y-%m-%d)"
+cutoff="$(date -j -v-"$((days - 1))"d -f %Y-%m-%d "$today" +%Y-%m-%d)"  # today counts as day 1
 
 frontmatter_or_empty() {  # <file>
   if [ -f "$1" ]; then fm_to_json "$1"; else echo '{}'; fi

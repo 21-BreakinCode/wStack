@@ -119,4 +119,5 @@ offline_page="$work_root/offline/vault task/review.html"
 assert "offline diagram still builds with exit 0" '[ "$offline_exit" -eq 0 ] && [ -s "$offline_page" ]'
 assert "offline diagram section says it was not rendered" 'grep -q "Diagram not rendered:" "$offline_page"'
 assert "offline diagram prints a warning" '[[ "$offline_output" == *"warning: diagram not rendered"* ]]'
+assert "page title names the task" 'grep -q "<title>2026-01-01-sample review</title>" "$offline_page"'
 finish

@@ -13,4 +13,4 @@ First version. wStack 0.1.0 does the following:
 - Delivers to the targets in the spec. A merge and every other step that you cannot undo wait for your approval.
 - Supports mobile mode, which also publishes pages as Claude artifacts.
 - Runs `/wstack:retro` once a week. A retro analyst agent reads the last 7 days of task folders and proposes improvements.
-- Guards commands that delete R2 data and asks you first.
+- Guards merges, pushes to the default branch, force pushes, remote branch deletes, R2 deletes, and deploys. It asks you first.

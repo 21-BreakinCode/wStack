@@ -48,12 +48,15 @@ node_accepted_by_cf() {
   esac
 }
 
+check_playwright_cli() { check playwright-cli 'playwright-cli --version' '' 'npm i -g @playwright/cli@0.1.24'; }
+
 check_base() {
   check git 'git --version' '' 'xcode-select --install'
   check gh 'gh --version' 2.99.0 'brew upgrade gh'
   check node 'node --version' '' 'mise use -g node@26'
   check jq 'jq --version' '' 'brew install jq'
   check claude 'claude --version' 2.1.51 'claude update'
+  check_playwright_cli  # every spec render checks the page width with it
   local plugin_install='claude plugin marketplace add QingYunA/answer-me-with-html && claude plugin install answer-me-with-html@answer-me-with-html'
   local plugin_list=""
   command -v claude >/dev/null 2>&1 && plugin_list="$(claude plugin list 2>/dev/null || true)"
@@ -83,7 +86,7 @@ check_video() {
 
 check_playwright() {
   local check_output ffmpeg_dry_run ffmpeg_dir
-  check_output="$(check playwright-cli 'playwright-cli --version' '' 'npm i -g @playwright/cli@0.1.24')"
+  check_output="$(check_playwright_cli)"
   printf '%s\n' "$check_output"
   case "$check_output" in OK*) ;; *) failed=1; return 0 ;; esac
   # S2: video needs Playwright's own ffmpeg, which the dry run locates without downloading
@@ -112,7 +115,8 @@ check_r2() {
 
 check_need() {
   case "$1" in
-    web|diagram) check_playwright ;;
+    web) check_playwright ;;
+    diagram) check_playwright_cli ;;
     video) check_video ;;
     webp) check cwebp 'cwebp -version' '' 'brew install webp' ;;
     terminal) check vhs 'vhs --version' '' 'brew install vhs' ;;

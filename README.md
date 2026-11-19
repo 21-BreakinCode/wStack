@@ -24,6 +24,14 @@ Once a week, run `/wstack:retro`. It reads the task folders of the last 7 days a
 
 ![The herdr launch sequence](docs/diagrams/launcher.svg)
 
+wStack accepts the folder trust prompt for the worktree that it creates from your repository, so the `.claude` hooks and MCP servers of that repository load in the task.
+
+Outside herdr, the launcher opens no workspace. The task runs in your current Claude session.
+
+To resume an open task, run `/wstack:start-task` with no arguments. It lists the open tasks and asks which one to resume.
+
+Add `--mobile` to the idea to publish the spec page and the review page as Claude artifacts, so you can read them on a phone.
+
 ## Install
 
 wStack needs the `answer-me-with-html` plugin. If it is not installed, add its marketplace first:
@@ -40,7 +48,7 @@ claude plugin marketplace add 21-BreakinCode/wStack
 claude plugin install wstack@wstack
 ```
 
-To see which tools you still need, run:
+`/wstack:start-task` checks the base tools first. To run the same check yourself from a clone of this repository, run:
 
 ```
 bash scripts/preflight.sh base
@@ -54,10 +62,13 @@ brew upgrade gh
 mise use -g node@26
 brew install jq
 claude update
+npm i -g @playwright/cli@0.1.24
 brew install herdr
 ```
 
-Some work types need more tools. The launcher runs `bash scripts/preflight.sh plan <need>...` and reports them when the task needs them. The needs are `web`, `video`, `webp`, `terminal`, `r2`, and `diagram`. For example, `brew install ffmpeg` gives video capture, and `brew install webp` gives WebP images.
+herdr is optional. Without it, preflight only warns.
+
+Some work types need more tools. After you approve the spec, Confirmation runs `preflight.sh plan <need>...` and reports them when the task needs them. The needs are `web`, `video`, `webp`, `terminal`, `r2`, and `diagram`. For example, `brew install ffmpeg` gives video capture, and `brew install webp` gives WebP images.
 
 ## Configuration
 
@@ -74,9 +85,11 @@ Claude Code asks for these values when you install wStack.
 | `local_evidence_only_repos` | empty list | Repositories (`owner/repo`) whose evidence never leaves your Mac. |
 | `pr_media_max_mb` | `10` | Size limit in MB for each pull request attachment. |
 
+If you set `r2_bucket` and `evidence_domain`, you agree that Verify uploads evidence to that bucket under `evidence/<task_id>/`.
+
 ## Evidence
 
-During Verify, the agent records evidence for each check: API logs, screenshots, videos, and terminal recordings. It compresses the files and uploads them to the private R2 bucket under `evidence/<task_id>/`. Evidence never goes into the vault. Review pages link to `https://<evidence_domain>/evidence/<task_id>/<file>`. Cloudflare Access protects that domain. After a merge, the agent deletes the evidence of that task from R2.
+During Verify, the agent records evidence for each check: API logs, screenshots, videos, and terminal recordings. It compresses the files and uploads them to the private R2 bucket under `evidence/<task_id>/`. Evidence never goes into the vault. Review pages link to `https://<evidence_domain>/evidence/<task_id>/<file>`. Cloudflare Access protects that domain. After a merge, the agent deletes the evidence of that task from R2. The merge question names this delete.
 
 ## Setup to-dos
 

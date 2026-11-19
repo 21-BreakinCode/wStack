@@ -54,7 +54,7 @@ Apply only the proposals the user named. Make the change that each one names in 
 
 A change to wStack itself goes to the wStack source repository. Never edit `${CLAUDE_PLUGIN_ROOT}`, because an update replaces it. The source repository is a git checkout whose `.claude-plugin/plugin.json` has `"name": "wstack"`. If the current directory is not that checkout, ask the user for its path, end the reply, and wait.
 
-In the source repository, run `git switch -c wstack/retro-$week` once, then commit each change there. Never push.
+In the source repository, run `git status --porcelain` first. If it prints anything, the checkout has uncommitted changes. Tell the user and stop. Then run `git switch -c wstack/retro-$week`. If the branch exists, run `git switch wstack/retro-$week` instead. Commit each change there. Never push.
 
 After each applied proposal, add a line under `## Applied` in `$retro_dir/$week.md`: the proposal number, the title, and the commit SHA when there is one. Replace `None yet.` on the first line. Render the page again as in step 6.
 

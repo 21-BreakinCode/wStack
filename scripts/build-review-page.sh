@@ -32,7 +32,13 @@ work_type=""
 fifth_heading="Guided diff" fifth_label="Diff"
 case "$work_type" in blog|video) fifth_heading="Before and after" fifth_label="Before/after" ;; esac
 draft="$work_dir/review-draft.md"
-sed "s/^## Guided diff\$/## $fifth_heading/" "$task_dir/review.md" > "$draft"
+task_id="$(fm_get "$task_dir/review.md" task_id)"
+# A leading "# ..." heading sets the page <title>, so each task's page gets its own name.
+sed "s/^## Guided diff\$/## $fifth_heading/" "$task_dir/review.md" | awk -v title="# ${task_id:-$(basename "$task_dir")} review" '
+  NR == 1 { in_frontmatter = ($0 == "---"); if (!in_frontmatter) { print title; print "" } print; next }
+  in_frontmatter && $0 == "---" { print; print ""; print title; in_frontmatter = 0; next }
+  { print }
+' > "$draft"
 
 # Diagram: render, then replace the marker in the draft with a fenced svg block (the tested path of S7).
 if [ -f "$task_dir/diagram.excalidraw" ]; then

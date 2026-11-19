@@ -56,6 +56,11 @@ run_preflight base
 assert "missing plugin exits 1" '[ "$rc" = "1" ]'
 assert "missing plugin line" 'echo "$output" | grep -q "^MISSING answer-me-with-html plugin: claude plugin marketplace add"'
 
+fresh_bin; rm "$stub_bin/playwright-cli"
+run_preflight base
+assert "base without playwright-cli exits 1" '[ "$rc" = "1" ]'
+assert "base names the playwright-cli install" 'echo "$output" | grep -qx "MISSING playwright-cli: npm i -g @playwright/cli@0.1.24"'
+
 fresh_bin; rm "$stub_bin/herdr"
 run_preflight base
 assert "no herdr still exits 0" '[ "$rc" = "0" ]'
@@ -106,7 +111,7 @@ run_preflight plan web
 assert "web without ffmpeg dir exits 1" '[ "$rc" = "1" ]'
 assert "web without ffmpeg dir names the install command" 'echo "$output" | grep -qx "MISSING playwright ffmpeg: playwright-cli install-browser ffmpeg"'
 run_preflight plan diagram
-assert "diagram shares the ffmpeg check" '[ "$rc" = "1" ] && echo "$output" | grep -q "^MISSING playwright ffmpeg"'
+assert "diagram needs no playwright ffmpeg" '[ "$rc" = "0" ] && ! echo "$output" | grep -q "playwright ffmpeg"'
 
 fresh_bin; make_stub playwright-cli 'if [ "$1" = "install-browser" ]; then echo "no location here"; else echo "0.1.24"; fi'
 run_preflight plan web
