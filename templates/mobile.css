@@ -1,0 +1,29 @@
+/* Sticky top navbar for the review page (spec 10.1). answer-me-with-html has none (decision S7). */
+.wstack-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  gap: 0;
+  justify-content: space-between;
+  overflow-x: auto;
+  padding: 0 8px;
+  background: Canvas;
+  color: CanvasText;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+}
+.wstack-nav a {
+  flex: none;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 6px;
+  color: inherit;
+  font-size: 16px;
+  text-decoration: none;
+}
+.wstack-nav a:hover { text-decoration: underline; }
+@media (max-width: 420px) { .wstack-nav a { font-size: 14px; padding: 0 4px; } }
+h2[id] { scroll-margin-top: 100px; }
+/* The toolbar (Theme, Mode, Reply) sits at top: 12px in the nav's corner. Move it below the nav so nothing covers Reply. */
+body .am-toolbar { top: 56px; }

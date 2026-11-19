@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Fake cf. FAKE_CF_AUTH=loggedin|loggedout sets what "cf auth whoami" prints. Both exit 0, like real cf 1.0.0-rc.1.
+echo "cf $*" >> "${FAKE_LOG:-/dev/null}"
+case "$*" in
+  "--version") echo "1.0.0-rc.1" ;;
+  "auth whoami")
+    case "${FAKE_CF_AUTH:-}" in
+      loggedin) echo '{"authenticated": true, "profile": {"name": "default"}}' ;;
+      loggedout) echo '{"authenticated": false, "error": "Not logged in", "profile": {"name": "default"}}' ;;
+    esac ;;
+  "r2 objects list "*)
+    # FAKE_CF_LIST (a JSON array) is the first listing. Later listings are empty, like a prefix after a delete.
+    # FAKE_CF_LIST_EVERY_TIME=1 repeats FAKE_CF_LIST on every listing (a delete that does nothing).
+    # FAKE_CF_LISTS holds one JSON array per line: listing N prints line N, then [].
+    listed_marker="${FAKE_LOG:-/dev/null}.listed"
+    if [ -n "${FAKE_CF_LISTS:-}" ]; then
+      listing_count="$(cat "$listed_marker" 2>/dev/null || echo 0)"
+      echo $((listing_count + 1)) > "$listed_marker"
+      sed -n "$((listing_count + 1))p" <<< "$FAKE_CF_LISTS" | grep . || echo '[]'
+    elif [ -n "${FAKE_CF_LIST:-}" ] && { [ "${FAKE_CF_LIST_EVERY_TIME:-}" = 1 ] || [ ! -e "$listed_marker" ]; }; then
+      touch "$listed_marker"; echo "$FAKE_CF_LIST"
+    else echo '[]'; fi ;;
+  "r2 objects bulk-delete "*) [ "${FAKE_CF_BULK_FAIL:-}" = 1 ] && { echo "bulk-delete failed" >&2; exit 1; } ;;
+esac
+exit 0

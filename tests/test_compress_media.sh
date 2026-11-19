@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$repo_root/tests/_assert.sh"
+script="$repo_root/scripts/compress-media.sh"
+work_dir="$(mktemp -d)"
+trap 'rm -rf "$work_dir"' EXIT
+out_dir="$work_dir/out"; r2_dir="$out_dir/r2"; gh_dir="$out_dir/gh"
+mkdir -p "$r2_dir" "$gh_dir"
+
+ffmpeg -loglevel error -f lavfi -i testsrc=duration=3:size=1280x720:rate=30 -c:v libvpx "$work_dir/clip.webm"
+ffmpeg -loglevel error -f lavfi -i testsrc=duration=1:size=640x360:rate=1 -frames:v 1 "$work_dir/shot.png"
+
+probe() { ffprobe -v error -select_streams v:0 -show_entries stream=$1 -of default=nw=1:nk=1 "$2"; }
+
+r2_video="$(bash "$script" --target r2 "$work_dir/clip.webm" "$r2_dir" | tail -n 1)"
+assert "r2 video exists" '[ -f "$r2_video" ]'
+assert "r2 video hevc" '[ "$(probe codec_name "$r2_video")" = "hevc" ]'
+assert "r2 video hvc1 tag" '[ "$(probe codec_tag_string "$r2_video")" = "hvc1" ]'
+
+gh_video="$(bash "$script" --target gh "$work_dir/clip.webm" "$gh_dir" | tail -n 1)"
+assert "gh video h264" '[ "$(probe codec_name "$gh_video")" = "h264" ]'
+
+r2_image="$(bash "$script" --target r2 "$work_dir/shot.png" "$r2_dir" | tail -n 1)"
+assert "r2 image webp" '[[ "$(file "$r2_image")" == *"Web/P"* ]]'
+
+gh_image="$(bash "$script" --target gh "$work_dir/shot.png" "$gh_dir" | tail -n 1)"
+assert "gh image jpeg" '[[ "$(file "$gh_image")" == *"JPEG"* ]]'
+
+status=0
+message="$(bash "$script" --target gh --max-mb 0.001 "$work_dir/clip.webm" "$gh_dir" 2>&1)" || status=$?
+assert "too large exits 1" '[ "$status" -eq 1 ]'
+assert "too large message" '[[ "$message" == *"cannot fit"* ]]'
+
+# I11: a GIF is rejected for both targets, so a terminal recording is never turned into one still image
+ffmpeg -loglevel error -f lavfi -i testsrc=duration=1:size=320x180:rate=5 "$work_dir/term.gif"
+for gif_target in r2 gh; do
+  status=0
+  message="$(bash "$script" --target "$gif_target" "$work_dir/term.gif" "$out_dir/$gif_target" 2>&1)" || status=$?
+  assert "gif $gif_target exits 1" '[ "$status" -eq 1 ]'
+  assert "gif $gif_target message names webm" '[[ "$message" == *"record the terminal as .webm or .mp4"* ]]'
+done
+
+# Output equal to input: exit 1, clear message, input intact.
+same_dir="$work_dir/same"; mkdir -p "$same_dir"
+cp "$r2_video" "$same_dir/in.mp4"; cp "$r2_image" "$same_dir/in.webp"
+before_mp4="$(cksum < "$same_dir/in.mp4")"; before_webp="$(cksum < "$same_dir/in.webp")"
+for name in in.mp4 in.webp; do
+  status=0
+  message="$(bash "$script" --target r2 "$same_dir/$name" "$same_dir" 2>&1)" || status=$?
+  assert "$name same-folder exits 1" '[ "$status" -eq 1 ]'
+  assert "$name same-folder message" '[[ "$message" == *"would overwrite input"* ]]'
+done
+assert "mp4 input intact" '[ "$(cksum < "$same_dir/in.mp4")" = "$before_mp4" ]'
+assert "webp input intact" '[ "$(cksum < "$same_dir/in.webp")" = "$before_webp" ]'
+finish

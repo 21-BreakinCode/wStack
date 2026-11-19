@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Fake gh. Logs arguments to $FAKE_LOG.
+# FAKE_REPO_URL: what `gh repo view` prints (default https://github.com/o/r).
+# FAKE_PR_FAIL=1: `gh pr create` prints a URL then exits 1.
+# FAKE_PR_FAIL=nourl: `gh pr create` prints an error on stderr, no URL, exits 1.
+# FAKE_PR_LIST: JSON that `gh pr list` prints (default []).
+echo "gh $*" >> "${FAKE_LOG:-/dev/null}"
+case "${1:-} ${2:-}" in
+  "repo view") echo "${FAKE_REPO_URL:-https://github.com/o/r}" ;;
+  "pr list") echo "${FAKE_PR_LIST:-[]}" ;;
+  "pr create")
+    if [ "${FAKE_PR_FAIL:-}" = nourl ]; then echo "fatal: branch not pushed" >&2; exit 1; fi
+    echo "https://github.com/o/r/pull/1"
+    [ -z "${FAKE_PR_FAIL:-}" ] || exit 1 ;;
+esac
+exit 0
