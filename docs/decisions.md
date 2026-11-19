@@ -377,7 +377,7 @@ Run: `/wstack:start-task --mobile compare R2 and S3 lifecycle rules in one short
 
 In the new session: Confirmation, user approval at 2026-11-19T14:58:55Z, Execute, Verify, Deliver (`new Obsidian note`) at 15:11:48Z. The reviewer found one correctness finding. The session fixed it, and the second review had 0 findings. `retries` was 1.
 
-Both pages were published as Claude artifacts (spec and review). This was the first test of the real artifact publish, which S12 could not test in `claude -p`. `report.md` had the undo step and the cleanup command `herdr workspace close wT`.
+Both pages were published as Claude artifacts (spec and review). This was the first test of the real artifact publish, because `claude -p` has no Artifact tool (S12). `report.md` had the undo step and the cleanup command `herdr workspace close wT`.
 
 `tokens_used` was 14729229. It counts cache reads, as S8 says.
 
