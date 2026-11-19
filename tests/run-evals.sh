@@ -4,7 +4,7 @@
 # plugins and so cannot satisfy the answer-me-with-html dependency. The copy drops that dependency.
 # It also replaces preflight.sh with a stub that prints OK: the sandbox hides git and claude, so the real
 # base check can never pass there (preflight has its own test). It fills the placeholder
-# __AMJS__ (am.mjs of the installed plugin). The eval vault is the sandbox working directory (case env sets it to "."):
+# __AMJS__ (am.mjs of the installed plugin) and __WEEK_FIXTURE__ (the staged tests/fixtures/week). The eval vault is the sandbox working directory (case env sets it to "."):
 # the sandbox lets a run write only there.
 set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
@@ -42,7 +42,7 @@ fi
 echo "OK preflight stubbed for evals"
 STUB
 for prompt_file in "$stage_dir"/plugin/evals/*/prompt.md; do
-  sed -i '' -e "s|__AMJS__|$amjs|g" "$prompt_file"
+  sed -i '' -e "s|__AMJS__|$amjs|g" -e "s|__WEEK_FIXTURE__|$stage_dir/plugin/tests/fixtures/week|g" "$prompt_file"
 done
 
 # Pass --json <file> to keep the results: the staged copy is deleted on exit.
