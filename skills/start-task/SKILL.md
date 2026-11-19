@@ -100,6 +100,7 @@ No arguments.
 1. Run `bash "$scripts/list-open-tasks.sh" --vault "$vault" --tasks-dir "$tasks_dir"`. Each line is `task_id`, `status`, `workspace_cwd`, and `folder`, split by tabs.
 2. If there are no lines, tell the user there is no open task. Stop.
 3. Ask the user which task to resume. Show the task id and the status of each.
-4. Run `bash "$scripts/resume-task.sh" --task-dir "<folder>"`. It prints `focused` or `restarted`. Tell the user which one.
-5. If it exits 1, tell the user that the working directory of the task is gone, and print the stderr.
-6. If it exits 5 or 6, print the stderr. Stop.
+4. Read `echo "${HERDR_ENV:-}"`. If it is not `1`, run work mode for the chosen task in this session, and skip the steps below.
+5. Run `bash "$scripts/resume-task.sh" --task-dir "<folder>"`. It prints `focused` or `restarted`. Tell the user which one.
+6. If it exits 1, tell the user that the working directory of the task is gone, and print the stderr.
+7. If it exits 5 or 6, print the stderr. Stop.

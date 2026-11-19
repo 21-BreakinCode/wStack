@@ -38,6 +38,14 @@ assert "thinking: workspace_cwd" '[ "$(fm_get "$think_dir/spec.md" workspace_cwd
 rc=0; HERDR_ENV=0 bash "$script" --task-dir "$think_dir" >/dev/null 2>"$work_dir/err" || rc=$?
 assert "outside herdr exits 3" '[ "$rc" = 3 ] && grep -q "not running inside herdr" "$work_dir/err"'
 
+# I9: outside herdr this session does the work, so workspace_cwd is the current folder or the repository
+outside_dir="$work_dir/outside dir"; mkdir -p "$outside_dir"
+rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$think_dir" >/dev/null 2>&1) || rc=$?
+assert "outside herdr, thinking: exit 3 sets workspace_cwd to the current folder" '[ "$rc" = 3 ] && [ "$(fm_get "$think_dir/spec.md" workspace_cwd)" = "$outside_dir" ]'
+outside_code_dir="$(new_task outside-code code)"
+rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$outside_code_dir" --repo-path "$work_dir/repo dir" >/dev/null 2>&1) || rc=$?
+assert "outside herdr, code: exit 3 sets workspace_cwd to the repository" '[ "$rc" = 3 ] && [ "$(fm_get "$outside_code_dir/spec.md" workspace_cwd)" = "$work_dir/repo dir" ]'
+
 rc=0; FAKE_AGENT_EXISTS=1 bash "$script" --task-dir "$think_dir" >/dev/null 2>"$work_dir/err" || rc=$?
 assert "name taken exits 4" '[ "$rc" = 4 ] && grep -q "agent name taken" "$work_dir/err"'
 

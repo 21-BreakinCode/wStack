@@ -3,7 +3,7 @@
 # Opens a herdr workspace named after the task and starts a claude session there.
 # Exit codes:
 #   1 bad input
-#   3 not running inside herdr
+#   3 not running inside herdr (sets workspace_cwd to the repository or the current folder first)
 #   4 agent name taken
 #   5 the claude agent did not start or take the prompt. The workspace stays open and
 #     stderr prints the workspace id and the cleanup commands. Nothing is closed automatically.
@@ -26,10 +26,15 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-[ "${HERDR_ENV:-}" = 1 ] || fail "not running inside herdr" 3
 [[ "$task_dir" = /* ]] && [ -f "$task_dir/spec.md" ] || fail "no spec.md in task dir: $task_dir"
 task_id="$(fm_get "$task_dir/spec.md" task_id)"
 work_type="$(fm_get "$task_dir/spec.md" work_type)"
+if [ "${HERDR_ENV:-}" != 1 ]; then  # this session does the work, so resume and token counts need its folder
+  session_cwd="$PWD"
+  if [ "$work_type" = code ] && [ -n "$repo_path" ]; then session_cwd="$repo_path"; fi
+  fm_set "$task_dir/spec.md" workspace_cwd "$session_cwd"
+  fail "not running inside herdr" 3
+fi
 slug="${task_id:11}"
 [[ "$slug" =~ ^[a-z][a-z0-9-]{0,31}$ ]] || fail "bad slug in task_id: $task_id"
 
