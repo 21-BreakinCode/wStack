@@ -336,3 +336,31 @@ Decision: `scripts/build-review-page.sh` adds the sticky top navbar after the re
 Reason: answer-me-with-html has no sticky top navbar (decision S7), and `references/settings.md` of that plugin lists no setting that adds CSS or HTML. Spec section 10.1 requires the navbar.
 
 Diagram render: `scripts/render-excalidraw.sh` opens `about:blank`. The module import of `@excalidraw/utils` 0.1.8 works there, so it needs no local server. It exits 1 for a broken scene and 2 for a network or browser failure. On exit 2 the build writes `Diagram not rendered: <reason>` in the Diagram section, prints a warning, and still builds the page. `WSTACK_EXCALIDRAW_BUNDLE_URL` points the bundle at another URL. Tests use it to simulate a network failure.
+
+## D-DOCS: README diagrams and the R2 lifecycle command
+
+Decision 1: `tests/test_docs.sh` does not compare file times of an `.excalidraw` file and its `.svg`. Git keeps no file times, so on a fresh clone the times are random. The test renders each `.excalidraw` to a temporary SVG with `scripts/render-excalidraw.sh` and checks for exit 0. It then checks that the committed `.svg` exists and holds every text label of its source. It reads the labels with `jq -r '.elements[] | select(.type=="text") | .text'`. If the render exits 2 (CDN or network down), the check prints `SKIP` with the cause and does not fail.
+
+Decision 2: the test does not scan `docs/superpowers/` for the removed diagram tool. The design document and the plan there are historical and still name that tool. The test scans `README.md`, `CHANGELOG.md`, and `docs/` without `docs/spec.md` and `docs/superpowers/`.
+
+Decision 3: the README names no company and no email address. Setup to-do 6 tells the user to check their company policy and to list work repositories in `local_evidence_only_repos`.
+
+R2 lifecycle command (setup to-do 3). Found with `cf r2 buckets lifecycle update --help`, `cf schema r2 buckets lifecycle update`, and `cf docs search`. PATH had Node 26.13.1. I ran it with `--dry-run` only and never ran it for real:
+```
+cf r2 buckets lifecycle update my-bucket --rules '[{"id":"expire-evidence","enabled":true,"conditions":{"prefix":"evidence/"},"deleteObjectsTransition":{"condition":{"type":"Age","maxAge":2592000}}}]' --dry-run
+```
+Output:
+```
+{
+  "command": "cf r2 buckets lifecycle update",
+  "method": "PUT",
+  "url": "https://api.cloudflare.com/client/v4/accounts/<account-id>/r2/buckets/my-bucket/lifecycle",
+  "pathParams": { "bucket-name": "my-bucket" },
+  "bodyKind": "json",
+  "body": { "rules": [ { "id": "expire-evidence", "enabled": true, "conditions": { "prefix": "evidence/" },
+    "deleteObjectsTransition": { "condition": { "type": "Age", "maxAge": 2592000 } } } ] }
+}
+```
+`update` replaces all lifecycle rules of the bucket (`PUT .../lifecycle`). `maxAge` is in seconds: 2592000 is 30 days, the `evidence_retention_days` default. The shape of `maxAge` and `type: "Age"` comes from the Cloudflare API and I did not verify it against a live bucket. The dry run checks the request only.
+
+Effect on plan: the user runs the command after approving the bucket change. Nothing in the plugin calls it.
