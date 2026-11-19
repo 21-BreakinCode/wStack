@@ -185,7 +185,7 @@ task_id: 2026-11-18-fix-login-timeout
 started_at:
 ended_at:
 retries: 0
-stopped_for_user: []       # list of {at, reason}
+stopped_for_user: []       # stop items, shape in skills/start-task/SKILL.md
 tokens_used:               # see section 17, item 1
 ---
 ```

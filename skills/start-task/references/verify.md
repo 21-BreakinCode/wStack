@@ -48,16 +48,16 @@ Never ask the user between tries. If you find no fix inside the spec's scope, ru
 
 ## Stop for the user
 
-Use this stop for the retry limit and for a missing stage file. Execute uses it too, with `"stage":"execute"`.
+Use this stop for the retry limit, a missing file, a missing tool, and a failed evidence upload.
 
 1. Write a `stop` line in `run-log.md`.
-2. Run `bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","stage":"verify","reason":"<reason>"}'`. For the retry limit, the reason is `retry_limit reached: <failed check>`.
+2. Append a stop item with `"stage":"verify"` and the reason, as "Stop items" in `SKILL.md` says. For the retry limit, the reason is `retry_limit reached: <failed check>`.
 3. Set `result` to `waiting` in `review.md`. Set `status` to `waiting-user` in `spec.md`.
-4. Tell the user the reason. For the retry limit, name the check that keeps failing and the number of tries, and offer three choices: try again with their direction, change the spec, or cancel. For a missing file, ask the user to confirm when it is there. End the reply. Wait.
+4. Tell the user the reason. For the retry limit, name the check that keeps failing and the number of tries, and offer three choices: try again with their direction, change the spec, or cancel. For any other stop, ask the user to fix the cause and to tell you when it is fixed. End the reply. Wait.
 
 ## After the user answers a stop
 
-This rule runs the same way in the same session and in a resumed task. In a resumed task, `SKILL.md` sends `waiting-user` to `execute.md`, which sends you here when the last stop item has `"stage":"verify"` or a reason that holds `retry_limit`. Resume the stage that the item names in `stage`.
+This rule runs the same way in the same session and in a resumed task. "Stop items" in `SKILL.md` sends a `verify` stop here. `execute.md` sends an Execute retry-limit stop here. Resume the stage that the item names in `stage`.
 
 Retry-limit stop:
 
@@ -65,7 +65,7 @@ Retry-limit stop:
 - Change the spec: set `retries` to `0` and `status` to `drafting`. Then follow `confirmation.md`.
 - Cancel: set `status` to `cancelled`.
 
-Missing-file stop:
+Any other stop (a missing file, a missing tool, or a failed evidence upload):
 
-- The file is there: set `status` to `verifying` and run the Order again from the step that stopped.
+- The user fixed the cause: set `status` to `verifying` and run the Order again from the step that stopped.
 - Cancel: set `status` to `cancelled`.

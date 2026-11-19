@@ -6,7 +6,8 @@ Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontma
 
 ## Start
 
-1. If `status` is `waiting-user`, read the last item of `stopped_for_user` in `run-log.md`. Tell the user its step and reason. If the item has `"stage":"deliver"`, run the deliver skill and follow its "After the user answers" section instead. If the item has `"stage":"verify"` or its reason holds `retry_limit`, follow "After the user answers a stop" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` instead. Otherwise ask for a yes or no, end the reply, and wait. Then follow "After the user answers a stop".
+0. If `approved_at` in `spec.md` is empty, nobody approved the spec. Set `status` to `drafting`. Then read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/confirmation.md` and follow it.
+1. If `status` is `waiting-user`, read the last item of `stopped_for_user` in `run-log.md`. Go on as "Stop items" in `SKILL.md` says for its `stage`.
 2. If `started_at` in `run-log.md` is empty, set it once to `date -u +%Y-%m-%dT%H:%M:%SZ`: `bash "$scripts/frontmatter-set.sh" "$task_dir/run-log.md" started_at <time>`. Never set it again.
 3. For a code task, work in `workspace_cwd`. Run `git switch -c wstack/<slug>`, or `git switch wstack/<slug>` if the branch exists. `<slug>` is the task id without its date prefix. Commit only on that branch. Never commit to the default branch.
 
@@ -31,22 +32,31 @@ Execute never pushes `wstack/<slug>` and never opens the pull request. The Deliv
 Before a non-undoable step, stop:
 
 1. Write a `stop` line in `run-log.md` with the reason.
-2. Run `bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","stage":"execute","reason":"<reason>"}'`.
+2. Append a stop item with `"stage":"execute"` and the reason, as "Stop items" in `SKILL.md` says.
 3. Set `status` to `waiting-user` in `spec.md`.
 4. Tell the user the step and the reason. Ask for a yes or no. End the reply. Wait.
 
 If the guard hook asks or denies a command, treat it as a non-undoable step and stop the same way.
 
+Stop also when the spec is wrong or unclear. Stop the same way with the reason `spec unclear: <question>`. In step 4, ask the question instead of a yes or no.
+
 ## After the user answers a stop
 
 This rule runs the same way when the user answers in the same session and when a resumed task reaches Start step 1.
+
+If the reason starts with `retry_limit`, follow "Retry-limit stop" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` instead.
+
+If the reason starts with `spec unclear`:
+
+- The answer changes the spec: set `status` to `drafting`. Then read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/confirmation.md` and follow it. The changed spec needs a new approval.
+- The answer changes nothing in the spec: set `status` to `executing`, write a `step` line with the answer, and go on with the work.
+
+For a stop before a non-undoable step:
 
 - Yes: set `status` to `executing`, write a `step` line, and run the stopped step with the prefix `WSTACK_APPROVED=1`.
 - No: keep `status` as `waiting-user` and ask what to change.
 
 Add the prefix `WSTACK_APPROVED=1` to a command only after the user says yes in this session. Never add it before.
-
-Stop also when the spec is wrong or unclear. Set `status` to `waiting-user` and ask the user.
 
 ## Retry
 

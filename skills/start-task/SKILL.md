@@ -60,18 +60,38 @@ The idea text is the starting point of the spec. In the exit 3 case, keep the id
 
 The argument is `--task <task_id>`. The task folder is `$vault/$tasks_dir/<task_id>`.
 
-1. Read the status: `sed -n 's/^status: //p' "$task_dir/spec.md"`.
+1. Read the status from the frontmatter only: `(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" status)`.
 2. Continue from that stage:
 
 | Status | Stage |
 |---|---|
 | `drafting`, `awaiting-approval` | Confirmation. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/confirmation.md` and follow it. |
-| `executing`, `waiting-user` | Execute. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/execute.md` and follow it. |
+| `executing` | Execute. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/execute.md` and follow it. |
+| `waiting-user` | Read the last item of `stopped_for_user` in `run-log.md`. Go on as "Stop items" says for its `stage`. |
 | `verifying` | Verify. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` and follow it. |
 | `awaiting-deliver-approval` | Deliver. Run the deliver skill and follow its "After the user answers" section. |
 | `delivered`, `cancelled` | Tell the user the task is closed. Stop. |
 
 Change `status` only with `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" status <value>`.
+
+## Stop items
+
+Each time a stage sets `status` to `waiting-user`, it first appends one stop item to `stopped_for_user` in `run-log.md`:
+
+`bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","stage":"<stage>","reason":"<reason>"}'`
+
+`<ISO time>` comes from `date -u +%Y-%m-%dT%H:%M:%SZ`. The stage is `confirmation`, `execute`, `verify`, or `deliver`. A Deliver item also has `"target":"<target>"`, the Target name from the table in the deliver skill. No other item has `target`.
+
+When the user answers a stop, in the same session or in a resumed task, tell the user the reason of the last item. Then go on by its `stage`:
+
+| Stage | Go on with |
+|---|---|
+| `confirmation` | "After a stop" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/confirmation.md` |
+| `execute` | "After the user answers a stop" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/execute.md` |
+| `verify` | "After the user answers a stop" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` |
+| `deliver` | The deliver skill. Follow its "After the user answers" section. |
+
+If `stopped_for_user` is empty, ask the user which stage to resume.
 
 ## Resume mode
 

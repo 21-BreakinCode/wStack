@@ -27,7 +27,7 @@ Status stays `drafting` until the page exists.
 6. Run `bash "$scripts/render-page.sh" "$draft" "$task_dir/spec.html"`.
    - Exit 0: the page fits at 375 px.
    - Exit 1: the page is too wide. Shorten wide tables and long lines in the draft, and run it again. Stop after 3 tries and tell the user the width.
-   - Exit 2: print the stderr of the script as it is. It names the cause and the fix. Set `status` to `waiting-user` and stop.
+   - Exit 2: print the stderr of the script as it is. It names the cause and the fix. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the reason `spec page not rendered: <first stderr line>`, as "Stop items" in `SKILL.md` says. Set `status` to `waiting-user` and stop.
 7. If `mobile` is `true` in the frontmatter, publish `spec.html` as a Claude artifact. Follow `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/mobile.md` with `$page` set to `$task_dir/spec.html`.
 8. Set `status` to `awaiting-approval`. Tell the user the path of `spec.html`, and ask for approval. End the reply. Wait.
 
@@ -38,8 +38,15 @@ If the user asks for changes, go back to step 4, then run steps 5 to 8 again.
 9. Set `approved_at` to the current UTC time: `date -u +%Y-%m-%dT%H:%M:%SZ`.
 10. List the tools the verification plan needs from this set: `web`, `diagram`, `video`, `webp`, `terminal`, `r2`. If the list is not empty, run `bash "$scripts/preflight.sh" plan <needs>`.
     - Exit 0: go on.
-    - Exit 1: set `status` to `waiting-user`. Print the install lines. Ask the user to install the tools. When the user answers, run the same check again. Repeat until it exits 0.
-11. Set `status` to `executing`. The Execute stage is written in a later reference file in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/`. If it is not there, tell the user the stage is not available yet and stop.
+    - Exit 1: write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the reason `tools missing: <tools>`, as "Stop items" in `SKILL.md` says. Set `status` to `waiting-user`. Print the install lines. Ask the user to install the tools. When the user answers, run the same check again. Repeat until it exits 0.
+11. Set `status` to `executing`. Then read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/execute.md` and follow it.
+
+## After a stop
+
+This rule runs when the user answers a Confirmation stop, in the same session or in a resumed task.
+
+- If `approved_at` is empty, set `status` to `drafting` and run "Show the spec" again from step 5.
+- If `approved_at` is set, run step 10 again.
 
 ## Approval scope
 
