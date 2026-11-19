@@ -72,7 +72,7 @@ If every target is shipped, skip this section.
 
 ## After the user answers
 
-This rule runs the same way in the same session and in a resumed task. A waiting target is a `stopped_for_user` item with `"stage":"deliver"` whose `target` has no item in the `targets` list of `report.md`. Find the first waiting target and handle only that one. Ask the user about the next one in the same reply when the user has not answered it yet.
+This rule runs the same way in the same session and in a resumed task. A waiting target is a `stopped_for_user` item with `"stage":"deliver"` whose `target` is still listed in the spec's `## Deliver targets` and has no item in the `targets` list of `report.md`. A target removed from the spec is not waiting. Find the first waiting target and handle only that one. Ask the user about the next one in the same reply when the user has not answered it yet.
 
 - No: keep `status` as `awaiting-deliver-approval`. Ask what to change. If the user wants to drop the target, remove it from the spec's `## Deliver targets` first, then finish as below.
 - Yes: set `approved_at` in `report.md` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Run the target with the prefix `WSTACK_APPROVED=1`. Add the prefix only after the yes. Never add it before.
