@@ -315,11 +315,11 @@ Effect on plan: Spec section 17 item 7 reads "50 users (unconfirmed: from a sear
 
 Command: `claude -p "say ok" --output-format stream-json --verbose` (HERDR variables unset), then `jq` on the `init` event tool list. Then `claude -p "Call ToolSearch with query select:Artifact. Do nothing else."`. Then `bash tests/run-evals.sh --case 'mobile-*'` and a search of its kept trace.
 
-Output: the `init` event lists 45 tools, `ToolSearch` among them and no `Artifact`. The ToolSearch call returned `No matching deferred tools found`. In the eval sandbox the run wrote `Artifact tool is not available, so spec.html was not published` into run-log.md and made no Artifact call.
+Output: the `init` event lists 45 tools, `ToolSearch` among them and no `Artifact`. The ToolSearch call returned `No matching deferred tools found`. In the eval run (allowlist without Artifact) the session wrote `Artifact tool is not available, so spec.html was not published` into run-log.md and made no Artifact call.
 
-Result: not available in `claude -p` and not in the eval sandbox (one run each). I did not test an interactive session.
+Result: plain `claude -p` has no Artifact tool (one run). The `mobile-publish` case sets `allowed_tools` without `Artifact` and `ToolSearch`, so the eval run had no Artifact tool by its own configuration. I did not check whether the sandbox itself offers one, and I did not test an interactive session.
 
-Effect on plan: The `mobile-publish` eval always takes the `stop` line branch. It cannot test a real publish. A real publish needs an interactive session with the Artifact tool.
+Effect on plan: The `mobile-publish` eval takes the `stop` line branch because its allowlist excludes `Artifact`. It cannot test a real publish. A real publish needs an interactive session with the Artifact tool.
 
 ## D-FM: Frontmatter format
 
