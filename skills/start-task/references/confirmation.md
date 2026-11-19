@@ -6,7 +6,7 @@ Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontma
 
 ## Write the spec
 
-1. Read the Obsidian notes in `$vault` that bear on the idea. The vault is the ground truth.
+1. Read the Obsidian notes in `$vault` that bear on the idea. The vault is the ground truth. The idea is the `Rough idea from launch:` line under `## Goal` in `spec.md`, when that line exists. Step 4 replaces that line when it writes the Goal.
 2. Find the unclear parts.
    - For a rough idea, ask the user one question at a time. Send one question, then end the reply and wait. Ask until you can fill all five sections.
    - For a written spec, ask only about the unclear parts, one question at a time. If nothing is unclear, go on.

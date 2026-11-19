@@ -361,7 +361,7 @@ Output:
     "deleteObjectsTransition": { "condition": { "type": "Age", "maxAge": 2592000 } } } ] }
 }
 ```
-`update` replaces all lifecycle rules of the bucket (`PUT .../lifecycle`). `maxAge` is in seconds: 2592000 is 30 days, the `evidence_retention_days` default. The shape of `maxAge` and `type: "Age"` comes from the Cloudflare API and I did not verify it against a live bucket. The dry run checks the request only.
+`update` replaces all lifecycle rules of the bucket (`PUT .../lifecycle`). `maxAge` is in seconds: 2592000 is 30 days, the `evidence_retention_days` default. On 2026-11-19, `cf r2 buckets lifecycle get wstack-evidence` returned both rules in this shape after the real update, so the shape works on a live bucket.
 
 Checked on a real bucket on 2026-11-19, two facts:
 1. A new R2 bucket already has the rule `{"id":"Default Multipart Abort Rule","enabled":true,"conditions":{},"abortMultipartUploadsTransition":{"condition":{"type":"Age","maxAge":604800}}}`. `update` replaces every rule, so the command in the first version of setup to-do 3 deleted this rule. Without it, incomplete multipart uploads never expire.
@@ -370,3 +370,23 @@ Checked on a real bucket on 2026-11-19, two facts:
 Setup to-do 3 now runs `lifecycle get` first, then a `--dry-run` update with both rules, then the real update. It names `--force` for scripts.
 
 Effect on plan: the user runs the command after approving the bucket change. Nothing in the plugin calls it.
+
+## E2E: first real task run (2026-11-19)
+
+Run: `/wstack:start-task --mobile compare R2 and S3 lifecycle rules in one short note` from the main herdr session, with wStack 0.1.0 installed from GitHub. Task `2026-11-19-r2-s3-lifecycle`, work type `thinking`. `launch-task.sh` exited 0 and opened herdr workspace `wT` with agent `r2-s3-lifecycle`.
+
+In the new session: Confirmation, user approval at 2026-11-19T14:58:55Z, Execute, Verify, Deliver (`new Obsidian note`) at 15:11:48Z. The reviewer found one correctness finding. The session fixed it, and the second review had 0 findings. `retries` was 1.
+
+Both pages were published as Claude artifacts (spec and review). This was the first test of the real artifact publish, because `claude -p` has no Artifact tool (S12). `report.md` had the undo step and the cleanup command `herdr workspace close wT`.
+
+`tokens_used` was 14729229. It counts cache reads, as S8 says.
+
+Defect: the launched session did not get the idea text. Version 0.1.1 fixes it: `new-task-folder.sh --idea` writes the idea under `## Goal` in `spec.md`.
+
+Spec section 17 item 5 (open the review page on the phone through Remote Control): the user asked the `r2-s3-lifecycle` session through Remote Control to show `review.html`. The session opened the published review artifact. The phone showed the artifact viewer. The local `review.html` file does not reach the phone.
+Result: on a phone, the review page needs mobile mode.
+
+Spec section 17 item 4 (edit a note on the phone while Obsidian is closed on the Mac): the Obsidian app on the Mac was not running (checked at 00:47:19, and every 5 seconds from 00:49:14 to 00:51:15, local time 2026-11-20). The phone edit reached the file on the Mac disk at 00:48:55. The cause: a LaunchAgent `com.obsidian.headless-sync` runs `obsidian-headless` 0.0.14 with `sync --path <vault> --continuous`.
+Result: a wStack session reads phone edits without the Obsidian app, while that agent runs. If the agent stops, phone edits wait until a sync client runs.
+
+Effect on plan: none beyond the 0.1.1 fix.

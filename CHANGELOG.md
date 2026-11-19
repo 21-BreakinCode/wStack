@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 - 2026-11-20
+
+A launched task session now gets the idea text, because `new-task-folder.sh` writes it under `## Goal` in `spec.md`.
+
 ## 0.1.0 - 2026-11-19
 
 First version. wStack 0.1.0 does the following:

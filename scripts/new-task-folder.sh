@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Usage: new-task-folder.sh --vault <abs> --tasks-dir <rel> --slug <slug>
 #          [--date YYYY-MM-DD] [--work-type code|ops|thinking|blog|video] [--repo owner/repo] [--mobile]
+#          [--idea <text>]   (written under ## Goal in spec.md as one line)
 # Prints the absolute task folder path as the last stdout line.
 set -euo pipefail
 
@@ -8,11 +9,11 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 templates_dir="$script_dir/../templates"
 fail() { echo "new-task-folder: $1" >&2; exit 1; }
 
-vault="" tasks_dir="" slug="" date_stamp="$(date +%Y-%m-%d)" work_type=code repo="" mobile=false
+vault="" tasks_dir="" slug="" date_stamp="$(date +%Y-%m-%d)" work_type=code repo="" idea="" mobile=false
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --mobile) mobile=true; shift; continue ;;
-    --vault|--tasks-dir|--slug|--date|--work-type|--repo) [ "$#" -ge 2 ] || fail "missing value for $1" ;;
+    --vault|--tasks-dir|--slug|--date|--work-type|--repo|--idea) [ "$#" -ge 2 ] || fail "missing value for $1" ;;
     *) fail "unknown argument: $1" ;;
   esac
   case "$1" in
@@ -22,6 +23,7 @@ while [ "$#" -gt 0 ]; do
     --date) date_stamp="$2" ;;
     --work-type) work_type="$2" ;;
     --repo) repo="$2" ;;
+    --idea) idea="$2" ;;
   esac
   shift 2
 done
@@ -55,4 +57,10 @@ for name in spec run-log review report; do
       -e "s|{{mobile}}|$mobile|g" -e "s|{{created_at}}|$created_at|g" \
       "$templates_dir/$name.md" >"$folder/$name.md"
 done
+if [ -n "$idea" ]; then
+  # ENVIRON keeps backslashes and & literal, unlike sed replacement or awk -v
+  IDEA_TEXT="${idea//$'\n'/ }" awk '{ print } /^## Goal$/ && !done { print ""; print "Rough idea from launch: " ENVIRON["IDEA_TEXT"]; done = 1 }' \
+    "$folder/spec.md" >"$folder/spec.md.tmp"
+  mv "$folder/spec.md.tmp" "$folder/spec.md"
+fi
 echo "$folder"
