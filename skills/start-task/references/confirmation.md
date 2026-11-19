@@ -11,7 +11,7 @@ Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontma
    - For a rough idea, ask the user one question at a time. Send one question, then end the reply and wait. Ask until you can fill all five sections.
    - For a written spec, ask only about the unclear parts, one question at a time. If nothing is unclear, go on.
 3. Fix `work_type` in the frontmatter if the answers change it.
-4. Write the body of `spec.md` with these five headings. Each one has content.
+4. If `approved_at` is set, set it to empty first: `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" approved_at ""`. A changed spec needs a new approval. Then write the body of `spec.md` with these five headings. Each one has content.
    - `## Goal`: what the result must do.
    - `## Scope`: what is in and what is out.
    - `## Verification plan`: for each check, its name, its pass rule, and the evidence it produces.
