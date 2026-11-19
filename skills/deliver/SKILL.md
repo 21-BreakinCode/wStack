@@ -42,7 +42,7 @@ Run all targets that need no approval first. Then handle the ones that need appr
 ### Pull request
 
 1. Work in `workspace_cwd`. Take `<slug>` from the task id without its date prefix.
-2. Check for an open pull request: `gh pr list --head wstack/<slug> --state open --json number,url`. If the list holds one, use its `url` and skip the other steps.
+2. Check for an open pull request: `gh pr list --head wstack/<slug> --state open --json number,url`. If the list holds one, use its `url` and go to step 7.
 3. Run `git push -u origin wstack/<slug>`. If it fails, stop as in "Stop".
 4. Write the pull request body to `$task_dir/pr-body.md`: the goal, what changed, the review result, and the evidence links from `review.md`. Use the evidence skill's rule for text logs: put them in the body as text.
 5. Run `bash "$scripts/pr-attach.sh" --task-id <task_id> --title "<title>" --body-file "$task_dir/pr-body.md" --max-mb <pr media limit> <evidence files>`. The evidence files are the media files in `/tmp/wstack-evidence/<task_id>/`. Add `--base <default branch>` when the repository default is not what `gh` picks.
@@ -66,16 +66,16 @@ If every target is shipped, skip this section.
 
 1. Write the short report in your reply: each waiting target, what it does, and how to undo it, or that it cannot be undone. For a merge, name the pull request and say that other people can see a merge before a revert.
 2. Run `bash "$scripts/frontmatter-set.sh" "$task_dir/report.md" approval_needed true`.
-3. Write a `stop` line in `run-log.md`. Run `bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","stage":"deliver","reason":"<target> needs approval"}'`.
+3. Write a `stop` line in `run-log.md`. Write one `stopped_for_user` item for each waiting target: `bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","stage":"deliver","target":"<target>","reason":"<target> needs approval"}'`. A Deliver item is the only item with a `target` field. Its value is the target name from the table, for example `merge` or `deploy`.
 4. Set `status` to `awaiting-deliver-approval` in `spec.md`.
 5. Ask the user for a yes or no on each waiting target. End the reply with that question. Write nothing after it. Never run the target before the answer.
 
 ## After the user answers
 
-This rule runs the same way in the same session and in a resumed task. Read the last item of `stopped_for_user` in `run-log.md` to find the waiting target.
+This rule runs the same way in the same session and in a resumed task. A waiting target is a `stopped_for_user` item with `"stage":"deliver"` whose `target` has no item in the `targets` list of `report.md`. Find the first waiting target and handle only that one. Ask the user about the next one in the same reply when the user has not answered it yet.
 
 - No: keep `status` as `awaiting-deliver-approval`. Ask what to change. If the user wants to drop the target, remove it from the spec's `## Deliver targets` first, then finish as below.
-- Yes: set `approved_at` in `report.md` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Run the target with the prefix `WSTACK_APPROVED=1`. After a failed target, run it again. Add the prefix only after the yes. Never add it before.
+- Yes: set `approved_at` in `report.md` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Run the target with the prefix `WSTACK_APPROVED=1`. Add the prefix only after the yes. Never add it before.
 
 ### Merge
 
@@ -87,6 +87,14 @@ This rule runs the same way in the same session and in a resumed task. Read the 
 ### Other targets
 
 Run the target. Record its URL and its undo, or `"undo":"none"` if it has none.
+
+### Retry a failed target
+
+A failed target has a stop item with `"target":"pull request"` or the name of the failed target, and `status` is `waiting-user`. After the user says yes, set `status` to `executing`. For a pull request, run the steps of "Pull request" again from step 1. For another target, run its steps again. Record the target as usual. If it fails again, stop again as in "Stop".
+
+### When no waiting target is left
+
+After each target, look for another waiting target. If one is left, set `status` to `awaiting-deliver-approval` and ask the user about it. End the reply. Run "Finish" only when no waiting target is left.
 
 ## Finish
 
@@ -100,9 +108,9 @@ Run the target. Record its URL and its undo, or `"undo":"none"` if it has none.
 
 ## Stop
 
-Use this stop when a target fails. Never retry the target.
+Use this stop when a target fails. Never retry the target before the user says yes.
 
 1. Write a `stop` line in `run-log.md`.
-2. Run `bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","stage":"deliver","reason":"<reason>"}'`.
+2. Run `bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","stage":"deliver","target":"<failed target>","reason":"<reason>"}'`.
 3. Set `status` to `waiting-user` in `spec.md`.
 4. Tell the user the reason. Ask for a yes or no to try again. End the reply. Wait.
