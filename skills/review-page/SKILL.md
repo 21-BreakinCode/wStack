@@ -24,7 +24,7 @@ Set `$task_dir` to the task folder and `$work_dir` to `/tmp/wstack-evidence/<tas
    ```
 
 4. Read the exit code.
-   - Exit 0: the page is at `$task_dir/review.html` and fits at 375 px.
+   - Exit 0: the page is at `$task_dir/review.html` and fits at 375 px. If `mobile` is `true` in `spec.md`, publish it as a Claude artifact. Follow `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/mobile.md` with `$page` set to `$task_dir/review.html`.
    - Exit 1 with a message about the diagram: `diagram.excalidraw` is broken. Fix the JSON and run step 3 again.
    - Exit 1 with a number on the last line: the page is wider than 375 px. Find the wide table or code block in `review.md`. Shorten it and run step 3 again.
    - Exit 2: a tool is missing or failed. Read the message, then stop with that reason, as in "Stop for the user" in the start-task skill.

@@ -311,6 +311,16 @@ Result: 50 users. Source: https://www.cloudflare.com/plans/zero-trust-services/ 
 
 Effect on plan: Spec section 17 item 7 reads "50 users (unconfirmed: from a search summary, the pricing page returned 403)".
 
+## S12: Is the Artifact tool available in claude -p and in the eval sandbox?
+
+Command: `claude -p "say ok" --output-format stream-json --verbose` (HERDR variables unset), then `jq` on the `init` event tool list. Then `claude -p "Call ToolSearch with query select:Artifact. Do nothing else."`. Then `bash tests/run-evals.sh --case 'mobile-*'` and a search of its kept trace.
+
+Output: the `init` event lists 45 tools, `ToolSearch` among them and no `Artifact`. The ToolSearch call returned `No matching deferred tools found`. In the eval sandbox the run wrote `Artifact tool is not available, so spec.html was not published` into run-log.md and made no Artifact call.
+
+Result: not available in `claude -p` and not in the eval sandbox (one run each). I did not test an interactive session.
+
+Effect on plan: The `mobile-publish` eval always takes the `stop` line branch. It cannot test a real publish. A real publish needs an interactive session with the Artifact tool.
+
 ## D-FM: Frontmatter format
 
 Decision: every task file starts with frontmatter between two `---` lines. Each line is `key: value`. A line has no inline comment. A list value is one-line JSON, for example `stopped_for_user: []` and `targets: [{"target":"pr","url":"...","undo":"..."}]`.
