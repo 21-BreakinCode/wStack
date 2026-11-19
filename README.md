@@ -97,11 +97,16 @@ Do these steps once, in this order. Cloudflare steps are only needed if you want
 
 1. Get a domain on Cloudflare. Cloudflare Access needs it for the evidence subdomain.
 2. Create the R2 bucket.
-3. Add the lifecycle rule: prefix `evidence/`, delete after 30 days (`evidence_retention_days`). The command replaces all lifecycle rules of the bucket. It needs a Node version that `cf` accepts, which `bash scripts/preflight.sh plan r2` checks. Add `--dry-run` first to see the request. Replace `<bucket>` with your bucket name. The value `2592000` is 30 days in seconds. If you change `evidence_retention_days`, change this number to match.
+3. Add the lifecycle rule for evidence: prefix `evidence/`, delete after 30 days (`evidence_retention_days`). Replace `<bucket>` with your bucket name. The update command replaces all lifecycle rules of the bucket. A new bucket has a default rule that aborts incomplete multipart uploads after 7 days (`604800` seconds). Keep that rule in the command.
+   1. Run `cf r2 buckets lifecycle get <bucket>`. Note each rule in the output.
+   2. Run the update command below with `--dry-run` at the end. Check the request body. It must list the default rule and the `expire-evidence` rule. If step 1 shows other rules, add them to `--rules` too.
+   3. Run the same command without `--dry-run`. The command asks you to confirm before it changes the bucket. In a script, add `--force` to skip the question.
 
    ```
-   cf r2 buckets lifecycle update <bucket> --rules '[{"id":"expire-evidence","enabled":true,"conditions":{"prefix":"evidence/"},"deleteObjectsTransition":{"condition":{"type":"Age","maxAge":2592000}}}]'
+   cf r2 buckets lifecycle update <bucket> --rules '[{"id":"Default Multipart Abort Rule","enabled":true,"conditions":{},"abortMultipartUploadsTransition":{"condition":{"type":"Age","maxAge":604800}}},{"id":"expire-evidence","enabled":true,"conditions":{"prefix":"evidence/"},"deleteObjectsTransition":{"condition":{"type":"Age","maxAge":2592000}}}]'
    ```
+
+   The value `2592000` is 30 days in seconds. If you change `evidence_retention_days`, change this number to match. The command needs a Node version that `cf` accepts. `bash scripts/preflight.sh plan r2` checks it.
 
 4. Create the Cloudflare Access application and an Allow policy with your email.
 5. Connect the custom domain to the bucket. Do this after step 4.

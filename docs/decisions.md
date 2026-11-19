@@ -363,4 +363,10 @@ Output:
 ```
 `update` replaces all lifecycle rules of the bucket (`PUT .../lifecycle`). `maxAge` is in seconds: 2592000 is 30 days, the `evidence_retention_days` default. The shape of `maxAge` and `type: "Age"` comes from the Cloudflare API and I did not verify it against a live bucket. The dry run checks the request only.
 
+Checked on a real bucket on 2026-11-19, two facts:
+1. A new R2 bucket already has the rule `{"id":"Default Multipart Abort Rule","enabled":true,"conditions":{},"abortMultipartUploadsTransition":{"condition":{"type":"Age","maxAge":604800}}}`. `update` replaces every rule, so the command in the first version of setup to-do 3 deleted this rule. Without it, incomplete multipart uploads never expire.
+2. Without a terminal, `cf r2 buckets lifecycle update` prints a confirmation prompt and `Aborted.` unless `--force` is given.
+
+Setup to-do 3 now runs `lifecycle get` first, then a `--dry-run` update with both rules, then the real update. It names `--force` for scripts.
+
 Effect on plan: the user runs the command after approving the bucket change. Nothing in the plugin calls it.
