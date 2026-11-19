@@ -6,7 +6,7 @@ Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontma
 
 ## Start
 
-1. If `status` is `waiting-user`, read the last item of `stopped_for_user` in `run-log.md`. Tell the user its step and reason. If the item has `"stage":"verify"` or its reason holds `retry_limit`, follow "After the user answers a stop" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` instead. Otherwise ask for a yes or no, end the reply, and wait. Then follow "After the user answers a stop".
+1. If `status` is `waiting-user`, read the last item of `stopped_for_user` in `run-log.md`. Tell the user its step and reason. If the item has `"stage":"deliver"`, run the deliver skill and follow its "After the user answers" section instead. If the item has `"stage":"verify"` or its reason holds `retry_limit`, follow "After the user answers a stop" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` instead. Otherwise ask for a yes or no, end the reply, and wait. Then follow "After the user answers a stop".
 2. If `started_at` in `run-log.md` is empty, set it once to `date -u +%Y-%m-%dT%H:%M:%SZ`: `bash "$scripts/frontmatter-set.sh" "$task_dir/run-log.md" started_at <time>`. Never set it again.
 3. For a code task, work in `workspace_cwd`. Run `git switch -c wstack/<slug>`, or `git switch wstack/<slug>` if the branch exists. `<slug>` is the task id without its date prefix. Commit only on that branch. Never commit to the default branch.
 
@@ -26,7 +26,7 @@ Iterate on your own. Test your work as you go.
 
 A non-undoable step is one the spec lists under `## Non-undoable steps`. A merge, a push to the default branch, a force push, a delete, and a deploy are always non-undoable.
 
-Execute never pushes `wstack/<slug>` and never opens the pull request. The Deliver stage does both. When the spec lists `open a pull request` under `## Deliver targets`, the user's approval of the spec removes the stop of Deliver for those two actions. A merge always asks. If the Deliver stage is not available, the router says so and the task stays at `verifying`.
+Execute never pushes `wstack/<slug>` and never opens the pull request. The Deliver stage does both. When the spec lists `open a pull request` under `## Deliver targets`, the user's approval of the spec removes the stop of Deliver for those two actions. A merge always asks.
 
 Before a non-undoable step, stop:
 

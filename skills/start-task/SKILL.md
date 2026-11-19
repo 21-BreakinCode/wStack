@@ -21,6 +21,10 @@ Resolve each value in this order. Take the first one that is set and is not a li
 - Vault path: the shell variable `WSTACK_VAULT_PATH`, then `EVAL_WSTACK_VAULT_PATH`, then `${user_config.vault_path}`.
 - Tasks folder: `WSTACK_TASKS_DIR`, then `EVAL_WSTACK_TASKS_DIR`, then `${user_config.tasks_dir}`, then `Workflow/Tasks`.
 - Retry limit: `WSTACK_RETRY_LIMIT`, then `EVAL_WSTACK_RETRY_LIMIT`, then `${user_config.retry_limit}`, then `3`.
+- R2 bucket: `WSTACK_R2_BUCKET`, then `EVAL_WSTACK_R2_BUCKET`, then `${user_config.r2_bucket}`, then empty.
+- Evidence domain: `WSTACK_EVIDENCE_DOMAIN`, then `EVAL_WSTACK_EVIDENCE_DOMAIN`, then `${user_config.evidence_domain}`, then empty.
+- Local-only evidence repos: `WSTACK_LOCAL_EVIDENCE_ONLY_REPOS`, then `EVAL_WSTACK_LOCAL_EVIDENCE_ONLY_REPOS`, then `${user_config.local_evidence_only_repos}`, then empty. The value is a comma list of `owner/repo`.
+- Pull request media limit in MB: `WSTACK_PR_MEDIA_MAX_MB`, then `EVAL_WSTACK_PR_MEDIA_MAX_MB`, then `${user_config.pr_media_max_mb}`, then `10`.
 
 Read the shell variables with `echo "${WSTACK_VAULT_PATH:-}" "${EVAL_WSTACK_VAULT_PATH:-}"`. Read the other shell variables the same way. If no vault path is set, ask the user for it and stop.
 
@@ -64,7 +68,7 @@ The argument is `--task <task_id>`. The task folder is `$vault/$tasks_dir/<task_
 | `drafting`, `awaiting-approval` | Confirmation. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/confirmation.md` and follow it. |
 | `executing`, `waiting-user` | Execute. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/execute.md` and follow it. |
 | `verifying` | Verify. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` and follow it. |
-| `awaiting-deliver-approval` | The Deliver stage is not available yet. Tell the user and stop. |
+| `awaiting-deliver-approval` | Deliver. Run the deliver skill and follow its "After the user answers" section. |
 | `delivered`, `cancelled` | Tell the user the task is closed. Stop. |
 
 Change `status` only with `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" status <value>`.
