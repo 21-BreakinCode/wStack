@@ -20,7 +20,7 @@ Two things start Deliver. Verify starts it with `status` as `verifying` and `res
 
 ## Sort the targets
 
-Read `## Deliver targets` in the spec. Sort each target with this table.
+Read `## Deliver targets` in the spec. Match each line to a row of this table. The Target column is the one name of a target. Use that name, never the raw spec text, in every stop item, in every `targets` item of `report.md`, and in every check below.
 
 | Work type | Target | Undo | Approval |
 |---|---|---|---|
@@ -50,11 +50,11 @@ Run all targets that need no approval first. Then handle the ones that need appr
    - Exit 0: take the pull request URL from the last URL in the output. If the output says `attachment upload failed`, say so in the report.
    - Exit 3: the pull request does not exist. Never run it again. Stop as in "Stop".
    - Exit 1 or 2: read stderr. Stop as in "Stop".
-7. Record the target: `bash "$scripts/frontmatter-set.sh" --append "$task_dir/report.md" targets '{"target":"pull request","url":"<url>","undo":"gh pr close <number>"}'`.
+7. Record the target: `bash "$scripts/frontmatter-set.sh" --append "$task_dir/report.md" targets '{"target":"open a pull request","url":"<url>","undo":"gh pr close <number>"}'`.
 
 ### Obsidian note
 
-Execute already wrote the note in `$vault`. Never write it again. Record it: `{"target":"obsidian note","url":"<absolute note path>","undo":"delete the note <absolute note path>"}`.
+Execute already wrote the note in `$vault`. Never write it again. Record it: `{"target":"new Obsidian note","url":"<absolute note path>","undo":"delete the note <absolute note path>"}`.
 
 ### Blog draft and rendered video file
 
@@ -66,13 +66,13 @@ If every target is shipped, skip this section.
 
 1. Write the short report in your reply: each waiting target, what it does, and how to undo it, or that it cannot be undone. For a merge, name the pull request and say that other people can see a merge before a revert.
 2. Run `bash "$scripts/frontmatter-set.sh" "$task_dir/report.md" approval_needed true`.
-3. Write a `stop` line in `run-log.md`. Write one `stopped_for_user` item for each waiting target: `bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","stage":"deliver","target":"<target>","reason":"<target> needs approval"}'`. A Deliver item is the only item with a `target` field. Its value is the target name from the table, for example `merge` or `deploy`.
+3. Write a `stop` line in `run-log.md`. Write one `stopped_for_user` item for each waiting target: `bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","stage":"deliver","target":"<target>","reason":"<target> needs approval"}'`. A Deliver item is the only item with a `target` field. Its value is the Target name from the table, for example `merge` or `deploy`.
 4. Set `status` to `awaiting-deliver-approval` in `spec.md`.
 5. Ask the user for a yes or no on each waiting target. End the reply with that question. Write nothing after it. Never run the target before the answer.
 
 ## After the user answers
 
-This rule runs the same way in the same session and in a resumed task. A waiting target is a `stopped_for_user` item with `"stage":"deliver"` whose `target` is still listed in the spec's `## Deliver targets` and has no item in the `targets` list of `report.md`. A target removed from the spec is not waiting. Find the first waiting target and handle only that one. Ask the user about the next one in the same reply when the user has not answered it yet.
+This rule runs the same way in the same session and in a resumed task. A waiting target is a `stopped_for_user` item with `"stage":"deliver"` whose `target` matches (by the table) a line still listed in the spec's `## Deliver targets` and has no item with the same `target` value in the `targets` list of `report.md`. A target removed from the spec is not waiting. Find the first waiting target and handle only that one. Ask the user about the next one in the same reply when the user has not answered it yet.
 
 - No: keep `status` as `awaiting-deliver-approval`. Ask what to change. If the user wants to drop the target, remove it from the spec's `## Deliver targets` first, then finish as below.
 - Yes: set `approved_at` in `report.md` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Run the target with the prefix `WSTACK_APPROVED=1`. Add the prefix only after the yes. Never add it before.
@@ -90,7 +90,7 @@ Run the target. Record its URL and its undo, or `"undo":"none"` if it has none.
 
 ### Retry a failed target
 
-A failed target has a stop item with `"target":"pull request"` or the name of the failed target, and `status` is `waiting-user`. After the user says yes, set `status` to `executing`. For a pull request, run the steps of "Pull request" again from step 1. For another target, run its steps again. Record the target as usual. If it fails again, stop again as in "Stop".
+A failed target has a stop item with the Target name of the failed target, for example `"target":"open a pull request"`, and `status` is `waiting-user`. After the user says yes, set `status` to `executing`. For `open a pull request`, run the steps of "Pull request" again from step 1. For another target, run its steps again. Record the target as usual. If it fails again, stop again as in "Stop".
 
 ### When no waiting target is left
 
