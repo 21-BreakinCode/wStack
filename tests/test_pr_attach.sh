@@ -13,7 +13,7 @@ ffmpeg -loglevel error -f lavfi -i testsrc=duration=1:size=320x180:rate=1 -frame
 cwebp -quiet "$work_dir/shot.png" -o "$work_dir/shot.webp"
 ffmpeg -loglevel error -f lavfi -i testsrc=duration=2:size=320x180:rate=10 -c:v libvpx "$work_dir/clip.webm"
 
-run() { bash "$script" --task-id t1 --title "My PR" --body-file "$work_dir/body.md" --max-mb "${MAX_MB:-5}" "$@" "$work_dir/shot.webp" "$work_dir/clip.webm"; }
+run() { bash "$script" --task-id 2026-01-01-t1 --title "My PR" --body-file "$work_dir/body.md" --max-mb "${MAX_MB:-5}" "$@" "$work_dir/shot.webp" "$work_dir/clip.webm"; }
 cp "$work_dir/shot.png" "$work_dir/issue#12.png"
 
 : > "$FAKE_LOG"
@@ -21,7 +21,7 @@ out="$(run --base main)"
 assert "jpg attached" 'grep -qE -- "--attach [^ ]+/gh/01-shot\.jpg" "$FAKE_LOG"'
 assert "mp4 attached" 'grep -qE -- "--attach [^ ]+/gh/02-clip\.mp4" "$FAKE_LOG"'
 assert "base passed" 'grep -q -- "--base main" "$FAKE_LOG"'
-assert "gh copies exist" '[ -f "$WSTACK_EVIDENCE_ROOT/t1/gh/01-shot.jpg" ] && [ -f "$WSTACK_EVIDENCE_ROOT/t1/gh/02-clip.mp4" ]'
+assert "gh copies exist" '[ -f "$WSTACK_EVIDENCE_ROOT/2026-01-01-t1/gh/01-shot.jpg" ] && [ -f "$WSTACK_EVIDENCE_ROOT/2026-01-01-t1/gh/02-clip.mp4" ]'
 assert "pr url printed" '[[ "$out" == *"/pull/1"* ]]'
 
 : > "$FAKE_LOG"
@@ -48,7 +48,7 @@ assert "unfit file named" '[[ "$out" == *"attachment upload failed: $work_dir/cl
 assert "unfit reason printed" '[[ "$out" == *"/pull/1"* ]]'
 
 : > "$FAKE_LOG"
-bash "$script" --task-id t2 --title T --body-file "$work_dir/body.md" --max-mb 5 "$work_dir/issue#12.png" >/dev/null
+bash "$script" --task-id 2026-01-01-t2 --title T --body-file "$work_dir/body.md" --max-mb 5 "$work_dir/issue#12.png" >/dev/null
 attach_arg="$(grep -o -- '--attach [^ ]*' "$FAKE_LOG")"
 assert "hash name attached" '[[ "$attach_arg" == *"issue_12.jpg" ]]'
 assert "no hash in attach path" '[[ "$attach_arg" != *"#"* ]]'
@@ -66,14 +66,23 @@ cp "$work_dir/c/a_1.png" "$work_dir/c/a.png"
 attach_paths() { grep -o -- '--attach [^ ]*' "$FAKE_LOG" | sed 's/--attach //'; }
 
 : > "$FAKE_LOG"
-bash "$script" --task-id t3 --title T --body-file "$work_dir/body.md" --max-mb 5 "$work_dir/c/a#1.png" "$work_dir/c/a_1.png" >/dev/null
+bash "$script" --task-id 2026-01-01-t3 --title T --body-file "$work_dir/body.md" --max-mb 5 "$work_dir/c/a#1.png" "$work_dir/c/a_1.png" >/dev/null
 first_copy="$(attach_paths | sed -n 1p)"; second_copy="$(attach_paths | sed -n 2p)"
 assert "a#1 and a_1 copies have different paths" '[ -n "$first_copy" ] && [ "$first_copy" != "$second_copy" ]'
 assert "a#1 and a_1 copies hold different bytes" '! cmp -s "$first_copy" "$second_copy"'
 
 : > "$FAKE_LOG"
-bash "$script" --task-id t4 --title T --body-file "$work_dir/body.md" --max-mb 5 "$work_dir/c/a.png" "$work_dir/c/a.webp" >/dev/null
+bash "$script" --task-id 2026-01-01-t4 --title T --body-file "$work_dir/body.md" --max-mb 5 "$work_dir/c/a.png" "$work_dir/c/a.webp" >/dev/null
 first_copy="$(attach_paths | sed -n 1p)"; second_copy="$(attach_paths | sed -n 2p)"
 assert "a.png and a.webp copies have different paths" '[ -n "$first_copy" ] && [ "$first_copy" != "$second_copy" ]'
 assert "a.png and a.webp copies both exist" '[ -f "$first_copy" ] && [ -f "$second_copy" ]'
+
+for bad_id in "" ".." "a/b" "2026-01-01-a b" "../2026-01-01-x"; do
+  mkdir -p "$WSTACK_EVIDENCE_ROOT/keep"; : > "$FAKE_LOG"
+  status=0
+  bash "$script" --task-id "$bad_id" --title T --body-file "$work_dir/body.md" --max-mb 5 "$work_dir/shot.webp" >/dev/null 2>&1 || status=$?
+  expected=1
+  assert "bad task id '$bad_id' exits $expected" '[ "$status" -eq "$expected" ]'
+  assert "bad task id '$bad_id' runs no gh and keeps files" '[ ! -s "$FAKE_LOG" ] && [ -d "$WSTACK_EVIDENCE_ROOT/keep" ]'
+done
 finish

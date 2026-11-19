@@ -14,10 +14,10 @@ set -euo pipefail
 
 usage() { echo "usage: pr-attach.sh --task-id <id> --title <t> --body-file <f> --max-mb <n> [--base <b>] [--allow-ghes] <files...>" >&2; exit 2; }
 
-task_id=""; title=""; body_file=""; max_mb=""; base=""; allow_ghes=0
+task_id=""; task_id_given=0; title=""; body_file=""; max_mb=""; base=""; allow_ghes=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --task-id) [ $# -ge 2 ] || usage; task_id="$2"; shift 2 ;;
+    --task-id) [ $# -ge 2 ] || usage; task_id="$2"; task_id_given=1; shift 2 ;;
     --title) [ $# -ge 2 ] || usage; title="$2"; shift 2 ;;
     --body-file) [ $# -ge 2 ] || usage; body_file="$2"; shift 2 ;;
     --max-mb) [ $# -ge 2 ] || usage; max_mb="$2"; shift 2 ;;
@@ -27,7 +27,12 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
-[ -n "$task_id" ] && [ -n "$title" ] && [ -n "$body_file" ] && [ -n "$max_mb" ] || usage
+[ "$task_id_given" -eq 1 ] && [ -n "$title" ] && [ -n "$body_file" ] && [ -n "$max_mb" ] || usage
+task_id_pattern='^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z][a-z0-9-]{0,31}$'
+if ! [[ "$task_id" =~ $task_id_pattern ]]; then
+  echo "pr-attach: invalid task id '$task_id' (expected YYYY-MM-DD-slug)" >&2
+  exit 1
+fi
 [ -f "$body_file" ] || { echo "body file not found: $body_file" >&2; exit 1; }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
