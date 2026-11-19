@@ -8,7 +8,7 @@ user-invocable: false
 
 Build `review.html` in the task folder from `review.md` and a diagram.
 
-Set `$task_dir` to the task folder and `$work_dir` to `/tmp/wstack-evidence/<task_id>/`. Run `mkdir -p "$work_dir"`.
+Set `$task_dir` to the task folder and `$work_dir` to `/tmp/wstack-evidence/<task_id>/page/`. Run `mkdir -p "$work_dir"`. The evidence upload and the pull request take only the top-level files of the evidence folder, so the build files in `page/` stay out of both.
 
 ## Steps
 
@@ -27,7 +27,7 @@ Set `$task_dir` to the task folder and `$work_dir` to `/tmp/wstack-evidence/<tas
    - Exit 0: the page is at `$task_dir/review.html` and fits at 375 px. If `mobile` is `true` in `spec.md`, publish it as a Claude artifact. Follow `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/mobile.md` with `$page` set to `$task_dir/review.html`.
    - Exit 1 with a message about the diagram: `diagram.excalidraw` is broken. Fix the JSON and run step 3 again.
    - Exit 1 with a number on the last line: the page is wider than 375 px. Find the wide table or code block in `review.md`. Shorten it and run step 3 again.
-   - Exit 2: a tool is missing or failed. Read the message, then stop with that reason, as in "Stop for the user" in the start-task skill.
+   - Exit 2: a tool is missing or failed. Read the message, then stop with that reason, as in "Stop for the user" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md`.
 5. Read the warnings. If one says `diagram not rendered`, the network or the browser failed. The page still built, and the Diagram section says why. Tell the user in the next reply. Do not retry in a loop.
 
 ## Rules

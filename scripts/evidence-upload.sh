@@ -29,9 +29,11 @@ if [ -z "$bucket" ]; then
   echo "r2_bucket is empty, so nothing was uploaded."
   exit 0
 fi
-case ",$local_only_repos," in
-  *",$repo,"*) echo "local only: $dir"; echo "repo $repo is in local_evidence_only_repos, so nothing was uploaded."; exit 0 ;;
-esac
+if [ -n "$repo" ]; then  # an empty repo would match the ",," of an empty list
+  case ",$local_only_repos," in
+    *",$repo,"*) echo "local only: $dir"; echo "repo $repo is in local_evidence_only_repos, so nothing was uploaded."; exit 0 ;;
+  esac
+fi
 if [ -z "$domain" ]; then
   echo "local only: $dir"
   echo "evidence_domain is empty, so nothing was uploaded. Set evidence_domain in the plugin config."

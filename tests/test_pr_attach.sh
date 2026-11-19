@@ -77,6 +77,15 @@ first_copy="$(attach_paths | sed -n 1p)"; second_copy="$(attach_paths | sed -n 2
 assert "a.png and a.webp copies have different paths" '[ -n "$first_copy" ] && [ "$first_copy" != "$second_copy" ]'
 assert "a.png and a.webp copies both exist" '[ -f "$first_copy" ] && [ -f "$second_copy" ]'
 
+# I8: an input inside the gh/ output folder is rejected before the folder is deleted
+own_gh_dir="$WSTACK_EVIDENCE_ROOT/2026-01-01-t5/gh"
+mkdir -p "$own_gh_dir"; cp "$work_dir/shot.png" "$own_gh_dir/old copy.png"
+: > "$FAKE_LOG"; status=0
+err="$(bash "$script" --task-id 2026-01-01-t5 --title T --body-file "$work_dir/body.md" --max-mb 5 "$own_gh_dir/old copy.png" 2>&1 >/dev/null)" || status=$?
+assert "gh/ input exits 1" '[ "$status" -eq 1 ]'
+assert "gh/ input message names the top-level files" '[[ "$err" == *"inside the gh/ folder"* && "$err" == *"top-level"* ]]'
+assert "gh/ input is kept and no pr is created" '[ -f "$own_gh_dir/old copy.png" ] && ! grep -q "pr create" "$FAKE_LOG"'
+
 for bad_id in "" ".." "a/b" "2026-01-01-a b" "../2026-01-01-x"; do
   mkdir -p "$WSTACK_EVIDENCE_ROOT/keep"; : > "$FAKE_LOG"
   status=0

@@ -27,7 +27,7 @@ server_pid=$!
 sleep 1
 
 # Runs the capture path from skills/evidence/SKILL.md into <task_dir> and sets task_dir, page_width, capture_output.
-# Layout: raw captures in raw/, R2 copies in the task folder, GitHub copies in gh/.
+# Layout: raw captures in raw/, R2 copies in the task folder. pr-attach.sh makes the GitHub copies in gh/ from the top-level files.
 capture() {  # <preflight script> <name>
   local preflight="$1" have_ffmpeg=1 preflight_output
   task_dir="$work_dir/wstack-evidence/$2"
@@ -51,7 +51,7 @@ capture() {  # <preflight script> <name>
   r2_webp="$(bash "$repo_root/scripts/compress-media.sh" --target r2 "$task_dir/raw/check-1.webp" "$task_dir" | tail -n 1)"
   if [ "$have_ffmpeg" = "1" ]; then
     r2_mp4="$(bash "$repo_root/scripts/compress-media.sh" --target r2 "$task_dir/raw/flow.webm" "$task_dir" | tail -n 1)"
-    gh_mp4="$(bash "$repo_root/scripts/compress-media.sh" --target gh --max-mb 5 "$task_dir/raw/flow.webm" "$task_dir/gh" | tail -n 1)"
+    gh_mp4="$(bash "$repo_root/scripts/compress-media.sh" --target gh --max-mb 5 "$r2_mp4" "$task_dir/gh" | tail -n 1)"
   fi
 }
 video_codec() { ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=nw=1:nk=1 "$1"; }
@@ -65,7 +65,7 @@ assert "r2 webp is in the task folder" '[ "$(dirname "$r2_webp")" = "$real_task_
 if [ -z "$capture_output" ]; then
   assert "raw webm video exists" '[ -s "$real_task_dir/raw/flow.webm" ]'
   assert "r2 mp4 is hevc" '[ "$(video_codec "$r2_mp4")" = "hevc" ]'
-  assert "gh mp4 is h264 in gh/" '[ "$(dirname "$gh_mp4")" = "$real_task_dir/gh" ] && [ "$(video_codec "$gh_mp4")" = "h264" ]'
+  assert "gh mp4 from the top-level hevc copy is h264 in gh/" '[ "$(dirname "$gh_mp4")" = "$real_task_dir/gh" ] && [ "$(video_codec "$gh_mp4")" = "h264" ]'
 fi
 
 # Case 2: a stub preflight says ffmpeg is missing. Only the video steps are skipped.

@@ -32,6 +32,15 @@ message="$(bash "$script" --target gh --max-mb 0.001 "$work_dir/clip.webm" "$gh_
 assert "too large exits 1" '[ "$status" -eq 1 ]'
 assert "too large message" '[[ "$message" == *"cannot fit"* ]]'
 
+# I11: a GIF is rejected for both targets, so a terminal recording is never turned into one still image
+ffmpeg -loglevel error -f lavfi -i testsrc=duration=1:size=320x180:rate=5 "$work_dir/term.gif"
+for gif_target in r2 gh; do
+  status=0
+  message="$(bash "$script" --target "$gif_target" "$work_dir/term.gif" "$out_dir/$gif_target" 2>&1)" || status=$?
+  assert "gif $gif_target exits 1" '[ "$status" -eq 1 ]'
+  assert "gif $gif_target message names webm" '[[ "$message" == *"record the terminal as .webm or .mp4"* ]]'
+done
+
 # Output equal to input: exit 1, clear message, input intact.
 same_dir="$work_dir/same"; mkdir -p "$same_dir"
 cp "$r2_video" "$same_dir/in.mp4"; cp "$r2_image" "$same_dir/in.webp"

@@ -37,6 +37,14 @@ fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 gh_dir="${WSTACK_EVIDENCE_ROOT:-/tmp/wstack-evidence}/$task_id/gh"
+if [ -d "$gh_dir" ]; then  # each run deletes gh/, so an input inside it would be lost
+  gh_dir_real="$(cd "$gh_dir" && pwd -P)"
+  for evidence_file in "$@"; do
+    case "$(cd "$(dirname "$evidence_file")" 2>/dev/null && pwd -P)/" in
+      "$gh_dir_real"/*) echo "pr-attach: input is inside the gh/ folder, which each run deletes: $evidence_file. Pass the top-level evidence files." >&2; exit 1 ;;
+    esac
+  done
+fi
 
 create_args=(--title "$title" --body-file "$body_file")
 [ -z "$base" ] || create_args+=(--base "$base")

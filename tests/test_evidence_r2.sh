@@ -48,6 +48,12 @@ assert "empty domain: local only" '[[ "$out" == *"local only: $evidence_dir"* ]]
 assert "empty domain: names evidence_domain" '[[ "$out" == *"evidence_domain"* ]]'
 assert "empty domain: no cf call" '[ ! -s "$FAKE_LOG" ]'
 
+# I7: a task with no repository and an empty local-only list still uploads
+fresh_log
+out="$(bash "$upload" --task-id "$task_id" --dir "$evidence_dir" --bucket bkt --domain ev.example.com --repo "" --local-only-repos "")"
+assert "no repo: uploads every file" '[ "$(grep -c "^cf r2 objects put" "$FAKE_LOG")" = 3 ]'
+assert "no repo: prints urls, not local only" '[[ "$out" == *"https://ev.example.com/evidence/$task_id/a.webp"* && "$out" != *"local only"* ]]'
+
 # R25(a): bad task ids stop before any cf call
 for bad_id in "" ".." "2000-01-02-a/b" "2000-01-02-a b" "../x" "2000-01-02-Demo" "demo"; do
   fresh_log

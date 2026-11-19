@@ -10,7 +10,7 @@ Record one evidence set for each check in the spec's verification plan. Do this 
 
 ## Working folder
 
-Save all files in `/tmp/wstack-evidence/<task_id>/`. Run `mkdir -p` on it and on its `raw/` and `gh/` folders first. Never save media in the Obsidian vault.
+Save all files in `/tmp/wstack-evidence/<task_id>/`. Run `mkdir -p` on it and on its `raw/` folder first. Never save media in the Obsidian vault.
 
 Name each file after its check, for example `check-1` or `check-2-flow`.
 
@@ -46,22 +46,19 @@ Use the task slug for `<slug>`, so parallel tasks do not share a browser. To rea
 
 ### Terminal check
 
-Record the session with VHS. Save the recording as `.gif` or `.webm` in the `raw/` folder.
+Record the session with VHS. Save the recording as `.webm` or `.mp4` in the `raw/` folder. Never save it as `.gif`, because `compress-media.sh` rejects GIF files.
 
 ## Compress
 
-Make two copies of each image and video. Compress from `raw/`. Put the R2 copies in the working folder and the GitHub copies in `gh/`.
+Make one compressed copy of each image and video. Compress from `raw/` into the working folder.
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/compress-media.sh" --target r2 <input> /tmp/wstack-evidence/<task_id>
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/compress-media.sh" --target gh --max-mb <pr_media_max_mb> <input> /tmp/wstack-evidence/<task_id>/gh
 ```
 
-Each command prints the output path. Images become WebP for R2 and JPEG for GitHub. Videos become H.265 MP4 for R2 and H.264 MP4 for GitHub.
+The command prints the output path. Images become WebP. Videos become H.265 MP4.
 
-If `compress-media.sh` exits 1 with "cannot fit", shorten the recording and run it again.
-
-Task 13 attaches the `gh/` files to the pull request. Text logs go in the pull request body as text.
+In Deliver, `pr-attach.sh` makes the GitHub copies from the top-level files of the working folder and attaches them to the pull request. Text logs go in the pull request body as text.
 
 ## Record in review.md
 

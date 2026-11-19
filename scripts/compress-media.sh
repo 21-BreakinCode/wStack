@@ -40,7 +40,8 @@ fail_if_output_is_input() {  # <output>
 }
 
 case "$extension" in
-  png|jpg|jpeg|webp|gif)
+  gif) echo "GIF is not supported: record the terminal as .webm or .mp4 ($file_name)" >&2; exit 1 ;;
+  png|jpg|jpeg|webp)
     if [ "$target" = "r2" ]; then
       output="$out_dir/$base_name.webp"
       fail_if_output_is_input "$output"
