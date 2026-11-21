@@ -57,18 +57,24 @@ If the user asks for changes, go back to step 4, then run steps 5 to 8 again.
 
 ## After approval
 
-9. If `$task_dir/contract-brief.md` does not exist, the task has no contract: skip to "Then set `approved_at`" below. Otherwise update the contract first. Read the values back in the same Bash call as the commands that use them: `source "$scripts/lib/frontmatter.sh"; contract_file="$(fm_get "$task_dir/contract-brief.md" contract_file)"`, and the same for `base_branch` and `checked_commit`. Run these commands in order. If `contract.gate-patch.md` does not exist, or holds no `## ` section other than `## Remove from plan`, skip the `cp` and `apply` lines.
+9. If `$task_dir/contract-brief.md` does not exist, the task has no contract: skip to "Then set `approved_at`" below. Otherwise update the contract first. Run this in one Bash call. Write the real task folder for `<task folder>`. If `contract.gate-patch.md` does not exist, or holds no `## ` section other than `## Remove from plan`, skip the `cp` and `apply` lines.
 
    ```bash
+   set -e
+   scripts="${CLAUDE_PLUGIN_ROOT}/scripts"
+   task_dir="<task folder>"
+   source "$scripts/lib/frontmatter.sh"
+   contract_file="$(fm_get "$task_dir/contract-brief.md" contract_file)"
+   checked_commit="$(fm_get "$task_dir/contract-brief.md" checked_commit)"
    bash "$scripts/contract-edit.sh" lock "$contract_file"
+   trap 'bash "$scripts/contract-edit.sh" unlock "$contract_file"' EXIT
    [ -f "$task_dir/contract.before.md" ] || cp "$contract_file" "$task_dir/contract.before.md"
    bash "$scripts/contract-edit.sh" apply "$contract_file" "$task_dir/contract.gate-patch.md"
    bash "$scripts/contract-edit.sh" set-verified "$contract_file" "$checked_commit"
-   bash "$scripts/contract-edit.sh" unlock "$contract_file"
    ```
 
-   If `lock` exits 4, write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the stderr text of `lock` as the reason. Set `status` to `waiting-user` and stop.
-   If any command after `lock` exits non-zero, run `unlock`. Then write a `stop` line in `run-log.md`, append a stop item with `"stage":"confirmation"` and the stderr text of that command as the reason, set `status` to `waiting-user`, and stop. Do not set `approved_at`.
+   Exit 4 means the lock is busy. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the stderr text of `lock` as the reason. Set `status` to `waiting-user` and stop.
+   Any other non-zero exit means a command failed after the lock. The trap already ran `unlock`. Write a `stop` line in `run-log.md`, append a stop item with `"stage":"confirmation"` and the stderr text of that command as the reason, set `status` to `waiting-user`, and stop. Do not set `approved_at`.
 
    Then set `approved_at` to the current UTC time: `date -u +%Y-%m-%dT%H:%M:%SZ`.
 10. List the tools the verification plan needs from this set: `web`, `diagram`, `video`, `webp`, `terminal`, `r2`. If the list is not empty, run `bash "$scripts/preflight.sh" plan <needs>`.
