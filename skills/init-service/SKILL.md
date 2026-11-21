@@ -72,7 +72,7 @@ Ask with `AskUserQuestion` (batched, 2 questions in one call). The second questi
 
 For an "Other..." answer, follow up with a free-form `AskUserQuestion`. If the user picked a non-default `app_name` in question 1 but accepted the default in question 2 (`Services/$DEFAULT_APP_NAME`), ask once more: "Use `Services/<app_name>` instead?" Adjust the answer to match.
 
-Write the row repo_path in the `$HOME/...` form when `$MAIN_CHECKOUT` starts with `$HOME`. A new row for the `## Service Mapping` table in `$INIT` looks like this:
+If `$MAIN_CHECKOUT` starts with `$HOME`, write the row repo_path in the `$HOME/...` form. A new row for the `## Service Mapping` table in `$INIT` looks like this:
 
 ```
 | new-app | $HOME/Projects/Appier/appier/new-app | Services/new-app |

@@ -10,4 +10,4 @@ Prepare the sandbox first. Run these commands exactly:
 
 1. `mkdir demo && git -C demo init -q && git -C demo remote add origin git@github.com:acme-org/demo.git`
 
-Then run `/wstack:init-service` from the `demo` folder. Do not answer its questions on my behalf. Stop when it asks me something.
+Then run `/wstack:init-service` from the `demo` folder. Do not answer its questions on my behalf. When it asks me something, stop.
