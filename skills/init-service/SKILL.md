@@ -44,6 +44,15 @@ INIT="$vault/01Project/$ORG/handover_handler__initiation.md"
 
 ### Phase 3 — Resolve service mapping
 
+Find the repository root and the main checkout. They differ in a worktree and in a subfolder:
+
+```bash
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+MAIN_CHECKOUT="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+```
+
+Each Bash call is a new shell. If Phase 6 or Phase 7 runs in a later Bash call, set these two variables again there.
+
 ```bash
 RESULT=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/resolve-service.sh" "$PWD" "$ORG") && EXIT=$? || EXIT=$?
 ```
@@ -54,15 +63,8 @@ RESULT=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/resolve-service.sh" "$PWD"
 
 ### Phase 4 — Collect new mapping row values
 
-Find the repository root and the main checkout. They differ in a worktree and in a subfolder:
-
-```bash
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-MAIN_CHECKOUT="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
-```
-
 Compute defaults:
-- `DEFAULT_APP_NAME` = `basename "$MAIN_CHECKOUT"`, used verbatim in kebab-case, used verbatim in kebab-case (for example, `creative-studio` → `creative-studio`, `bust-backend` → `bust-backend`). If the folder name is not kebab-case, lowercase it and replace `_`, spaces, and camelCase boundaries with `-`.
+- `DEFAULT_APP_NAME` = `basename "$MAIN_CHECKOUT"`, used verbatim in kebab-case (for example, `creative-studio` → `creative-studio`, `bust-backend` → `bust-backend`). If the folder name is not kebab-case, lowercase it and replace `_`, spaces, and camelCase boundaries with `-`.
 - `DEFAULT_LIFEOS_SUBPATH` = `Services/$DEFAULT_APP_NAME`.
 
 Ask with `AskUserQuestion` (batched, 2 questions in one call). The second question uses `$DEFAULT_APP_NAME`, not the answer to the first, because batched questions resolve at the same time:
@@ -72,7 +74,7 @@ Ask with `AskUserQuestion` (batched, 2 questions in one call). The second questi
 
 For an "Other..." answer, follow up with a free-form `AskUserQuestion`. If the user picked a non-default `app_name` in question 1 but accepted the default in question 2 (`Services/$DEFAULT_APP_NAME`), ask once more: "Use `Services/<app_name>` instead?" Adjust the answer to match.
 
-If `$MAIN_CHECKOUT` starts with `$HOME`, write the row repo_path in the `$HOME/...` form. A new row for the `## Service Mapping` table in `$INIT` looks like this:
+Set `REPO_PATH_FOR_ROW` to `$MAIN_CHECKOUT`. If it starts with `$HOME`, write it in the `$HOME/...` form. A new row for the `## Service Mapping` table in `$INIT` looks like this:
 
 ```
 | new-app | $HOME/Projects/Appier/appier/new-app | Services/new-app |
@@ -83,7 +85,7 @@ Single-space padding is enough. Obsidian tables tolerate it.
 ### Phase 4a — Confirm with user
 
 `AskUserQuestion`:
-- `question`: "Append this row to $INIT and create $vault/01Project/$ORG/$LIFEOS_SUBPATH/handover/?\n| $APP_NAME | $MAIN_CHECKOUT | $LIFEOS_SUBPATH |"
+- `question`: "Append this row to $INIT and create $vault/01Project/$ORG/$LIFEOS_SUBPATH/handover/?\n| $APP_NAME | $REPO_PATH_FOR_ROW | $LIFEOS_SUBPATH |"
 - `options`:
   - "Yes, write it"
   - "No, abort"
