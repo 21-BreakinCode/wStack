@@ -32,7 +32,7 @@ Anti-goals. The build fails if any of these happen, even when every done check p
 
 - An overnight task merges, pushes to the default branch, deletes remote data, or publishes, and nobody saw a prompt.
 - An overnight task stops for hours at a permission prompt for a routine command, such as `npm test`.
-- A test run writes into the user's real vault at `/Users/williamhung/Projects/LifeOS`.
+- A test run writes into the user's real vault at `$HOME/Projects/LifeOS/`.
 - A test run creates, closes, or changes workspaces in the user's main herdr session.
 
 ## 3. Constraints
@@ -188,7 +188,7 @@ Other effects:
 
 ### 5.6 Testing (new)
 
-- No test writes into `/Users/williamhung/Projects/LifeOS`. Tests use a throwaway vault in a temporary directory, built from `tests/fixtures/`.
+- No test writes into `$HOME/Projects/LifeOS/`. Tests use a throwaway vault in a temporary directory, built from `tests/fixtures/`.
 - No test touches the user's main herdr session. Tests that need herdr use a named session, for example `herdr --session wstack-test`.
 - Scripts (`new-task-folder.sh`, `preflight.sh`, `guard.sh`, `compress-media.sh`, `render-excalidraw.sh`, `pr-attach.sh`, `evidence-upload.sh`, `evidence-delete.sh`) get shell test scripts with no extra test framework.
 - Agent behavior (done checks for spec steps 3, 4, 5, 6, and 13, and the launcher) runs as `claude plugin eval` cases in `evals/`, or as scripted `claude -p --plugin-dir .` runs where an eval case does not fit. Builder's call.
