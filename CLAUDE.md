@@ -25,8 +25,8 @@ Run `bash tests/run-all.sh`. It runs every `tests/test_*.sh` file at the top lev
 
 ## Skill rules
 
-- `start-task` and `retro` are user-invoked (`disable-model-invocation: true`).
-- `review-page`, `evidence`, and `deliver` are helper skills (`user-invocable: false`).
+- `start-task` and `run-retro` are user-invoked (`disable-model-invocation: true`).
+- `build-review-page`, `capture-evidence`, and `deliver-task` are helper skills (`user-invocable: false`).
 
 ## Documents
 

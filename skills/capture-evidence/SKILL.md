@@ -1,5 +1,5 @@
 ---
-name: evidence
+name: capture-evidence
 description: Use only inside a wStack task session, to capture and publish evidence.
 user-invocable: false
 ---

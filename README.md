@@ -14,7 +14,7 @@ You type `/wstack:start-task <rough idea>`. Then the task goes through five step
 
 If a check fails and the spec is right, the task goes back to Execute. It tries again up to `retry_limit` times, then waits for you. If the spec is wrong, the task goes back to Confirmation.
 
-Once a week, run `/wstack:retro`. It reads the task folders of the last 7 days and proposes improvements to wStack. You choose which proposals to apply.
+Once a week, run `/wstack:run-retro`. It reads the task folders of the last 7 days and proposes improvements to wStack. You choose which proposals to apply.
 
 ![The wStack pipeline with its fail loops](docs/diagrams/pipeline.svg)
 

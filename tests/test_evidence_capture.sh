@@ -26,7 +26,7 @@ python3 -m http.server --bind 127.0.0.1 "$port" --directory "$work_dir/site" >/d
 server_pid=$!
 sleep 1
 
-# Runs the capture path from skills/evidence/SKILL.md into <task_dir> and sets task_dir, page_width, capture_output.
+# Runs the capture path from skills/capture-evidence/SKILL.md into <task_dir> and sets task_dir, page_width, capture_output.
 # Layout: raw captures in raw/, R2 copies in the task folder. pr-attach.sh makes the GitHub copies in gh/ from the top-level files.
 capture() {  # <preflight script> <name>
   local preflight="$1" have_ffmpeg=1 preflight_output

@@ -82,7 +82,7 @@ The argument is `--task <task_id>`. The task folder is `$vault/$tasks_dir/<task_
 | `executing` | Execute. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/execute.md` and follow it. |
 | `waiting-user` | Read the last item of `stopped_for_user` in `run-log.md`. Go on as "Stop items" says for its `stage`. |
 | `verifying` | Verify. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` and follow it. |
-| `awaiting-deliver-approval` | Deliver. Run the deliver skill and follow its "After the user answers" section. |
+| `awaiting-deliver-approval` | Deliver. Run the `deliver-task` skill and follow its "After the user answers" section. |
 | `delivered`, `cancelled` | Tell the user the task is closed. Stop. |
 
 Change `status` only with `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" status <value>`.
@@ -93,7 +93,7 @@ Each time a stage sets `status` to `waiting-user`, it first appends one stop ite
 
 `bash "$scripts/frontmatter-set.sh" --append "$task_dir/run-log.md" stopped_for_user '{"at":"<ISO time>","stage":"<stage>","reason":"<reason>"}'`
 
-`<ISO time>` comes from `date -u +%Y-%m-%dT%H:%M:%SZ`. The stage is `confirmation`, `execute`, `verify`, or `deliver`. A Deliver item also has `"target":"<target>"`, the Target name from the table in the deliver skill. No other item has `target`.
+`<ISO time>` comes from `date -u +%Y-%m-%dT%H:%M:%SZ`. The stage is `confirmation`, `execute`, `verify`, or `deliver`. A Deliver item also has `"target":"<target>"`, the Target name from the table in the `deliver-task` skill. No other item has `target`.
 
 When the user answers a stop, in the same session or in a resumed task, tell the user the reason of the last item. Then go on by its `stage`:
 
@@ -102,7 +102,7 @@ When the user answers a stop, in the same session or in a resumed task, tell the
 | `confirmation` | "After a stop" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/confirmation.md` |
 | `execute` | "After the user answers a stop" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/execute.md` |
 | `verify` | "After the user answers a stop" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` |
-| `deliver` | The deliver skill. Follow its "After the user answers" section. |
+| `deliver` | The `deliver-task` skill. Follow its "After the user answers" section. |
 
 If `stopped_for_user` is empty, ask the user which stage to resume.
 

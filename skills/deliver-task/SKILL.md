@@ -1,5 +1,5 @@
 ---
-name: deliver
+name: deliver-task
 description: Use only inside a wStack task session, to deliver the finished work.
 user-invocable: false
 ---
@@ -46,7 +46,7 @@ Run all remaining targets that need no approval first. Then handle the ones that
 1. Work in `workspace_cwd`. Take `<slug>` from the task id without its date prefix.
 2. Check for an open pull request: `gh pr list --head wstack/<slug> --state open --json number,url`. If the list holds one, use its `url` and go to step 7.
 3. Run `git push -u origin wstack/<slug>`. If it fails, stop as in "Stop".
-4. Write the pull request body to `$task_dir/pr-body.md`: the goal, what changed, the review result, and the evidence links from `review.md`. Use the evidence skill's rule for text logs: put them in the body as text.
+4. Write the pull request body to `$task_dir/pr-body.md`: the goal, what changed, the review result, and the evidence links from `review.md`. Use the `capture-evidence` skill's rule for text logs: put them in the body as text.
 5. Run `bash "$scripts/pr-attach.sh" --task-id <task_id> --title "<title>" --body-file "$task_dir/pr-body.md" --max-mb <pr media limit> <evidence files>`. The evidence files are the top-level media files in `/tmp/wstack-evidence/<task_id>/`, never the files in its subfolders. `pr-attach.sh` makes the GitHub copies. Add `--base <default branch>` when the repository default is not what `gh` picks.
 6. Act on the exit code.
    - Exit 0: take the pull request URL from the last URL in the output. If the output says `attachment upload failed`, say so in the report.

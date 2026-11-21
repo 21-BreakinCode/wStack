@@ -24,7 +24,7 @@ wStack is a Claude Code plugin. It runs one fixed pipeline for most of the user'
                           │              └─ fail ───┤  (fix, max 3 tries)
                           └──── spec wrong ─────────┘
 
-/wstack:retro (weekly) ─► reads last week's task folders ─► proposals to improve wStack
+/wstack:run-retro (weekly) ─► reads last week's task folders ─► proposals to improve wStack
 ```
 
 ### 1.1 In scope (version 1)
@@ -34,7 +34,7 @@ wStack is a Claude Code plugin. It runs one fixed pipeline for most of the user'
 - The task folder in the Obsidian vault **(confirmed)**.
 - A reviewer agent and a review page **(confirmed)**.
 - Evidence capture, compression, upload to Cloudflare R2, and pull request attachments **(confirmed)**.
-- The weekly `/wstack:retro` command **(confirmed)**.
+- The weekly `/wstack:run-retro` command **(confirmed)**.
 
 ### 1.2 Out of scope (version 1)
 
@@ -95,7 +95,7 @@ Plugin facts from the Claude Code plugin reference:
 - Prefer `skills/` over `commands/` for new plugins.
 - `${CLAUDE_PLUGIN_ROOT}` is the plugin's install path. Each plugin update changes this path. Do not write state there.
 
-So the plugin `name` is `wstack` and the `displayName` is `wStack`. The commands appear as `/wstack:start-task` and `/wstack:retro`.
+So the plugin `name` is `wstack` and the `displayName` is `wStack`. The commands appear as `/wstack:start-task` and `/wstack:run-retro`.
 
 ```
 wstack/
@@ -103,13 +103,13 @@ wstack/
 │   └── plugin.json
 ├── skills/
 │   ├── start-task/SKILL.md        user command: /wstack:start-task
-│   ├── retro/SKILL.md             user command: /wstack:retro
-│   ├── review-page/SKILL.md       helper: build review.html
-│   ├── evidence/SKILL.md          helper: capture, compress, upload evidence
-│   └── deliver/SKILL.md           helper: deliver rules and approval gate
+│   ├── run-retro/SKILL.md         user command: /wstack:run-retro
+│   ├── build-review-page/SKILL.md helper: build review.html
+│   ├── capture-evidence/SKILL.md  helper: capture, compress, upload evidence
+│   └── deliver-task/SKILL.md      helper: deliver rules and approval gate
 ├── agents/
 │   ├── reviewer.md                reviewer agent (fresh context)
-│   └── retro-analyst.md           reads task folders for /wstack:retro
+│   └── retro-analyst.md           reads task folders for /wstack:run-retro
 ├── templates/
 │   ├── spec.md
 │   ├── run-log.md
@@ -157,11 +157,11 @@ One folder per task in the Obsidian vault. It holds text only. Media never goes 
   report.md     Deliver: what shipped, where, and how to undo it
 ```
 
-Each agent reads the files from the steps before it. `/wstack:retro` reads every folder from the past week.
+Each agent reads the files from the steps before it. `/wstack:run-retro` reads every folder from the past week.
 
 ### 6.1 File frontmatter
 
-ASSUME: every file starts with YAML frontmatter, so that `/wstack:retro` can read fields without parsing prose.
+ASSUME: every file starts with YAML frontmatter, so that `/wstack:run-retro` can read fields without parsing prose.
 
 `spec.md`:
 
@@ -342,7 +342,7 @@ Output: a findings list in `review.md`. Each finding has: id, kind, blocking (ye
 
 ### 8.3 Retro analyst agent
 
-File: `agents/retro-analyst.md`. Used by `/wstack:retro` (section 13).
+File: `agents/retro-analyst.md`. Used by `/wstack:run-retro` (section 13).
 
 ## 9. Work types (confirmed)
 
@@ -485,7 +485,7 @@ gh pr create --title "<title>" --body-file /tmp/wstack-evidence/<task_id>/pr-bod
 
 If an upload fails, the agent keeps the R2 copy and writes the failure in `review.md`.
 
-## 13. /wstack:retro (confirmed)
+## 13. /wstack:run-retro (confirmed)
 
 - The user runs it by hand, once a week.
 - The retro analyst agent reads every task folder from the past 7 days.
@@ -539,13 +539,13 @@ Build in this order. Each step must pass its done check before the next step sta
 | 10 | Pull request attachments | `gh pr create --attach` shows a JPEG and an H.264 video inline in the PR description, each under 10 MB. |
 | 11 | Deliver | Undoable targets ship without asking. Merge waits for approval, then the agent merges and deletes evidence. `report.md` lists undo steps. |
 | 12 | Mobile mode | With `--mobile`, the confirmation and review pages are also published as Claude artifacts. |
-| 13 | `/wstack:retro` | On a week of sample task folders, it lists at least one proposal with task ids and numbers. |
+| 13 | `/wstack:run-retro` | On a week of sample task folders, it lists at least one proposal with task ids and numbers. |
 
 ## 17. Check first (not verified)
 
 | # | Item | Why it matters | How to check |
 |---|---|---|---|
-| 1 | How an agent reads the session token count and writes it into `run-log.md` | `/wstack:retro` needs it to find token savings | Check Claude Code docs for usage output, hooks data, or OpenTelemetry. |
+| 1 | How an agent reads the session token count and writes it into `run-log.md` | `/wstack:run-retro` needs it to find token savings | Check Claude Code docs for usage output, hooks data, or OpenTelemetry. |
 | 2 | Whether answer-me-with-html can save to a chosen path (`am config`) | Copy step in 10.4 | Run `am config` and read its options. |
 | 3 | Whether answer-me-with-html pages work at phone width | Layout rules in 10.1 | Open a sample page at 375 px. If the layout breaks, write `templates/mobile.css`. |
 | 4 | Whether Obsidian Sync runs only while Obsidian is open | Phone edits reaching the Mac | Edit a note on the phone with Obsidian closed on the Mac, then check the file on disk. |

@@ -8,7 +8,7 @@ Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontma
 
 Run the five steps in this order. If `result` in `review.md` is already `pass` when you start (a resumed task), skip to "Go on to Deliver".
 
-1. Behavior check. Run each check in the spec's `## Verification plan`. For each check, run the evidence skill. It saves the evidence in `/tmp/wstack-evidence/<task_id>/` and writes one line per check under `## Evidence` in `review.md`: `- <check> → <file> → pass|fail`. A check whose only evidence is command output still gets a line. Save the output as a file in that folder. If a check fails, go to "A check fails".
+1. Behavior check. Run each check in the spec's `## Verification plan`. For each check, run the `capture-evidence` skill. It saves the evidence in `/tmp/wstack-evidence/<task_id>/` and writes one line per check under `## Evidence` in `review.md`: `- <check> → <file> → pass|fail`. A check whose only evidence is command output still gets a line. Save the output as a file in that folder. If a check fails, go to "A check fails".
 2. Rollback check. Find the undo method for the work type in the spec. Confirm that it works. Write the undo steps under `## Decisions` in `review.md`. If no working undo exists, treat it as a failed check.
 3. Final review. Dispatch the `wstack:reviewer` agent defined in `${CLAUDE_PLUGIN_ROOT}/agents/reviewer.md`. Give it the task folder and the change (a diff file or a git range). It writes its findings into `review.md` and sets both finding counts. If the file is not there, stop with the reason `missing agents/reviewer.md`, as in "Stop for the user".
 4. Upload the evidence. Run this after the last compression and before the page build. Run it for every task type that saved evidence.
@@ -18,7 +18,7 @@ Run the five steps in this order. If `result` in `review.md` is already `pass` w
    ```
 
    Take the values from the Config list in `SKILL.md`. For a task with no repository, pass an empty `--repo`. The script prints `local only: <dir>` or one `https://<domain>/evidence/<task_id>/<file>` line per file. If it exits non-zero, stop with the reason `evidence upload failed`, as in "Stop for the user". Then extend each evidence line under `## Evidence` in `review.md`: `- <check> → <file> → pass|fail → <link>`. Use the printed URL whose last part is the file name. Use `local only` when the script printed `local only` or printed no URL for that file. Set `evidence_location` in the `review.md` frontmatter to `r2` or `local only`.
-5. Review page. Run the review-page skill to build `review.html` in the task folder. If the skill is not there, stop with the reason `missing review-page skill`, as in "Stop for the user".
+5. Review page. Run the `build-review-page` skill to build `review.html` in the task folder. If the skill is not there, stop with the reason `missing build-review-page skill`, as in "Stop for the user".
 
 After step 3, set `blocking_findings` and `non_blocking_findings` in the `review.md` frontmatter to the counts. A blocking finding is a spec mismatch, a correctness bug, or a security problem. Go to "A check fails" for each open blocking finding. A non-blocking finding (design or test coverage) does not stop the task.
 
@@ -26,7 +26,7 @@ When all five steps pass, set `result` to `pass` in `review.md`. Write a `step` 
 
 ## Go on to Deliver
 
-Run the deliver skill and follow it. It reads `status` as `verifying` and `result` as `pass`. If the deliver skill is not there, stop with the reason `missing deliver skill`, as in "Stop for the user".
+Run the `deliver-task` skill and follow it. It reads `status` as `verifying` and `result` as `pass`. If the `deliver-task` skill is not there, stop with the reason `missing deliver-task skill`, as in "Stop for the user".
 
 ## A check fails
 
