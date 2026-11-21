@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Usage: new-task-folder.sh --vault <abs> --tasks-dir <rel> --slug <slug>
-#          [--date YYYY-MM-DD] [--work-type code|ops|thinking|blog|video] [--repo owner/repo] [--mobile]
+#          [--date YYYY-MM-DD] [--work-type code|ops|thinking|blog|video|contract] [--repo owner/repo] [--mobile]
 #          [--idea <text>]   (written under ## Goal in spec.md as one line)
 # Prints the absolute task folder path as the last stdout line.
 set -euo pipefail
@@ -30,7 +30,7 @@ done
 
 [[ "$slug" =~ ^[a-z][a-z0-9-]{0,31}$ ]] || fail "bad slug: $slug"
 [[ "$date_stamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || fail "bad date: $date_stamp"
-case "$work_type" in code|ops|thinking|blog|video) ;; *) fail "bad work type: $work_type" ;; esac
+case "$work_type" in code|ops|thinking|blog|video|contract) ;; *) fail "bad work type: $work_type" ;; esac
 [ -z "$repo" ] || [[ "$repo" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || fail "bad repo: $repo"
 [[ "$vault" = /* ]] && [ -d "$vault" ] || fail "vault is not an absolute existing directory: $vault"
 [ -n "$tasks_dir" ] && [[ "$tasks_dir" != /* ]] && [[ "/$tasks_dir/" != *"/../"* ]] || fail "bad tasks dir: $tasks_dir"

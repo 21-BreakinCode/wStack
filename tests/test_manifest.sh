@@ -7,7 +7,7 @@ market_json="$repo_root/.claude-plugin/marketplace.json"
 
 assert "plugin name" '[ "$(jq -r .name "$plugin_json")" = "wstack" ]'
 assert "display name" '[ "$(jq -r .displayName "$plugin_json")" = "wStack" ]'
-assert "version is 0.2.0 in both" '[ "$(jq -r .version "$plugin_json")" = "0.2.0" ] && [ "$(jq -r ".plugins[0].version" "$market_json")" = "0.2.0" ]'
+assert "version is 0.3.0 in both" '[ "$(jq -r .version "$plugin_json")" = "0.3.0" ] && [ "$(jq -r ".plugins[0].version" "$market_json")" = "0.3.0" ]'
 assert "dependency" '[ "$(jq -r ".dependencies[0]" "$plugin_json")" = "answer-me-with-html@answer-me-with-html" ]'
 assert "cross-marketplace allowlist" '[ "$(jq -c .allowCrossMarketplaceDependenciesOn "$market_json")" = "[\"answer-me-with-html\"]" ]'
 assert "plugin source" '[ "$(jq -r ".plugins[0].source" "$market_json")" = "./" ]'

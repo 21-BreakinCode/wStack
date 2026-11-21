@@ -40,6 +40,11 @@ mobile_folder="$(bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --sl
 assert "mobile true" '[ "$(fm_get "$mobile_folder/spec.md" mobile)" = "true" ]'
 assert "work type and repo" '[ "$(fm_get "$mobile_folder/spec.md" work_type)" = "ops" ] && [ "$(fm_get "$mobile_folder/spec.md" repo)" = "owner/repo" ]'
 
+contract_folder="$(bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --slug set-contract --date 2026-11-18 --work-type contract --repo owner/repo | tail -n 1)"
+assert "work type contract accepted" '[ "$(fm_get "$contract_folder/spec.md" work_type)" = "contract" ]'
+rc=0; bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --slug bad-contract --work-type contracts >/dev/null 2>&1 || rc=$?
+assert "work type contracts rejected" '[ "$rc" = "1" ]'
+
 goal_line_after_blank() { awk '/^## Goal$/{getline; getline; print; exit}' "$1/spec.md"; }
 idea_folder="$(bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --slug idea-zh --date 2026-11-18 --idea '修 login 逾時!' | tail -n 1)"
 assert "idea line under Goal" '[ "$(goal_line_after_blank "$idea_folder")" = "Rough idea from launch: 修 login 逾時!" ]'
@@ -57,4 +62,10 @@ plain_folder="$(bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --slu
 empty_folder="$(bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --slug idea-empty --date 2026-11-18 --idea '' | tail -n 1)"
 assert "no idea: Goal empty" '! grep -q "Rough idea" "$plain_folder/spec.md" && [ "$(sed -n "/^## Goal$/,/^## Scope$/p" "$plain_folder/spec.md" | wc -l | tr -d " ")" = "3" ]'
 assert "empty idea equals no idea" 'diff <(sed "/^created_at:/d;/^task_id:/d" "$plain_folder/spec.md") <(sed "/^created_at:/d;/^task_id:/d" "$empty_folder/spec.md") >/dev/null'
+
+headings="$(grep '^## ' "$folder/spec.md" | tr '\n' '|')"
+assert "spec has seven sections in order" '[ "$headings" = "## Goal|## Scope|## Verification plan|## Non-undoable steps|## Deliver targets|## Contract changes|## Decisions|" ]'
+assert "contract template frontmatter" 'grep -qx "pending: \[\]" "$repo_root/templates/contract.md" && grep -qx "base_branch: {{base_branch}}" "$repo_root/templates/contract.md"'
+assert "plan template" '[ -f "$repo_root/templates/plan.md" ]'
+assert "decision template" 'grep -qx "status: accepted" "$repo_root/templates/decision.md"'
 finish

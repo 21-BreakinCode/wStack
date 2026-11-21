@@ -47,7 +47,7 @@ wStack is a Claude Code plugin. It runs one fixed pipeline for most of the user'
 | Term | Meaning |
 |---|---|
 | Task | One unit of work that goes through the pipeline once. One `/wstack:start-task` call starts one task. |
-| Work type | The kind of task: code, ops, thinking, blog, or video. Section 9 defines them. |
+| Work type | The kind of task: code, ops, thinking, blog, video, or contract. Section 9 defines them. |
 | Spec | The approved description of a task: what to do, and how the result will be checked. Stored in `spec.md`. |
 | Task folder | The folder that holds all text files for one task. Section 6 defines it. |
 | Slug | A short kebab-case name for a task, for example `fix-login-timeout`. |
@@ -58,6 +58,9 @@ wStack is a Claude Code plugin. It runs one fixed pipeline for most of the user'
 | Evidence | Proof that a check passed or failed: API logs, screenshots, videos, terminal recordings. |
 | Review page | The HTML page that shows findings, decisions, evidence, a diagram, and a guided diff. |
 | Guided diff | Code changes grouped by purpose. Each group has a one-line reason. |
+| Contract | One Markdown file in the vault for each mapped service. It states what the service does now: abilities, interfaces, dependencies, consumers, and gotchas. It describes `origin/<base_branch>`. |
+| Drift | The contract no longer matches the code. The check finds it by comparing `verified_commit` with `origin/<base_branch>`. |
+| Base branch | The branch that the contract describes, for example `main`. The contract frontmatter holds it as `base_branch`. |
 | Mobile mode | The user asks for mobile access. Pages are then also published as Claude artifacts. |
 
 ## 3. Runtime environment (confirmed)
@@ -114,8 +117,15 @@ wstack/
 │   └── deliver-task/SKILL.md      helper: deliver rules and approval gate
 ├── agents/
 │   ├── reviewer.md                reviewer agent (fresh context)
-│   └── retro-analyst.md           reads task folders for /wstack:run-retro
+│   ├── retro-analyst.md           reads task folders for /wstack:run-retro
+│   ├── contract-reader.md         reads a service contract, returns a brief and a patch
+│   └── contract-historian.md      answers why-questions from decisions and history
+├── hooks/
+│   └── hooks.json                 guard, and the contract drift hook
 ├── templates/
+│   ├── contract.md                service contract
+│   ├── plan.md                    planned items that are not built yet
+│   ├── decision.md                one decision file
 │   ├── spec.md
 │   ├── run-log.md
 │   ├── review.md
@@ -128,6 +138,10 @@ wstack/
 │   ├── evidence-upload.sh         uploads a folder to R2
 │   ├── evidence-delete.sh         deletes a task's evidence from R2
 │   ├── pr-attach.sh               makes GitHub copies and calls gh --attach
+│   ├── contract-path.sh           prints the contract path of a repository
+│   ├── contract-check.sh          drift check, no network call
+│   ├── contract-edit.sh           the only writer of contract files
+│   ├── contract-hook.sh           SessionStart and PostToolUse drift hook
 │   ├── lib/repo.sh                main_checkout: finds the main checkout from a worktree
 │   └── handover/                  resolvers, exclude and symlink scripts, Python helpers
 ├── docs/
@@ -164,6 +178,22 @@ One folder per task in the Obsidian vault. It holds text only. Media never goes 
   review.html   Verify: the review page
   report.md     Deliver: what shipped, where, and how to undo it
 ```
+
+A task with a contract adds these files. Section 7.2 describes the gate.
+
+```
+  contract-brief.md             Confirmation: gate state in frontmatter (contract_file, base_branch, checked_commit, check_exit, stale_sections), then the reader's brief. No file means the task has no contract
+  contract.gate-patch.md        Confirmation: the reader's patch for stale sections and built plan items
+  contract.before.md            Confirmation: copy of the contract before the gate patch, for undo. A contract task writes it in Deliver
+  plan.before.md                Confirmation: copy of plan.md before the gate removes built items, for undo
+  contract.patch.md             Deliver: the reader's patch for the pull request, applied after the merge
+  contract.writeback.before.md  After the merge: copy of the contract before the write-back, for undo
+  plan.writeback.before.md      After the merge: copy of plan.md before the write-back removes built items, for undo
+```
+
+Each copy is written once. The write-back has its own copies, so its undo keeps the gate change.
+
+A `contract` task adds `contract.draft.md`, `plan.draft.md`, and `decisions.draft/`. Execute writes them. Deliver copies them into the vault.
 
 Each agent reads the files from the steps before it. `/wstack:run-retro` reads every folder from the past week.
 
@@ -260,11 +290,25 @@ Purpose: turn the rough idea into one clear spec that the user approves.
    - Verification plan: how the work will be checked. Name each check, its pass rule, and the evidence it will produce.
    - Non-undoable steps: every step that will need the user's approval.
    - Deliver targets: where the result goes (section 11).
+   - Contract changes: the planned contract changes, or `None`.
+   - Decisions: each choice between named options, with the options and the reason, or `None`.
 3. When the user's Obsidian notes are relevant, the agent reads them as context. The vault is the ground truth.
 4. The agent sets `status: awaiting-approval` and waits. After the user approves, the agent sets `approved_at` and `status: executing`.
 5. Pages follow the layout rules in section 10.1. The default is a local HTML file on the Mac. In mobile mode, the agent also publishes the page as a Claude artifact.
 
-Done when: `spec.md` has all five sections and `approved_at` is set.
+Done when: `spec.md` has all seven sections and `approved_at` is set.
+
+Contract gate. For a `code` or `ops` task, the gate runs before the spec is written:
+
+1. Find the contract of the repository. If the repository has no service mapping, write `Contract: not mapped` to `run-log.md` and go on. The task has no contract. If the contract file does not exist, go to step 4.
+2. Fetch `origin/<base_branch>`. If the fetch fails, go on with the local ref and say so.
+3. Resolve the pending items, as "Pending items" in the `deliver-task` skill says. A merged pull request moves its patch into the contract. A closed one drops its item and its patch.
+4. Run the drift check. If the contract file is missing or the check fails, ask the user to set up a contract first or to go on without one. To go on without one, the agent writes the spec with no `contract-brief.md`. Otherwise dispatch the `contract-reader` agent. The gate writes `contract-brief.md`. If sections are stale, it also writes `contract.gate-patch.md`.
+5. When the agent writes the spec, it reads the brief with the vault notes. The spec adds a `## Contract changes` section.
+6. If the check exited 0 or 1, the agent applies the gate patch after approval and removes the built plan items from `plan.md`. If the patch has a block for each stale section, it sets `verified_commit` to `checked_commit`. This is the commit that the gate checked. Otherwise `verified_commit` stays, and the agent names the sections that stay stale. Every contract write takes the lock folder `<contract>.lock`. If the lock is busy, the task stops.
+7. A gate stop starts its reason with `contract gate:`. When the user answers, the gate runs again from step 1.
+
+For a `contract` task, a new project gets one question for each contract section before approval. Inside herdr, the task runs in a workspace in the repository folder, with no worktree, because it reads only `origin/<base_branch>`. For an existing project, the spec lists the team docs and the code areas to read. A repository with no service mapping stops the task. The message says to run `/wstack:init-service`.
 
 ### 7.3 Execute (confirmed)
 
@@ -352,6 +396,14 @@ Output: a findings list in `review.md`. Each finding has: id, kind, blocking (ye
 
 File: `agents/retro-analyst.md`. Used by `/wstack:run-retro` (section 13).
 
+### 8.4 Contract reader agent
+
+File: `agents/contract-reader.md`. Dispatched by the gate (section 7.2) and by the write-back in Deliver. It reads one contract, the team docs it lists, and the code at `origin/<base_branch>`. It returns a brief, the freshness, the plan items that bear on the input, and a patch for the stale sections. It is read only. If the work contradicts the contract, and the spec's `## Contract changes` does not list the change, the reviewer reports a `contract-mismatch` finding.
+
+### 8.5 Contract historian agent
+
+File: `agents/contract-historian.md`. It answers "why is X like this?" from `decisions/`, `docs/adr/`, the git log, and the linked task folders. It is read only. If no record gives the reason, it says so.
+
 ## 9. Work types (confirmed)
 
 The list is not complete. The worker agent picks the closest type. If no type fits, it uses the closest type and says so in `spec.md`.
@@ -363,6 +415,7 @@ The list is not complete. The worker agent picks the closest type. If no type fi
 | thinking | research, analysis, learning input and output | answers the spec question, every claim has a source, guesses are marked | delete the new note |
 | blog | blog posts | facts, tone, and links checked | delete the draft |
 | video | video editing | cuts, audio, length, plays correctly | delete the rendered file |
+| contract | set up or rebuild the service contract of a mapped repository | each claim in `contract.draft.md` has a `file:line` at `origin/<base_branch>`, and each section of a new project has content | delete the new contract file, `plan.md`, and the copied decision files, then restore the files from `_archive/<task_id>/` and `contract.before.md` |
 
 ### 9.1 Thinking work (confirmed)
 
@@ -518,6 +571,7 @@ The agent asks the user before these actions, and never otherwise:
 3. A non-undoable deliver target (section 11). Merge always.
 4. After `retry_limit` failed tries.
 5. When the spec is wrong or unclear.
+6. Writing the contract. The approved spec covers the gate's contract update, and the write after a merge. A `contract` task covers `write the contract files` as a deliver target. Every write takes the lock folder `<contract>.lock`. A busy lock stops the task, and the agent never writes without the lock.
 
 The user approves in the Claude Code session, in the terminal or in the Claude app. The review page "copy reply" text is one way to give that answer.
 
@@ -537,7 +591,7 @@ Build in this order. Each step must pass its done check before the next step sta
 |---|---|---|
 | 1 | Plugin skeleton: `plugin.json` (name `wstack`, displayName `wStack`, userConfig), empty skills | `claude plugin validate ./wstack` passes. `/wstack:start-task` appears in Claude Code. |
 | 2 | Task folder and templates | `/wstack:start-task test idea` creates `<tasks_dir>/<date>-test-idea/` with the four `.md` files and frontmatter. |
-| 3 | Confirmation | For a rough idea, the agent asks questions one at a time, writes a `spec.md` with all five sections, and stops at `awaiting-approval`. |
+| 3 | Confirmation | For a rough idea, the agent asks questions one at a time, writes a `spec.md` with all seven sections, and stops at `awaiting-approval`. |
 | 4 | Execute | After approval, the agent works on branch `wstack/<slug>`, logs steps in `run-log.md`, and stops before a non-undoable step. |
 | 5 | Verify checks and failure path | A failing check sends the task back to Execute. After `retry_limit` failures, the status is `waiting-user`. |
 | 6 | Reviewer agent | On a sample change with one planted bug, the reviewer agent reports it as a blocking finding. |

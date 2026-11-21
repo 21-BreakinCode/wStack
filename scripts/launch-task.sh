@@ -31,7 +31,7 @@ task_id="$(fm_get "$task_dir/spec.md" task_id)"
 work_type="$(fm_get "$task_dir/spec.md" work_type)"
 if [ "${HERDR_ENV:-}" != 1 ]; then  # this session does the work, so resume and token counts need its folder
   session_cwd="$PWD"
-  if [ "$work_type" = code ] && [ -n "$repo_path" ]; then session_cwd="$repo_path"; fi
+  if [ -n "$repo_path" ] && { [ "$work_type" = code ] || [ "$work_type" = contract ]; }; then session_cwd="$repo_path"; fi
   fm_set "$task_dir/spec.md" workspace_cwd "$session_cwd"
   fail "not running inside herdr" 3
 fi
@@ -42,6 +42,9 @@ if herdr_cmd agent get "$slug" >/dev/null 2>&1; then fail "agent name taken: $sl
 
 if [ "$work_type" = code ] && [ -n "$repo_path" ]; then
   create_args=(worktree create --cwd "$repo_path" --branch "wstack/$slug" --label "$slug" --no-focus)
+elif [ "$work_type" = contract ] && [ -n "$repo_path" ]; then
+  cwd="$repo_path"  # a contract task only reads origin/<base_branch>, so it needs no worktree
+  create_args=(workspace create --cwd "$cwd" --label "$slug" --no-focus)
 else
   cwd="$HOME/.wstack/tasks/$task_id"
   mkdir -p "$cwd"
