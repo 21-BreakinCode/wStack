@@ -1,6 +1,6 @@
 # Confirmation
 
-Goal: one clear spec that the user approves. Done when `spec.md` holds all five sections and `approved_at` is set.
+Goal: one clear spec that the user approves. Done when `spec.md` holds all seven sections and `approved_at` is set.
 
 Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontmatter field with `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" <key> <value>`.
 
@@ -8,15 +8,17 @@ Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontma
 
 1. Read the Obsidian notes in `$vault` that bear on the idea. The vault is the ground truth. The idea is the `Rough idea from launch:` line under `## Goal` in `spec.md`, when that line exists. Step 4 replaces that line when it writes the Goal.
 2. Find the unclear parts.
-   - For a rough idea, ask the user one question at a time. Send one question, then end the reply and wait. Ask until you can fill all five sections.
+   - For a rough idea, ask the user one question at a time. Send one question, then end the reply and wait. Ask until you can fill all seven sections.
    - For a written spec, ask only about the unclear parts, one question at a time. If nothing is unclear, go on.
 3. Fix `work_type` in the frontmatter if the answers change it.
-4. If `approved_at` is set, set it to empty first: `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" approved_at ""`. A changed spec needs a new approval. Then write the body of `spec.md` with these five headings. Each one has content.
+4. If `approved_at` is set, set it to empty first: `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" approved_at ""`. A changed spec needs a new approval. Then write the body of `spec.md` with these seven headings. Each one has content.
    - `## Goal`: what the result must do.
    - `## Scope`: what is in and what is out.
    - `## Verification plan`: for each check, its name, its pass rule, and the evidence it produces.
    - `## Non-undoable steps`: every step that needs the user's approval. Write `None` if there is none.
    - `## Deliver targets`: where the result goes, for example `new Obsidian note` or `open a pull request`.
+   - `## Contract changes`: the planned contract changes, or `None`.
+   - `## Decisions`: each choice between named options, with the options and the reason, or `None`.
 
 Status stays `drafting` until the page exists.
 

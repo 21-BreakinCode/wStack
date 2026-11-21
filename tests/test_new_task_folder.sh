@@ -57,4 +57,10 @@ plain_folder="$(bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --slu
 empty_folder="$(bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --slug idea-empty --date 2026-11-18 --idea '' | tail -n 1)"
 assert "no idea: Goal empty" '! grep -q "Rough idea" "$plain_folder/spec.md" && [ "$(sed -n "/^## Goal$/,/^## Scope$/p" "$plain_folder/spec.md" | wc -l | tr -d " ")" = "3" ]'
 assert "empty idea equals no idea" 'diff <(sed "/^created_at:/d;/^task_id:/d" "$plain_folder/spec.md") <(sed "/^created_at:/d;/^task_id:/d" "$empty_folder/spec.md") >/dev/null'
+
+headings="$(grep '^## ' "$folder/spec.md" | tr '\n' '|')"
+assert "spec has seven sections in order" '[ "$headings" = "## Goal|## Scope|## Verification plan|## Non-undoable steps|## Deliver targets|## Contract changes|## Decisions|" ]'
+assert "contract template frontmatter" 'grep -qx "pending: \[\]" "$repo_root/templates/contract.md" && grep -qx "base_branch: {{base_branch}}" "$repo_root/templates/contract.md"'
+assert "plan template" '[ -f "$repo_root/templates/plan.md" ]'
+assert "decision template" 'grep -qx "status: accepted" "$repo_root/templates/decision.md"'
 finish

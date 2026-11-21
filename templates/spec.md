@@ -18,3 +18,7 @@ created_at: {{created_at}}
 ## Non-undoable steps
 
 ## Deliver targets
+
+## Contract changes
+
+## Decisions
