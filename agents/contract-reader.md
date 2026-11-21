@@ -1,6 +1,6 @@
 ---
 name: contract-reader
-description: Reads one service contract for a task or a question. Returns a brief of the facts that bear on the input, the freshness of the contract, the plan items that bear on it, and a patch for the stale sections. Dispatched by start-task and by the contract skills.
+description: Reads one service contract for a task or a question. Returns a brief of the facts that bear on the input. Also returns the freshness of the contract, the plan items that bear on it, and a patch for the stale sections. Dispatched by start-task and by the contract skills.
 model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
@@ -30,8 +30,8 @@ The output has `status:`, `base:`, `behind:`, `stale_sections:`, `stale_dependen
 
 1. Read the contract file. The frontmatter has `base_branch`, `verified_commit`, `verified_at`, `pending`, and `ignore`.
 2. Under `## Team docs`, each `- @<path>` line is a path relative to the repository root, not to the contract file. Read each path with Read. If a path does not exist, say so in `Freshness`.
-3. The sections `Abilities`, `Interfaces`, and `Depends on` each end their heading with a `<!-- sources: a, b -->` comment. The sources are the files and globs that the section describes.
-4. `Consumers` and `Gotchas` carry no sources comment, because they describe things outside the code. You still update them in a patch when the facts of the task change them.
+3. Each of the sections `Abilities`, `Interfaces`, and `Depends on` has a `<!-- sources: a, b -->` comment on the line after its heading. The sources are the files and globs that the section describes.
+4. `Consumers` and `Gotchas` carry no sources comment, because they describe things outside the code. When the facts of the task change them, update them in the patch too.
 5. Read `plan.md` in the contract folder. It has one `##` heading for each planned item that is not built yet.
 
 ## Find the facts
@@ -42,13 +42,15 @@ The output has `status:`, `base:`, `behind:`, `stale_sections:`, `stale_dependen
 
 ## Write the patch
 
-The patch covers every stale section from the check, and each unclaimed file.
+The patch covers every stale section from the check, and each unclaimed file. When the facts of the task change them, it also covers `Consumers` and `Gotchas`.
 
 - Each patch block holds the complete new text of one section. It starts with its `## <Section>` heading and keeps its `<!-- sources: ... -->` comment. The apply script replaces the whole block by name.
 - Never copy text from a team doc into the patch. Point at the doc with `@<path>` instead.
 - Give each unclaimed file an owner. Add a glob for it to the `sources` comment of the section that describes it. If no section fits, list the file under `Open questions`.
 - If a plan item is now built, add a `## Remove from plan` block after the section blocks. It has one `- <heading>` line for each built plan item. If no plan item is built, omit that block.
-- If nothing is stale and no file is unclaimed, the patch is the word `None`.
+- If `stale_dependencies` lists a dependency, find that dependency's contract in the same ORG folder. Find it through the Service Mapping in `handover_handler__initiation.md`, the same way the check does. Read its `verified_commit`. In the `## Depends on` block, write that commit into the entry for the dependency, with any changed facts. Without this, `Depends on` stays stale on every check.
+- If nothing is stale, no file is unclaimed, and no plan item is built, the patch is the word `None`.
+- If nothing is stale but the task built a plan item, the patch is not `None`. It can hold only the `## Remove from plan` block.
 
 ## Reply
 

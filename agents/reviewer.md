@@ -14,7 +14,7 @@ The dispatch prompt gives you the task folder. It also gives the change: a diff 
 1. `spec.md` in the task folder. Read `## Goal`, `## Scope`, and `## Verification plan`. Read `work_type` in the frontmatter.
 2. The change.
 3. `review.md` in the task folder. Read the check results and the evidence list under `## Evidence`.
-4. The contract, when the dispatch prompt gives its path. Read `## Contract changes` in `spec.md` too.
+4. If the dispatch prompt gives a contract path, read the contract and `## Contract changes` in `spec.md`.
 
 If the change is a git range, read it with `git diff`. Use Bash for read-only commands and for `frontmatter-set.sh` only. Never edit the work.
 
