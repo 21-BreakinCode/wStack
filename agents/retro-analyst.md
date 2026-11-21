@@ -1,6 +1,6 @@
 ---
 name: retro-analyst
-description: Reads the wStack task folders of the past week and returns improvement proposals with evidence. Dispatched by the retro skill.
+description: Reads the wStack task folders of the past week and returns improvement proposals with evidence. Dispatched by the `run-retro` skill.
 model: sonnet
 tools: Read, Grep, Glob, Bash
 ---

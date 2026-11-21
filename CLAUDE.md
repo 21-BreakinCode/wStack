@@ -22,11 +22,12 @@ Run `bash tests/run-all.sh`. It runs every `tests/test_*.sh` file at the top lev
 - Start every script with `#!/usr/bin/env bash` and `set -euo pipefail`.
 - Scripts must run on `/bin/bash` 3.2.
 - Quote every path variable.
+- Python scripts use only the standard library and run on Python 3.9.
 
 ## Skill rules
 
-- `start-task` and `retro` are user-invoked (`disable-model-invocation: true`).
-- `review-page`, `evidence`, and `deliver` are helper skills (`user-invocable: false`).
+- `start-task`, `run-retro`, `init-org`, `init-service`, `create-handover`, and `wrap-up-handovers` are user-invoked (`disable-model-invocation: true`).
+- `build-review-page`, `capture-evidence`, and `deliver-task` are helper skills (`user-invocable: false`).
 
 ## Documents
 

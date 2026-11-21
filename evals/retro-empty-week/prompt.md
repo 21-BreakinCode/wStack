@@ -9,4 +9,4 @@ env:
   EVAL_WSTACK_AMJS: __AMJS__
 ---
 
-/wstack:retro
+/wstack:run-retro

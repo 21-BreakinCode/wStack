@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.0 - 2026-11-21
+
+Four skills have new names. The handover commands of obsidian-kit 2.3.1 now live in wStack.
+
+Renames:
+
+- `retro` is now `run-retro`. The command is `/wstack:run-retro`.
+- `review-page` is now `build-review-page`.
+- `evidence` is now `capture-evidence`.
+- `deliver` is now `deliver-task`.
+
+New commands:
+
+- `/wstack:init-org` (was `/obsidian-kit:handover-init-org`).
+- `/wstack:init-service` (was `/obsidian-kit:handover-init-service`).
+- `/wstack:create-handover` (was `/obsidian-kit:handover-new`).
+- `/wstack:wrap-up-handovers` (was `/obsidian-kit:handover-wrap-up`).
+
+The handover commands differ from obsidian-kit in four ways:
+
+- The vault path comes from the wStack `vault_path` setting, not from `OBSIDIAN_KIT_VAULT`.
+- `init-service` writes `/handover` to the local git exclude file. It never edits `.gitignore`.
+- The resolvers work inside herdr worktrees and read block-list `github_orgs`.
+- The archive root is fixed at `04Archive`.
+
 ## 0.1.1 - 2026-11-20
 
 A launched task session now gets the idea text, because `new-task-folder.sh` writes it under `## Goal` in `spec.md`.
