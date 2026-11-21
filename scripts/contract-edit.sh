@@ -27,13 +27,14 @@ case "$subcommand" in
     exit 4 ;;
 
   unlock)
-    rmdir "${1:?usage: contract-edit.sh unlock <contract_file>}.lock" ;;
+    rmdir "${1:?usage: contract-edit.sh unlock <contract_file>}.lock" 2>/dev/null || true ;;
 
   apply)
     target_file="${1:?usage: contract-edit.sh apply <target_file> <patch_file> [--sections \"A,B\"]}"
     patch_file="${2:?usage: contract-edit.sh apply <target_file> <patch_file> [--sections \"A,B\"]}"
     only_sections=""
     [ "${3:-}" != "--sections" ] || only_sections="${4:?--sections needs a value}"
+    [ -s "$patch_file" ] || { echo "contract-edit.sh: patch is empty or missing: $patch_file" >&2; exit 2; }
     tmp_file="$(mktemp "$target_file.XXXXXX")"
     # Patch pass fills body[name]; target pass swaps matching sections; unmatched names append at the end.
     # Names print to stdout in patch order, after the target is written to tmp_file.
@@ -87,12 +88,18 @@ case "$subcommand" in
 
   pending-add)
     contract_file="${1:?usage: contract-edit.sh pending-add <contract_file> <pr> <task_id>}"
-    fm_append "$contract_file" pending "$(jq -cn --argjson pr "${2:?pr}" --arg task "${3:?task_id}" '{pr: $pr, task: $task}')" ;;
+    pending_pr="${2:?pr}"; pending_task="${3:?task_id}"
+    [[ "$pending_pr" =~ ^[0-9]+$ ]] || { echo "contract-edit.sh: pr is not an integer: $pending_pr" >&2; exit 2; }
+    new_item="$(jq -cn --argjson pr "$pending_pr" --arg task "$pending_task" '{pr: $pr, task: $task}')"
+    fm_append "$contract_file" pending "$new_item" ;;
 
   pending-remove)
     contract_file="${1:?usage: contract-edit.sh pending-remove <contract_file> <pr>}"
+    pending_pr="${2:?pr}"
+    [[ "$pending_pr" =~ ^[0-9]+$ ]] || { echo "contract-edit.sh: pr is not an integer: $pending_pr" >&2; exit 2; }
     current="$(fm_get "$contract_file" pending)"
-    fm_set "$contract_file" pending "$(jq -c --argjson pr "${2:?pr}" 'map(select(.pr != $pr))' <<<"${current:-[]}")" ;;
+    remaining="$(jq -c --argjson pr "$pending_pr" 'map(select(.pr != $pr))' <<<"${current:-[]}")"
+    fm_set "$contract_file" pending "$remaining" ;;
 
   set-verified)
     contract_file="${1:?usage: contract-edit.sh set-verified <contract_file> <commit>}"

@@ -103,4 +103,23 @@ assert "missing folder gives 0001" "[ \"\$(bash '$edit' next-decision-id '$work/
 mkdir "$work/dec"; touch "$work/dec/0001-a.md" "$work/dec/0003-b.md"
 assert "after 0003 gives 0004" "[ \"\$(bash '$edit' next-decision-id '$work/dec')\" = 0004 ]"
 
+echo "bad input"
+rc=0; bash "$edit" unlock "$work/never-locked.md" 2>/dev/null || rc=$?
+assert "unlock of a missing lock exits 0" "[ $rc -eq 0 ]"
+write_contract; cp "$contract" "$work/before.md"
+rc=0; bash "$edit" pending-remove "$contract" abc 2>/dev/null || rc=$?
+assert "pending-remove non-integer pr fails" "[ $rc -ne 0 ]"
+assert "pending-remove non-integer pr leaves file" "cmp -s '$contract' '$work/before.md'"
+rc=0; bash "$edit" pending-add "$contract" abc t1 2>/dev/null || rc=$?
+assert "pending-add non-integer pr fails" "[ $rc -ne 0 ]"
+assert "pending-add non-integer pr leaves file" "cmp -s '$contract' '$work/before.md'"
+sed 's/^pending: .*/pending: [{broken/' "$work/before.md" >"$contract"; cp "$contract" "$work/malformed.md"
+rc=0; bash "$edit" pending-remove "$contract" 15 2>/dev/null || rc=$?
+assert "pending-remove malformed pending fails" "[ $rc -ne 0 ]"
+assert "pending-remove malformed pending leaves file" "cmp -s '$contract' '$work/malformed.md'"
+write_contract; : >"$work/empty.md"
+rc=0; bash "$edit" apply "$contract" "$work/empty.md" >/dev/null 2>&1 || rc=$?
+assert "0-byte patch exits 2" "[ $rc -eq 2 ]"
+assert "0-byte patch leaves target" "cmp -s '$contract' '$work/before.md'"
+
 finish
