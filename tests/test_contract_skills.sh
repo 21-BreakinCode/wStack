@@ -111,4 +111,14 @@ reader="$repo_root/agents/contract-reader.md"
 assert "reader writes no code fence in the reply" 'sed -n "/^## Reply/,\$p" "$reader" | grep -qF "Write no code fence in the reply."'
 assert "reader writes stale sections from the code" 'grep -qF "If the code does not show a fact, leave the fact out." "$reader"'
 
+# glob_blocks_without_null_glob <file>...: counts bash blocks that loop over a glob and lack the setopt line
+glob_blocks_without_null_glob() {
+  awk '/^[[:space:]]*```bash/ { in_block = 1; has_glob = 0; has_setopt = 0; next }
+    /^[[:space:]]*```/ { if (in_block && has_glob && !has_setopt) missing++; in_block = 0 }
+    in_block && /setopt NULL_GLOB/ { has_setopt = 1 }
+    in_block && /for [a-z_]+ in .*\*/ { has_glob = 1 }
+    END { print missing + 0 }' "$@"
+}
+assert "every bash block with a glob for loop sets NULL_GLOB (zsh)" '[ "$(glob_blocks_without_null_glob "$confirmation" "$execute" "$deliver")" = 0 ]'
+
 finish

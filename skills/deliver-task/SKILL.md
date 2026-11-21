@@ -74,6 +74,7 @@ Use this for the `write the contract files` target of a `contract` task. The dra
 
    ```bash
    set -e
+   setopt NULL_GLOB 2>/dev/null || true
    scripts="${CLAUDE_PLUGIN_ROOT}/scripts"
    task_dir='<task folder>'
    contract_file='<contract_file>'
@@ -135,6 +136,7 @@ Read the values in the same Bash call as the commands that use them: `source "$s
 
    ```bash
    set -e
+   setopt NULL_GLOB 2>/dev/null || true
    scripts="${CLAUDE_PLUGIN_ROOT}/scripts"
    task_dir='<task folder>'
    source "$scripts/lib/frontmatter.sh"

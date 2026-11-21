@@ -215,6 +215,18 @@ for shell in $test_shells; do
   assert "$shell Contract files: contract.before.md keeps the original" 'cmp -s "$task/contract.before.md" "$world_dir/contract.orig"'
   assert "$shell Contract files: the archive keeps the original" 'cmp -s "$contract_folder/_archive/$task_id/svc.md" "$world_dir/contract.orig" && [ -f "$contract_folder/_archive/$task_id/PRD.md" ]'
   assert "$shell Contract files: the new contract and decision are in" 'grep -qxF "New text." "$CONTRACT" && [ -f "$contract_folder/decisions/0001-baseline.md" ]'
+
+  for draft_state in missing empty; do
+    echo "$shell: Contract files with $draft_state decisions.draft"
+    setup_world "files-$draft_state-$shell"
+    task="$VAULT/Tasks/$task_id"; prepare_inputs "$task"
+    rm -rf "$task/decisions.draft"
+    if [ "$draft_state" = empty ]; then mkdir "$task/decisions.draft"; fi
+    run_block "$(filled_block files "$task" "" 0)" "$shell"
+    assert "$shell Contract files, $draft_state decisions.draft: exit 0 ($out)" '[ "$rc" = 0 ]'
+    assert "$shell Contract files, $draft_state decisions.draft: the contract is delivered" 'grep -qxF "New text." "$CONTRACT"'
+    assert "$shell Contract files, $draft_state decisions.draft: no lock is left" '[ ! -e "$CONTRACT.lock" ]'
+  done
 done
 
 finish
