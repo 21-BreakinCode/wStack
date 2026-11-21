@@ -71,6 +71,10 @@ names="$(bash "$edit" apply "$contract" "$work/patch.md" --sections "Abilities")
 assert "--sections applies only Abilities" "[ '$names' = 'Abilities' ] && grep -q 'New abilities' '$contract' && grep -q 'Old interfaces' '$contract'"
 
 write_contract
+bash "$edit" apply "$contract" "$work/patch.md" --sections "Abilities, Interfaces" >/dev/null
+assert "--sections trims the space after a comma" "grep -q 'New abilities' '$contract' && grep -q 'New interfaces' '$contract'"
+
+write_contract
 printf '## Abilities\n\nNew abilities.\n\n## Remove from plan\n\n- P2\n' >"$work/patch.md"
 bash "$edit" apply "$contract" "$work/patch.md" >/dev/null
 assert "Remove from plan not applied" "! grep -q 'Remove from plan' '$contract'"

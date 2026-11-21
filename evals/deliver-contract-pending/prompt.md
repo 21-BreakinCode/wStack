@@ -18,5 +18,5 @@ Do these steps in order.
    - run-log.md and report.md: copy them from the plugin templates.
    - contract-brief.md: frontmatter with `contract_file` set to CONTRACT, `base_branch: main`, `checked_commit` set to FIRST_COMMIT, and `check_exit: 0`. The body is `Brief`.
 3. In REPO, create the branch wstack/health-route from main, add a commit that changes api/routes.go, and do not push.
-4. Put a `gh` stub first on PATH. For `gh pr list` it prints `[]`. For `gh pr create` it prints https://github.com/example/svc/pull/7. For `gh pr view` it prints MERGED. Put a `git` wrapper first on PATH too only if `git push` needs it: make `git push` succeed without a network.
+4. Put a `gh` stub first on PATH. For `gh pr list` it prints `[]`. For `gh pr create` it prints https://github.com/example/svc/pull/7. For `gh pr view` it prints MERGED. If `git push` needs a network, put a `git` wrapper first on PATH too, and make `git push` succeed without a network.
 5. Run /wstack:start-task --task 2026-11-21-health-route. Do not ask me questions.

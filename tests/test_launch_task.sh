@@ -35,6 +35,14 @@ assert "thinking: workspace create" 'has_call workspace create --cwd "$task_cwd"
 assert "thinking: mobile prompt" 'has_call agent prompt fix-login-2 "/wstack:start-task --task 2026-11-18-fix-login-2 --mobile"'
 assert "thinking: workspace_cwd" '[ "$(fm_get "$think_dir/spec.md" workspace_cwd)" = "$task_cwd" ]'
 
+# C1: a contract task reads only origin/<base_branch>, so it gets a workspace in the repository, not a worktree
+contract_dir="$(new_task set-contract contract)"
+: >"$FAKE_LOG"
+bash "$script" --task-dir "$contract_dir" --repo-path "$work_dir/repo dir" >/dev/null
+assert "contract: workspace create in the repository" 'has_call workspace create --cwd "$work_dir/repo dir" --label set-contract --no-focus'
+assert "contract: no worktree" '! grep -q "worktree create" "$FAKE_LOG"'
+assert "contract: workspace_cwd is the repository" '[ "$(fm_get "$contract_dir/spec.md" workspace_cwd)" = "$work_dir/repo dir" ]'
+
 rc=0; HERDR_ENV=0 bash "$script" --task-dir "$think_dir" >/dev/null 2>"$work_dir/err" || rc=$?
 assert "outside herdr exits 3" '[ "$rc" = 3 ] && grep -q "not running inside herdr" "$work_dir/err"'
 
@@ -45,6 +53,9 @@ assert "outside herdr, thinking: exit 3 sets workspace_cwd to the current folder
 outside_code_dir="$(new_task outside-code code)"
 rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$outside_code_dir" --repo-path "$work_dir/repo dir" >/dev/null 2>&1) || rc=$?
 assert "outside herdr, code: exit 3 sets workspace_cwd to the repository" '[ "$rc" = 3 ] && [ "$(fm_get "$outside_code_dir/spec.md" workspace_cwd)" = "$work_dir/repo dir" ]'
+outside_contract_dir="$(new_task outside-contract contract)"
+rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$outside_contract_dir" --repo-path "$work_dir/repo dir" >/dev/null 2>&1) || rc=$?
+assert "outside herdr, contract: exit 3 sets workspace_cwd to the repository" '[ "$rc" = 3 ] && [ "$(fm_get "$outside_contract_dir/spec.md" workspace_cwd)" = "$work_dir/repo dir" ]'
 
 rc=0; FAKE_AGENT_EXISTS=1 bash "$script" --task-dir "$think_dir" >/dev/null 2>"$work_dir/err" || rc=$?
 assert "name taken exits 4" '[ "$rc" = 4 ] && grep -q "agent name taken" "$work_dir/err"'

@@ -72,17 +72,19 @@ The gate:
 - A `code` or `ops` task runs the contract gate in Confirmation, before the spec is written.
 - The gate fetches `origin/<base_branch>` and runs the drift check. It finds the sections that the changes since `verified_commit` made stale.
 - The `contract-reader` agent writes a brief into `contract-brief.md` in the task folder. The spec reads it.
-- After you approve the spec, the gate patch updates the contract.
+- After you approve the spec, the gate patch updates the contract and removes the built items from `plan.md`. If the patch covers each stale section, `verified_commit` moves to the checked commit.
+- A gate stop starts its reason with `contract gate:`. When you answer, the gate runs again from the start.
 - In Deliver, the write-back records a pending item for the pull request. After the merge, the next gate run writes the change into the contract. If the pull request closes without a merge, the gate drops the item.
 - A repository with no service mapping gets no contract. The gate writes `Contract: not mapped` and goes on.
 - Every write takes the lock folder `<contract>.lock`. If a crashed session leaves it, remove the folder.
+- Undo uses copies in the task folder. The gate writes `contract.before.md` and `plan.before.md`. The write-back writes `contract.writeback.before.md` and `plan.writeback.before.md`. Each copy is written once.
 
 The hooks: a SessionStart hook and a PostToolUse hook run `scripts/contract-hook.sh`. The PostToolUse hook runs only after `git pull`, `merge`, `rebase`, `switch`, `checkout`, or `reset`, and after `gh pr checkout`. A hook makes no network call and never blocks. If the contract is stale, it prints one line. Otherwise it prints nothing. It reads the vault path from `WSTACK_VAULT_PATH`, then from the `vault_path` setting.
 
 To set up a contract:
 
 1. Run `/wstack:init-org` and `/wstack:init-service`, so the repository has a service mapping.
-2. Run `/wstack:start-task` with an idea such as "set up the service contract". The task is a `contract` task.
+2. Run `/wstack:start-task` with an idea such as "set up the service contract". The task is a `contract` task. Inside herdr, it runs in a workspace in the repository folder, with no worktree.
 3. For a new project, answer one question for each section. For an existing project, the spec lists the team docs and code areas to read.
 4. Approve the spec. Execute writes drafts in the task folder. Deliver moves old vault files into `_archive/<task_id>/` and writes the contract. It is safe to run again.
 

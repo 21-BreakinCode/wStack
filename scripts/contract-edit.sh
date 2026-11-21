@@ -44,7 +44,7 @@ case "$subcommand" in
         text = body[name]; sub(/\n+$/, "\n", text)
         printf "%s", text > out
       }
-      BEGIN { n = split(only, wanted_list, ","); for (i = 1; i <= n; i++) wanted[wanted_list[i]] = 1 }
+      BEGIN { n = split(only, wanted_list, ","); for (i = 1; i <= n; i++) { sub(/^[ \t]+/, "", wanted_list[i]); wanted[trim(wanted_list[i])] = 1 } }
       NR == FNR {
         if ($0 ~ /^## /) {
           current = trim(substr($0, 4)); keep = (current != "Remove from plan") && (only == "" || (current in wanted))

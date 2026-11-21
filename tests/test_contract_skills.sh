@@ -23,12 +23,12 @@ spec_line="$(line_of '## Write the spec')"
 assert "gate section before Write the spec" '[ -n "$gate_line" ] && [ "$gate_line" -lt "$spec_line" ]'
 assert "verify.md passes the contract path to the reviewer" 'grep -qF "contract path" "$verify"'
 
-for key in contract_file base_branch checked_commit check_exit; do
+for key in contract_file base_branch checked_commit check_exit stale_sections; do
   assert "confirmation.md names the gate state key $key" 'grep -qF -- "\`$key\`" "$confirmation"'
 done
 assert "verify.md reads the gate state with fm_get" 'grep -qF "fm_get" "$verify" && grep -qF "contract-brief.md" "$verify"'
 assert "step 9 says the trap already unlocked" 'grep -qF "The trap already ran \`unlock\`" "$confirmation"'
-assert "gate deletes old files before dispatch" 'grep -qF "Delete \`\$task_dir/contract-brief.md\` and \`\$task_dir/contract.gate-patch.md\`" "$confirmation"'
+assert "gate deletes old files before dispatch" 'grep -qF "If \`\$task_dir/contract-brief.md\` or \`\$task_dir/contract.gate-patch.md\` exists, delete it." "$confirmation"'
 assert "step 9 is not tied to check exit 1" '! grep -qF "If the check in G5 exited 1" "$confirmation"'
 assert "set-verified uses checked_commit" 'grep -F "set-verified" "$confirmation" | grep -qF "checked_commit"'
 
@@ -60,9 +60,9 @@ for lock_file in "$confirmation" "$deliver"; do
   assert "$(basename "$lock_file"): no bare unlock line" '! grep -qE "^[[:space:]]*bash .*contract-edit.sh\" unlock" "$lock_file"'
 done
 assert "deliver: apply output is read from the call" 'grep -qF "Read both from the output of the call" "$deliver"'
-assert "deliver: plan.before.md saved before delete-section" '[ "$(grep -nF "plan.before.md\" ] ||" "$deliver" | head -1 | cut -d: -f1)" -lt "$(grep -nF "contract-edit.sh\" delete-section" "$deliver" | head -1 | cut -d: -f1)" ]'
-assert "deliver: undo restores plan items from plan.before.md" 'grep -qF "<task folder>/plan.before.md --sections" "$deliver"'
-assert "deliver: undo leaves out a part without names" 'grep -qF "Leave out the plan part" "$deliver" && grep -qF "Leave out the contract part" "$deliver"'
+assert "deliver: plan.writeback.before.md saved before delete-section" '[ "$(grep -nF "plan.writeback.before.md\" ] ||" "$deliver" | head -1 | cut -d: -f1)" -lt "$(grep -nF "contract-edit.sh\" delete-section" "$deliver" | head -1 | cut -d: -f1)" ]'
+assert "deliver: undo restores plan items from plan.writeback.before.md" 'grep -qF "<task folder>/plan.writeback.before.md'"'"' --sections" "$deliver"'
+assert "deliver: undo leaves out a part without names" 'grep -qF "leave out the plan part" "$deliver" && grep -qF "leave out the contract part" "$deliver"'
 assert "deliver: apply exit 2 has a way out" 'grep -qF "the user can say to drop the item" "$deliver"'
 assert "deliver: None patch still writes decisions" 'grep -qF "Decisions do not depend on the patch" "$deliver"'
 
@@ -95,5 +95,20 @@ assert "deliver: archive never moves over a file" 'printf "%s\n" "$files_part" |
 assert "deliver: empty decisions.draft does not fail" '! printf "%s\n" "$files_part" | grep -qF "decisions.draft\"/* \"\$contract_folder"'
 assert "confirmation: existing project asks no section question and lists what to read" 'grep -qF "ask no section question" "$confirmation" && grep -qF "code areas to read under" "$confirmation"'
 assert "execute: existing project reads the list from the spec" 'printf "%s\n" "$contract_part" | grep -qF "code areas that the spec lists"'
+
+# Final fix wave pins
+assert "gate stops start with the prefix" '[ "$(grep -cF "the reason \`contract gate: <stderr text>\`" "$confirmation")" -ge 1 ] && [ "$(grep -cF "the reason \`contract gate: <stderr text>\`" "$deliver")" -ge 1 ]'
+assert "After a stop runs the gate again from G1 for the prefix" 'sed -n "/^## After a stop/,/^## /p" "$confirmation" | grep -F "\`contract gate:\`" | grep -qF "from G1"'
+assert "G5 writes stale_sections from the check" 'grep -qF "the one-line JSON list from the \`stale_sections:\` line of the check" "$confirmation"'
+assert "step 9 reads stale_sections before set-verified" 'grep -qF "fm_get \"\$task_dir/contract-brief.md\" stale_sections" "$confirmation"'
+assert "gate snapshots are contract.before.md and plan.before.md" 'grep -qF "cp \"\$contract_file\" \"\$task_dir/contract.before.md\"" "$confirmation" && grep -qF "\"\$task_dir/plan.before.md\"" "$confirmation"'
+assert "write-back snapshots have their own names" 'grep -qF "\"\$task_folder/contract.writeback.before.md\"" "$deliver" && grep -qF "\"\$task_folder/plan.writeback.before.md\"" "$deliver" && ! sed -n "/^## Pending items/,\$p" "$deliver" | grep -qF "task_folder/contract.before.md"'
+assert "write-back undo names its own snapshot" 'grep -qF "<task folder>/contract.writeback.before.md'"'"' --sections" "$deliver"'
+assert "plan headings sit in single quotes" '[ "$(grep -cF "for heading in '"'"'<heading>'"'"'; do" "$confirmation")" -eq 1 ] && [ "$(grep -cF "for heading in '"'"'<heading>'"'"'; do" "$deliver")" -eq 1 ] && ! grep -qF "\"<heading>\"" "$confirmation" "$deliver"'
+assert "reference bash blocks use no CLAUDE_PLUGIN_ROOT" '! awk "/^[[:space:]]*\`\`\`bash/{b=1;next} /^[[:space:]]*\`\`\`/{b=0} b" "$confirmation" "$execute" "$verify" | grep -qF "CLAUDE_PLUGIN_ROOT"'
+assert "decision files are written under the lock" 'sed -n "/^## Contract write-back/,/^## Targets/p" "$deliver" | grep -qF "next-decision-id \"\$decisions_dir\""'
+reader="$repo_root/agents/contract-reader.md"
+assert "reader writes no code fence in the reply" 'sed -n "/^## Reply/,\$p" "$reader" | grep -qF "Write no code fence in the reply."'
+assert "reader writes stale sections from the code" 'grep -qF "If the code does not show a fact, leave the fact out." "$reader"'
 
 finish

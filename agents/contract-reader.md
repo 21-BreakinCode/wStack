@@ -45,6 +45,7 @@ The output has `status:`, `base:`, `behind:`, `stale_sections:`, `stale_dependen
 The patch covers every stale section from the check, and each unclaimed file. When the facts of the task change them, it also covers `Consumers` and `Gotchas`.
 
 - Each patch block holds the complete new text of one section. It starts with its `## <Section>` heading and keeps its `<!-- sources: ... -->` comment. The apply script replaces the whole block by name.
+- Write each stale section in full from the code at `origin/<base_branch>`. If the code does not show a fact, leave the fact out.
 - Never copy text from a team doc into the patch. Point at the doc with `@<path>` instead.
 - Give each unclaimed file an owner. Add a glob for it to the `sources` comment of the section that describes it. If no section fits, list the file under `Open questions`.
 - If a plan item is now built, add a `## Remove from plan` block after the section blocks. It has one `- <heading>` line for each built plan item. If no plan item is built, omit that block.
@@ -54,7 +55,7 @@ The patch covers every stale section from the check, and each unclaimed file. Wh
 
 ## Reply
 
-Reply in this exact form. The line `=== PATCH ===` stands alone.
+Reply in this exact form. The line `=== PATCH ===` stands alone. Write no code fence in the reply. The fence below only shows the form.
 
 ```
 ### Brief

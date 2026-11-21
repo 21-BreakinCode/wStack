@@ -10,15 +10,15 @@ Run this gate before "Write the spec". It keeps the service contract fresh. Its 
 
 G1. If `work_type` is not `code` or `ops`, skip the gate.
 G2. Run `bash "$scripts/contract-path.sh" --vault "$vault" "<repository folder>"`. Its output is `$contract_file`.
-   - Exit 0: go on.
+   - Exit 0: go on. If the file `$contract_file` does not exist, skip G3 and G4. Go to G5, where the check exits 3 at once.
    - Exit 1: write `Contract: not mapped` as a `step` line in `run-log.md`. Skip the rest of the gate and go on to "Write the spec".
-   - Exit 2: write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the stderr text as the reason, as "Stop items" in `SKILL.md` says. Set `status` to `waiting-user` and stop.
+   - Exit 2: write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the reason `contract gate: <stderr text>`, as "Stop items" in `SKILL.md` says. Set `status` to `waiting-user` and stop.
 G3. Read `base_branch`: `source "$scripts/lib/frontmatter.sh"; fm_get "$contract_file" base_branch`. Run `git -C "<repository folder>" fetch origin "<base_branch>"`. If the fetch fails, go on with the local ref `origin/<base_branch>` and say so in the brief.
 G4. Resolve the pending items of the contract, as "Pending items" in the `deliver-task` skill says.
-G5. Delete `$task_dir/contract-brief.md` and `$task_dir/contract.gate-patch.md` if they exist, so that no older gate run leaves files behind. Run `bash "$scripts/contract-check.sh" "<repository folder>" "$contract_file"`.
-   - Exit 3: the contract file is missing. Ask the user one question: set up the contract first (a `contract` task), or go on without a contract. End the reply. Wait.
-   - Exit 2: tell the user the stderr text. Ask the same question. End the reply. Wait.
-   - Exit 0 or 1: run `git -C "<repository folder>" rev-parse "origin/<base_branch>"` right away. This is `checked_commit`. Dispatch the `wstack:contract-reader` agent. Give it the repository folder, the contract path, the Goal text, and the output of the check. Write `$task_dir/contract-brief.md` as frontmatter, then the reply before the line `=== PATCH ===`. The frontmatter holds these four keys: `contract_file`, `base_branch`, `checked_commit`, and `check_exit` (the exit code of the check, 0 or 1). If the part after the marker is not `None`, write it to `$task_dir/contract.gate-patch.md`.
+G5. If `$task_dir/contract-brief.md` or `$task_dir/contract.gate-patch.md` exists, delete it. Then no older gate run leaves files behind. Run `bash "$scripts/contract-check.sh" "<repository folder>" "$contract_file"`.
+   - Exit 3: the contract file is missing. Ask the user one question: set up the contract first (a `contract` task), or go on without a contract. End the reply. Wait. To go on without a contract, go to "Write the spec" with no `contract-brief.md`.
+   - Exit 2: tell the user the stderr text. Ask the same question, with the same meaning. End the reply. Wait.
+   - Exit 0 or 1: run `git -C "<repository folder>" rev-parse "origin/<base_branch>"` right away. This is `checked_commit`. Dispatch the `wstack:contract-reader` agent. Give it the repository folder, the contract path, the Goal text, and the output of the check. Write `$task_dir/contract-brief.md` as frontmatter, then the reply before the line `=== PATCH ===`. The frontmatter holds five keys: `contract_file`, `base_branch`, `checked_commit`, `check_exit`, and `stale_sections`. `check_exit` is the exit code of the check, 0 or 1. `stale_sections` is the one-line JSON list from the `stale_sections:` line of the check. If the part after the marker is not `None`, write it to `$task_dir/contract.gate-patch.md`.
 G6. "Write the spec" reads `contract-brief.md` together with the vault notes.
 
 The gate never changes the contract file. Step 9 does that, after approval.
@@ -58,24 +58,39 @@ If the user asks for changes, go back to step 4, then run steps 5 to 8 again.
 
 ## After approval
 
-9. If `$task_dir/contract-brief.md` does not exist, the task has no contract: skip to "Then set `approved_at`" below. Otherwise update the contract first. Run this in one Bash call. Write the real task folder for `<task folder>`. If `contract.gate-patch.md` does not exist, or holds no `## ` section other than `## Remove from plan`, skip the `cp` and `apply` lines.
+9. If `$task_dir/contract-brief.md` does not exist, the task has no contract: skip to "Then set `approved_at`" below. Otherwise update the contract and the plan first. Run this in one Bash call. Write the real path of `$scripts` from `SKILL.md` for `<scripts folder>`, and the real task folder for `<task folder>`. Put each value and each heading in single quotes, and write each `'` in it as `'\''`.
+   - If `contract.gate-patch.md` does not exist, or holds no `## ` section other than `## Remove from plan`, skip the `contract.before.md` line and the `apply` line.
+   - If the patch has no `- <heading>` line under `## Remove from plan`, skip the plan lines: the `plan.before.md` line and the `for` loop. Otherwise write each such heading in the `for` line, one after another.
 
    ```bash
    set -e
-   scripts="${CLAUDE_PLUGIN_ROOT}/scripts"
-   task_dir="<task folder>"
+   scripts='<scripts folder>'
+   task_dir='<task folder>'
    source "$scripts/lib/frontmatter.sh"
    contract_file="$(fm_get "$task_dir/contract-brief.md" contract_file)"
    checked_commit="$(fm_get "$task_dir/contract-brief.md" checked_commit)"
+   stale_sections="$(fm_get "$task_dir/contract-brief.md" stale_sections)"
+   contract_folder="$(dirname "$contract_file")"
    bash "$scripts/contract-edit.sh" lock "$contract_file"
    trap 'bash "$scripts/contract-edit.sh" unlock "$contract_file"' EXIT
    [ -f "$task_dir/contract.before.md" ] || cp "$contract_file" "$task_dir/contract.before.md"
    bash "$scripts/contract-edit.sh" apply "$contract_file" "$task_dir/contract.gate-patch.md"
-   bash "$scripts/contract-edit.sh" set-verified "$contract_file" "$checked_commit"
+   [ -f "$task_dir/plan.before.md" ] || cp "$contract_folder/plan.md" "$task_dir/plan.before.md"
+   for heading in '<heading>'; do
+     rc=0; bash "$scripts/contract-edit.sh" delete-section "$contract_folder/plan.md" "$heading" || rc=$?
+     [ "$rc" -le 1 ] || exit "$rc"
+     [ "$rc" = 1 ] || printf 'plan item removed: %s\n' "$heading"
+   done
+   still_stale="$(jq -r '.[]' <<<"${stale_sections:-[]}" | awk -v patch="$task_dir/contract.gate-patch.md" 'BEGIN { while ((getline line < patch) > 0) if (line ~ /^## /) patched[substr(line, 4)] = 1 } !($0 in patched)')"
+   if [ -z "$still_stale" ]; then bash "$scripts/contract-edit.sh" set-verified "$contract_file" "$checked_commit"; else printf 'still stale:\n%s\n' "$still_stale"; fi
    ```
 
+   Each snapshot file is written once, so a second run keeps the text from before the gate. `apply` prints the applied section names. The loop prints `plan item removed: <heading>` for each plan item that it removed. A `delete-section` exit of 1 means that the plan item is already gone.
+   If each name in `stale_sections` has a `## <name>` block in the patch, `set-verified` runs. A `check_exit` of 0 means that `stale_sections` is `[]`, so `set-verified` runs. If a stale section has no block, the call prints `still stale:` and the names, and `verified_commit` stays. Then tell the user which sections stay stale.
+   If the call printed a `plan item removed:` line, write a `step` line in `run-log.md` with the undo of the plan part: `bash '<scripts>/contract-edit.sh' apply '<contract folder>/plan.md' '<task folder>/plan.before.md' --sections '<removed headings, joined by commas>'`. Quote each value as in the block.
+
    Exit 4 means the lock is busy. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the stderr text of `lock` as the reason. Set `status` to `waiting-user` and stop.
-   Any other non-zero exit means a command failed after the lock. The trap already ran `unlock`. Write a `stop` line in `run-log.md`, append a stop item with `"stage":"confirmation"` and the stderr text of that command as the reason, set `status` to `waiting-user`, and stop. Do not set `approved_at`.
+   Any other non-zero exit means a command failed after the lock. The trap already ran `unlock`. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the stderr text of that command as the reason. Set `status` to `waiting-user` and stop. Do not set `approved_at`.
 
    Then set `approved_at` to the current UTC time: `date -u +%Y-%m-%dT%H:%M:%SZ`.
 10. List the tools the verification plan needs from this set: `web`, `diagram`, `video`, `webp`, `terminal`, `r2`. If the list is not empty, run `bash "$scripts/preflight.sh" plan <needs>`.
@@ -87,8 +102,10 @@ If the user asks for changes, go back to step 4, then run steps 5 to 8 again.
 
 This rule runs when the user answers a Confirmation stop, in the same session or in a resumed task.
 
-- If `approved_at` is empty, set `status` to `drafting` and run "Show the spec" again from step 5.
-- If `approved_at` is set, run step 10 again.
+- If the reason of the last stop item starts with `contract gate:`, set `status` to `drafting` and run Confirmation again from G1.
+- For any other stop, read `approved_at`.
+  - If it is empty, set `status` to `drafting` and run "Show the spec" again from step 5.
+  - If it is set, run step 10 again.
 
 ## Approval scope
 
