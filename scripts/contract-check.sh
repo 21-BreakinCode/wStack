@@ -12,17 +12,6 @@ max_listed_files=10
 
 fail() { echo "contract-check.sh: $1" >&2; exit 2; }
 json_list() { jq -Rn '[inputs | select(length > 0)]' -c; }  # newline-separated stdin to one-line JSON
-matches_any_glob() {  # <file> <newline-separated globs>
-  local file="$1" glob
-  while IFS= read -r glob; do
-    [ -n "$glob" ] || continue
-    glob="${glob//\*\*/*}"
-    # shellcheck disable=SC2254
-    case "$file" in $glob) return 0 ;; esac
-  done <<<"$2"
-  return 1
-}
-
 [ -f "$contract_file" ] || { echo "contract-check.sh: no contract file: $contract_file" >&2; exit 3; }
 git -C "$repo_dir" rev-parse --git-dir >/dev/null 2>&1 || fail "not a git repository: $repo_dir"
 
@@ -47,18 +36,29 @@ sections="$(awk '
   name == "Depends on" && /^- / { print "D\t" substr($0, 3) }
 ' "$contract_file")"
 
-section_names=""   # newline-separated, in file order
-section_globs=""   # one line per section, globs comma-separated, parallel to section_names
-team_doc_paths=""
+# Parse once into arrays. The per-file loop below uses only shell builtins.
+section_names=(); section_has_globs=(); section_is_stale=()
+pair_section=(); pair_glob=()   # one entry per (section index, glob)
+team_doc_paths=()
 depends_lines=""
+section_count=0
 while IFS=$'\t' read -r kind first second; do
   case "$kind" in
-    S) section_names="$section_names$first"$'\n'; section_globs="$section_globs"$'\n' ;;
-    G) section_globs="${section_globs%$'\n'}$first"$'\n' ;;
-    A) team_doc_paths="$team_doc_paths$first"$'\n' ;;
+    S) section_names[section_count]="$first"; section_has_globs[section_count]=0; section_is_stale[section_count]=0
+       section_count=$((section_count + 1)) ;;
+    G) section_has_globs[section_count - 1]=1
+       oldifs="$IFS"; IFS=","; set -f
+       for glob in $first; do pair_section[${#pair_section[@]}]=$((section_count - 1)); pair_glob[${#pair_glob[@]}]="${glob//\*\*/*}"; done
+       IFS="$oldifs"; set +f ;;
+    A) team_doc_paths[${#team_doc_paths[@]}]="${first#@}" ;;
     D) depends_lines="$depends_lines$first"$'\n' ;;
   esac
 done <<<"$sections"
+ignore_list=()
+while IFS= read -r glob; do
+  [ -n "$glob" ] && ignore_list[${#ignore_list[@]}]="${glob//\*\*/*}"
+done <<<"$ignore_globs"
+pair_count=${#pair_glob[@]}
 
 stale_sections=""
 stale_dependencies=""
@@ -71,32 +71,43 @@ mark_section_stale() {  # <name>
   case $'\n'"$stale_sections" in *$'\n'"$1"$'\n'*) return ;; esac
   stale_sections="$stale_sections$1"$'\n'
 }
+mark_section_index_stale() {  # <index>
+  [ "${section_is_stale[$1]}" = 0 ] || return 0
+  section_is_stale[$1]=1
+  mark_section_stale "${section_names[$1]}"
+}
 
 if ! git -C "$repo_dir" merge-base --is-ancestor "$verified_commit" "$base_ref" 2>/dev/null; then
   behind="$(git -C "$repo_dir" rev-list --count "$base_ref")"
   is_stale=1
-  line_no=0
-  while IFS= read -r name; do
-    [ -n "$name" ] || continue
-    line_no=$((line_no + 1))
-    globs="$(printf '%s' "$section_globs" | sed -n "${line_no}p")"
-    if [ "$name" = "Team docs" ] || [ -n "$globs" ]; then mark_section_stale "$name"; fi
-  done <<<"$section_names"
+  for ((section_index = 0; section_index < section_count; section_index++)); do
+    if [ "${section_names[section_index]}" = "Team docs" ] || [ "${section_has_globs[section_index]}" = 1 ]; then
+      mark_section_index_stale "$section_index"
+    fi
+  done
 else
   behind="$(git -C "$repo_dir" rev-list --count "$verified_commit..$base_ref")"
   while IFS= read -r -d '' changed_file; do
-    if matches_any_glob "$changed_file" "$ignore_globs"; then continue; fi
+    ignored=0
+    for glob in ${ignore_list[@]+"${ignore_list[@]}"}; do
+      # shellcheck disable=SC2254
+      case "$changed_file" in $glob) ignored=1; break ;; esac
+    done
+    [ "$ignored" = 0 ] || continue
     claimed=0
-    if printf '%s' "$team_doc_paths" | grep -Fxq -- "@$changed_file"; then
-      claimed=1; mark_section_stale "Team docs"
-    fi
-    line_no=0
-    while IFS= read -r name; do
-      [ -n "$name" ] || continue
-      line_no=$((line_no + 1))
-      globs="$(printf '%s' "$section_globs" | sed -n "${line_no}p" | tr ',' '\n')"
-      if matches_any_glob "$changed_file" "$globs"; then claimed=1; mark_section_stale "$name"; fi
-    done <<<"$section_names"
+    for team_doc_path in ${team_doc_paths[@]+"${team_doc_paths[@]}"}; do
+      if [ "$team_doc_path" = "$changed_file" ]; then
+        claimed=1
+        for ((section_index = 0; section_index < section_count; section_index++)); do
+          [ "${section_names[section_index]}" != "Team docs" ] || mark_section_index_stale "$section_index"
+        done
+      fi
+    done
+    for ((pair_index = 0; pair_index < pair_count; pair_index++)); do
+      glob="${pair_glob[pair_index]}"
+      # shellcheck disable=SC2254
+      case "$changed_file" in $glob) claimed=1; mark_section_index_stale "${pair_section[pair_index]}" ;; esac
+    done
     if [ "$claimed" = 0 ]; then
       unclaimed_count=$((unclaimed_count + 1))
       [ "$unclaimed_count" -gt "$max_listed_files" ] || unclaimed="$unclaimed$changed_file"$'\n'

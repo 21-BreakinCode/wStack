@@ -80,4 +80,16 @@ for i in 1 2 3 4 5 6 7 8 9 10 11 12; do echo "$i" > "$REPO/n$i.txt"; done
 git -C "$REPO" add -A; git -C "$REPO" commit -q -m many; git -C "$REPO" push -q origin main 2>/dev/null; run
 assert "unclaimed capped at 10" '[ "$(field unclaimed_count)" = 12 ] && [ "$(field unclaimed_files | jq length)" = 10 ]'
 
+new_world
+mkdir -p "$REPO/api/v1" "$REPO/cmd/tool" "$REPO/tests/many" "$REPO/misc"
+for i in $(seq 1 125); do
+  echo "$i" > "$REPO/api/v1/f$i.go"; echo "$i" > "$REPO/cmd/tool/f$i.go"
+  echo "$i" > "$REPO/tests/many/f$i.go"; echo "$i" > "$REPO/misc/f$i.txt"
+done
+git -C "$REPO" add -A; git -C "$REPO" commit -q -m bulk; git -C "$REPO" push -q origin main 2>/dev/null
+started=$SECONDS; run; elapsed=$((SECONDS - started))
+echo "  (500 files took ${elapsed}s)"
+assert "500 changed files" '[ $rc = 1 ] && [ "$(field stale_sections)" = "[\"Interfaces\",\"Abilities\"]" ] && [ "$(field unclaimed_count)" = 125 ] && [ "$elapsed" -lt 10 ]'
+
+
 finish
