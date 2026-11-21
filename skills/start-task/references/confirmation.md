@@ -15,10 +15,10 @@ G2. Run `bash "$scripts/contract-path.sh" --vault "$vault" "<repository folder>"
    - Exit 2: write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the stderr text as the reason, as "Stop items" in `SKILL.md` says. Set `status` to `waiting-user` and stop.
 G3. Read `base_branch`: `source "$scripts/lib/frontmatter.sh"; fm_get "$contract_file" base_branch`. Run `git -C "<repository folder>" fetch origin "<base_branch>"`. If the fetch fails, go on with the local ref `origin/<base_branch>` and say so in the brief.
 G4. Resolve the pending items of the contract, as "Pending items" in the `deliver-task` skill says.
-G5. Run `bash "$scripts/contract-check.sh" "<repository folder>" "$contract_file"`.
+G5. Delete `$task_dir/contract-brief.md` and `$task_dir/contract.gate-patch.md` if they exist, so that no older gate run leaves files behind. Run `bash "$scripts/contract-check.sh" "<repository folder>" "$contract_file"`.
    - Exit 3: the contract file is missing. Ask the user one question: set up the contract first (a `contract` task), or go on without a contract. End the reply. Wait.
    - Exit 2: tell the user the stderr text. Ask the same question. End the reply. Wait.
-   - Exit 0 or 1: dispatch the `wstack:contract-reader` agent. Give it the repository folder, the contract path, the Goal text, and the output of the check. Write the reply before the line `=== PATCH ===` to `$task_dir/contract-brief.md`. If the part after that line is not `None`, write it to `$task_dir/contract.gate-patch.md`.
+   - Exit 0 or 1: run `git -C "<repository folder>" rev-parse "origin/<base_branch>"` right away. This is `checked_commit`. Dispatch the `wstack:contract-reader` agent. Give it the repository folder, the contract path, the Goal text, and the output of the check. Write `$task_dir/contract-brief.md` as frontmatter, then the reply before the line `=== PATCH ===`. The frontmatter holds these four keys: `contract_file`, `base_branch`, `checked_commit`, and `check_exit` (the exit code of the check, 0 or 1). If the part after the marker is not `None`, write it to `$task_dir/contract.gate-patch.md`.
 G6. "Write the spec" reads `contract-brief.md` together with the vault notes.
 
 The gate never changes the contract file. Step 9 does that, after approval.
@@ -57,17 +57,18 @@ If the user asks for changes, go back to step 4, then run steps 5 to 8 again.
 
 ## After approval
 
-9. If the check in G5 exited 1, update the contract first. Run these commands in order. If `contract.gate-patch.md` does not exist, or holds no `## ` section other than `## Remove from plan`, skip the `cp` and `apply` lines.
+9. If `$task_dir/contract-brief.md` does not exist, the task has no contract: skip to "Then set `approved_at`" below. Otherwise update the contract first. Read the values back in the same Bash call as the commands that use them: `source "$scripts/lib/frontmatter.sh"; contract_file="$(fm_get "$task_dir/contract-brief.md" contract_file)"`, and the same for `base_branch` and `checked_commit`. Run these commands in order. If `contract.gate-patch.md` does not exist, or holds no `## ` section other than `## Remove from plan`, skip the `cp` and `apply` lines.
 
    ```bash
    bash "$scripts/contract-edit.sh" lock "$contract_file"
    [ -f "$task_dir/contract.before.md" ] || cp "$contract_file" "$task_dir/contract.before.md"
    bash "$scripts/contract-edit.sh" apply "$contract_file" "$task_dir/contract.gate-patch.md"
-   bash "$scripts/contract-edit.sh" set-verified "$contract_file" "$(git -C "<repository folder>" rev-parse "origin/<base_branch>")"
+   bash "$scripts/contract-edit.sh" set-verified "$contract_file" "$checked_commit"
    bash "$scripts/contract-edit.sh" unlock "$contract_file"
    ```
 
    If `lock` exits 4, write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the stderr text of `lock` as the reason. Set `status` to `waiting-user` and stop.
+   If any command after `lock` exits non-zero, run `unlock`. Then write a `stop` line in `run-log.md`, append a stop item with `"stage":"confirmation"` and the stderr text of that command as the reason, set `status` to `waiting-user`, and stop. Do not set `approved_at`.
 
    Then set `approved_at` to the current UTC time: `date -u +%Y-%m-%dT%H:%M:%SZ`.
 10. List the tools the verification plan needs from this set: `web`, `diagram`, `video`, `webp`, `terminal`, `r2`. If the list is not empty, run `bash "$scripts/preflight.sh" plan <needs>`.

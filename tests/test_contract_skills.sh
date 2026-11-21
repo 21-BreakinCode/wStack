@@ -25,4 +25,13 @@ spec_line="$(line_of '## Write the spec')"
 assert "gate section before Write the spec" '[ -n "$gate_line" ] && [ "$gate_line" -lt "$spec_line" ]'
 assert "verify.md passes the contract path to the reviewer" 'grep -qF "contract path" "$verify"'
 
+for key in contract_file base_branch checked_commit check_exit; do
+  assert "confirmation.md names the gate state key $key" 'grep -qF -- "\`$key\`" "$confirmation"'
+done
+assert "verify.md reads the gate state with fm_get" 'grep -qF "fm_get" "$verify" && grep -qF "contract-brief.md" "$verify"'
+assert "step 9 unlocks when a command fails" 'grep -qF "If any command after \`lock\` exits non-zero, run \`unlock\`" "$confirmation"'
+assert "gate deletes old files before dispatch" 'grep -qF "Delete \`\$task_dir/contract-brief.md\` and \`\$task_dir/contract.gate-patch.md\`" "$confirmation"'
+assert "step 9 is not tied to check exit 1" '! grep -qF "If the check in G5 exited 1" "$confirmation"'
+assert "set-verified uses checked_commit" 'grep -F "set-verified" "$confirmation" | grep -qF "checked_commit"'
+
 finish
