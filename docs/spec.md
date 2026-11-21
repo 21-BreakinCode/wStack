@@ -35,6 +35,7 @@ wStack is a Claude Code plugin. It runs one fixed pipeline for most of the user'
 - A reviewer agent and a review page **(confirmed)**.
 - Evidence capture, compression, upload to Cloudflare R2, and pull request attachments **(confirmed)**.
 - The weekly `/wstack:run-retro` command **(confirmed)**.
+- The handover commands `/wstack:init-org`, `/wstack:init-service`, `/wstack:create-handover`, and `/wstack:wrap-up-handovers`, moved from obsidian-kit 2.3.1.
 
 ### 1.2 Out of scope (version 1)
 
@@ -104,6 +105,10 @@ wstack/
 ├── skills/
 │   ├── start-task/SKILL.md        user command: /wstack:start-task
 │   ├── run-retro/SKILL.md         user command: /wstack:run-retro
+│   ├── init-org/SKILL.md          user command: /wstack:init-org
+│   ├── init-service/SKILL.md      user command: /wstack:init-service
+│   ├── create-handover/SKILL.md   user command: /wstack:create-handover
+│   ├── wrap-up-handovers/SKILL.md user command: /wstack:wrap-up-handovers
 │   ├── build-review-page/SKILL.md helper: build review.html
 │   ├── capture-evidence/SKILL.md  helper: capture, compress, upload evidence
 │   └── deliver-task/SKILL.md      helper: deliver rules and approval gate
@@ -115,13 +120,16 @@ wstack/
 │   ├── run-log.md
 │   ├── review.md
 │   ├── report.md
+│   ├── initiation.md              handover initiation file for an org
 │   └── mobile.css                 CSS override for the narrow layout
 ├── scripts/
 │   ├── new-task-folder.sh         creates the task folder from templates
 │   ├── compress-media.sh          WebP, H.265, JPEG, H.264 conversion
 │   ├── evidence-upload.sh         uploads a folder to R2
 │   ├── evidence-delete.sh         deletes a task's evidence from R2
-│   └── pr-attach.sh               makes GitHub copies and calls gh --attach
+│   ├── pr-attach.sh               makes GitHub copies and calls gh --attach
+│   ├── lib/repo.sh                main_checkout: finds the main checkout from a worktree
+│   └── handover/                  resolvers, exclude and symlink scripts, Python helpers
 ├── docs/
 │   └── decisions.md               changes to ASSUME rules, with reasons
 └── README.md

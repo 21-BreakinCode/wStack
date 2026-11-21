@@ -32,6 +32,30 @@ To resume an open task, run `/wstack:start-task` with no arguments. It lists the
 
 Add `--mobile` to the idea to publish the spec page and the review page as Claude artifacts, so you can read them on a phone.
 
+## Commands
+
+User commands:
+
+- `/wstack:start-task`: run the pipeline for one task.
+- `/wstack:run-retro`: weekly retro over the last 7 days of task folders.
+- `/wstack:init-org`: scaffold the handover initiation file for an org. Run it once per org.
+- `/wstack:init-service`: set up the current repository for handovers. Run it once per repository.
+- `/wstack:create-handover`: create a handover document from the current conversation.
+- `/wstack:wrap-up-handovers`: wrap up all active handovers in the vault.
+
+Helper skills (the agent uses them, you do not): `build-review-page`, `capture-evidence`, `deliver-task`.
+
+## Handover
+
+A handover document carries the state of a piece of work to the next session. The handover commands keep these documents in your Obsidian vault and link them into each repository.
+
+1. Run `/wstack:init-org` once per org. It writes `handover_handler__initiation.md` in `01Project/<ORG>/` of the vault. That file holds the service mapping table.
+2. Run `/wstack:init-service` once in each repository. It finds or adds the mapping row for the repository, and creates the vault folder if it is missing. It links `./handover` to that folder. It writes the entry `/handover` to the local git exclude file, which `git rev-parse --git-path info/exclude` names. It never edits `.gitignore`. If a gitignore already ignores `handover`, it changes nothing and prints `already present`.
+3. Run `/wstack:create-handover` to write a handover document under `./handover/`, seeded from the conversation.
+4. Run `/wstack:wrap-up-handovers` to wrap up. It finds the active handovers in the vault. It asks you for one batch of decisions, then archives, updates, or suspends each handover. Archived files go to `<vault>/04Archive/<ORG>/`. The archive root is fixed at `04Archive`.
+
+The commands read the vault path from the `vault_path` setting. The resolvers find the org from the git remote, including `github_orgs` as a block list. They work inside herdr worktrees, because they look up the mapping row of the main checkout.
+
 ## Install
 
 wStack needs the `answer-me-with-html` plugin. If it is not installed, add its marketplace first:
