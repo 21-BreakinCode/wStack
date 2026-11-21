@@ -93,5 +93,7 @@ assert "deliver: decisions are checked before the first change" '[ "$(printf "%s
 assert "deliver: contract.before.md is write-once" 'printf "%s\n" "$files_part" | grep -qF "[ -f \"\$task_dir/contract.before.md\" ] || cp"'
 assert "deliver: archive never moves over a file" 'printf "%s\n" "$files_part" | grep -qF "[ ! -e \"\$archive_dir/\$(basename \"\$old_file\")\" ] || continue" && printf "%s\n" "$files_part" | grep -qF ".archived"'
 assert "deliver: empty decisions.draft does not fail" '! printf "%s\n" "$files_part" | grep -qF "decisions.draft\"/* \"\$contract_folder"'
+assert "confirmation: existing project asks no section question and lists what to read" 'grep -qF "ask no section question" "$confirmation" && grep -qF "code areas to read under" "$confirmation"'
+assert "execute: existing project reads the list from the spec" 'printf "%s\n" "$contract_part" | grep -qF "code areas that the spec lists"'
 
 finish
