@@ -56,6 +56,38 @@ A handover document carries the state of a piece of work to the next session. Th
 
 The commands read the vault path from the `vault_path` setting. The resolvers find the org from the git remote, including `github_orgs` as a block list. They work inside herdr worktrees, because they look up the mapping row of the main checkout.
 
+## Service contract
+
+A service contract is one Markdown file for each mapped service. It states what the service does now. It lives in the vault next to the handover files. The path is `<vault>/01Project/<ORG>/<lifeos_subpath>/<app_name>.md`.
+
+The vault files:
+
+- `<app_name>.md`: the contract. Its sections are Team docs, Abilities, Interfaces, Depends on, Consumers, Gotchas, and Open questions. The frontmatter holds `base_branch`, `verified_commit`, `pending`, and `ignore`.
+- `plan.md`: planned items that are not built yet.
+- `decisions/`: one file for each decision, named `NNNN-<slug>.md`.
+- `_archive/<task_id>/`: old vault files that a `contract` task moved.
+
+The gate:
+
+- A `code` or `ops` task runs the contract gate in Confirmation, before the spec is written.
+- The gate fetches `origin/<base_branch>` and runs the drift check. It finds the sections that the changes since `verified_commit` made stale.
+- The `contract-reader` agent writes a brief into `contract-brief.md` in the task folder. The spec reads it.
+- After you approve the spec, the gate patch updates the contract.
+- In Deliver, the write-back records a pending item for the pull request. After the merge, the next gate run writes the change into the contract. If the pull request closes without a merge, the gate drops the item.
+- A repository with no service mapping gets no contract. The gate writes `Contract: not mapped` and goes on.
+- Every write takes the lock folder `<contract>.lock`. If a crashed session leaves it, remove the folder.
+
+The hooks: a SessionStart hook and a PostToolUse hook run `scripts/contract-hook.sh`. The PostToolUse hook runs only after `git pull`, `merge`, `rebase`, `switch`, `checkout`, or `reset`, and after `gh pr checkout`. A hook makes no network call and never blocks. If the contract is stale, it prints one line. Otherwise it prints nothing. It reads the vault path from `WSTACK_VAULT_PATH`, then from the `vault_path` setting.
+
+To set up a contract:
+
+1. Run `/wstack:init-org` and `/wstack:init-service`, so the repository has a service mapping.
+2. Run `/wstack:start-task` with an idea such as "set up the service contract". The task is a `contract` task.
+3. For a new project, answer one question for each section. For an existing project, the spec lists the team docs and code areas to read.
+4. Approve the spec. Execute writes drafts in the task folder. Deliver moves old vault files into `_archive/<task_id>/` and writes the contract. It is safe to run again.
+
+To ask why a service is the way it is, ask in any session. Claude sends the question to the `contract-historian` agent.
+
 ## Install
 
 wStack needs the `answer-me-with-html` plugin. If it is not installed, add its marketplace first:

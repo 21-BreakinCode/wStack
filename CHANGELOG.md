@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.0 - 2026-11-22
+
+wStack keeps a service contract for each mapped service, and checks tasks against it.
+
+New:
+
+- A contract file in the vault for each mapped service, with `plan.md` and `decisions/` beside it.
+- A drift check, `contract-check.sh`. It compares `verified_commit` with `origin/<base_branch>` and makes no network call.
+- A SessionStart hook and a PostToolUse hook. If the contract is stale, they tell the agent. Otherwise they print nothing.
+- A contract gate for `code` and `ops` tasks, before the spec is written. It writes `contract-brief.md` and a gate patch in the task folder.
+- A write-back in Deliver. The contract changes after the pull request merges. A closed pull request drops its pending item.
+- A `contract` work type that sets up or rebuilds a contract. Deliver moves old vault files into `_archive/<task_id>/`.
+- Two agents: `contract-reader` and `contract-historian`. The reviewer reports a `contract-mismatch` finding.
+
+Behavior to know:
+
+- A repository with no service mapping gets no contract. A `contract` task stops and says to run `/wstack:init-service`.
+- Every contract write takes the lock folder `<contract>.lock`. A busy lock stops the task.
+
 ## 0.2.0 - 2026-11-21
 
 Four skills have new names. The handover commands of obsidian-kit 2.3.1 now live in wStack.
