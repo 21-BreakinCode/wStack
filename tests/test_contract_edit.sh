@@ -98,6 +98,15 @@ bash "$edit" set-verified "$contract" def456
 assert "verified_commit set" "[ \"\$(fm_get '$contract' verified_commit)\" = def456 ]"
 assert "verified_at set" "fm_get '$contract' verified_at | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'"
 
+echo "closed PR drops its pending item and keeps the body"
+write_contract
+bash "$edit" pending-add "$contract" 21 t9
+cp "$contract" "$work/closed-before.md"
+body_of() { awk 'n>=2{print} /^---$/{n++}' "$1"; }
+bash "$edit" pending-remove "$contract" 21
+assert "closed PR: pending is empty" "[ \"\$(fm_get '$contract' pending)\" = '[]' ]"
+assert "closed PR: body is unchanged" "[ \"\$(body_of '$contract')\" = \"\$(body_of '$work/closed-before.md')\" ]"
+
 echo "next-decision-id"
 assert "missing folder gives 0001" "[ \"\$(bash '$edit' next-decision-id '$work/none')\" = 0001 ]"
 mkdir "$work/dec"; touch "$work/dec/0001-a.md" "$work/dec/0003-b.md"

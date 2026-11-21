@@ -62,6 +62,27 @@ Execute already wrote the note in `$vault`. Never write it again. Record it: `{"
 
 Make the draft or the file. Record its URL or path and the undo, which is to delete the draft or the file.
 
+## Contract write-back
+
+Run this once, right after the `open a pull request` target is recorded, for a `code` or `ops` task. If `$task_dir/contract-brief.md` does not exist, the task has no contract: skip this section. If `targets` in `report.md` already holds a `contract write-back` item, skip it too.
+
+Read the values in the same Bash call as the commands that use them: `source "$scripts/lib/frontmatter.sh"; contract_file="$(fm_get "$task_dir/contract-brief.md" contract_file)"`, and the same for `base_branch`. The contract folder is the folder that holds `$contract_file`. `<pr>` is the number at the end of the pull request URL.
+
+1. Dispatch the `wstack:contract-reader` agent. Give it the repository folder, the contract path, and this input: "propose contract edits for the diff `origin/<base_branch>...wstack/<slug>` and the spec's `## Contract changes`". Write the part of the reply after the line `=== PATCH ===` to `$task_dir/contract.patch.md`. If that part is `None`, write no patch file and skip step 2. Go on to step 3.
+2. Take the lock, add the pending item, and release the lock:
+
+   ```bash
+   bash "$scripts/contract-edit.sh" lock "$contract_file"
+   bash "$scripts/contract-edit.sh" pending-add "$contract_file" <pr> <task_id>
+   bash "$scripts/contract-edit.sh" unlock "$contract_file"
+   ```
+
+   If `lock` exits 4, write a `stop` line in `run-log.md`. Append a stop item with `"stage":"deliver"`, `"target":"contract write-back"`, and the stderr text of `lock` as the reason. Set `status` to `waiting-user` and stop. If `pending-add` exits non-zero, run `unlock`, then write the same `stop` line and stop item with its stderr text, and stop.
+3. For each item in the spec's `## Decisions` that is not `None`: run `bash "$scripts/contract-edit.sh" next-decision-id "<contract folder>/decisions"` to get `<id>`. Write `<contract folder>/decisions/<id>-<slug>.md` from `${CLAUDE_PLUGIN_ROOT}/templates/decision.md`. Fill `{{id}}`, `{{date}}`, `{{title}}`, and `{{task_id}}`. Fill `{{tasks_dir}}` from `$tasks_dir`. Fill `## Context`, `## Options`, `## Choice`, and `## Why` from the item. If the pull request adds a file under `docs/adr/`, the decision file links that path and copies no text from it. If `decisions/` does not exist, create it first.
+4. Record the target: `bash "$scripts/frontmatter-set.sh" --append "$task_dir/report.md" targets '{"target":"contract write-back","url":"<contract_file>","undo":"bash <scripts>/contract-edit.sh pending-remove <contract_file> <pr>, and delete <decision files>"}'`. Write the real values for `<scripts>`, `<pr>`, and `<decision files>`.
+
+The contract text does not change here. It changes after the merge, as "Pending items" says.
+
 ## Targets that need approval
 
 If no remaining target needs approval, go to "Finish".
@@ -119,3 +140,37 @@ Use this stop when a target fails. Never retry the target before the user says y
 2. Append a stop item with `"stage":"deliver"`, `"target":"<failed target>"`, and the reason, as "Stop items" in the start-task skill says.
 3. Set `status` to `waiting-user` in `spec.md`.
 4. Tell the user the reason. Ask for a yes or no to try again. End the reply. Wait.
+
+## Pending items
+
+The contract gate runs this (step G4 of Confirmation). At G4 the brief does not exist yet. `$contract_file` comes from `contract-path.sh`, and `<base_branch>` from the contract frontmatter. Read `pending` with `fm_get "$contract_file" pending`. It is a list of `{"pr":<n>,"task":"<id>"}` items. If it is empty, do nothing.
+
+For each item, run `gh pr view <pr> --json state -q .state` in the repository folder. The task folder of the item is `$vault/$tasks_dir/<task>`.
+
+- `OPEN`: keep the item.
+- `gh` fails or prints another value: keep the item.
+- `MERGED`: write the change into the contract. Let `<task folder>` be the task folder of the item. Run these commands in order:
+
+  ```bash
+  bash "$scripts/contract-edit.sh" lock "$contract_file"
+  [ -f "<task folder>/contract.before.md" ] || cp "$contract_file" "<task folder>/contract.before.md"
+  applied_names="$(bash "$scripts/contract-edit.sh" apply "$contract_file" "<task folder>/contract.patch.md")"
+  bash "$scripts/contract-edit.sh" delete-section "<contract folder>/plan.md" "<heading>"
+  bash "$scripts/contract-edit.sh" pending-remove "$contract_file" <pr>
+  bash "$scripts/contract-edit.sh" unlock "$contract_file"
+  ```
+
+  - If `<task folder>/contract.patch.md` does not exist, or holds no `## ` section other than `## Remove from plan`, skip the `apply` line. `applied_names` is then empty. Otherwise `apply` prints one applied section name per line. Join them with commas for the undo.
+  - Run `delete-section` once for each `- <heading>` line under `## Remove from plan`. If there is no such line, skip it. If it exits 1, that plan item is already gone: go on.
+  - In `report.md` of that task, set the undo of the `contract write-back` target to `bash <scripts>/contract-edit.sh apply <contract_file> <task folder>/contract.before.md --sections "<applied_names>"`.
+- `CLOSED`: the pull request did not merge. The contract text must not change. Run these commands:
+
+  ```bash
+  bash "$scripts/contract-edit.sh" lock "$contract_file"
+  bash "$scripts/contract-edit.sh" pending-remove "$contract_file" <pr>
+  bash "$scripts/contract-edit.sh" unlock "$contract_file"
+  ```
+
+If `lock` exits 4, write a `stop` line in `run-log.md`. Append a stop item with the stage of the caller (`confirmation` at G4) and the stderr text of `lock` as the reason. Set `status` to `waiting-user` and stop. If any command after `lock` exits non-zero, run `unlock`. Then write a `stop` line and a stop item with the stderr text of that command, set `status` to `waiting-user`, and stop.
+
+`verified_commit` does not move here. The gate's own check finds what the merged change touched, and the reader compares those sections with the code.

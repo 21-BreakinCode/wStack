@@ -2,7 +2,7 @@
 id: "{{id}}"
 date: {{date}}
 status: accepted
-task: "[[Workflow/Tasks/{{task_id}}/spec]]"
+task: "[[{{tasks_dir}}/{{task_id}}/spec]]"
 ---
 
 # {{id}} {{title}}

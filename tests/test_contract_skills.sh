@@ -34,4 +34,22 @@ assert "gate deletes old files before dispatch" 'grep -qF "Delete \`\$task_dir/c
 assert "step 9 is not tied to check exit 1" '! grep -qF "If the check in G5 exited 1" "$confirmation"'
 assert "set-verified uses checked_commit" 'grep -F "set-verified" "$confirmation" | grep -qF "checked_commit"'
 
+deliver="$repo_root/skills/deliver-task/SKILL.md"
+decision_template="$repo_root/templates/decision.md"
+assert "deliver has Contract write-back heading" 'grep -qxF "## Contract write-back" "$deliver"'
+assert "deliver has Pending items heading" 'grep -qxF "## Pending items" "$deliver"'
+for needle in 'contract-brief.md' 'contract.patch.md' '=== PATCH ===' 'pending-add' 'next-decision-id' \
+  'templates/decision.md' 'docs/adr/' 'contract write-back' 'gh pr view' 'MERGED' 'CLOSED' 'OPEN' \
+  'contract.before.md' 'delete-section' 'pending-remove' '{{tasks_dir}}'; do
+  assert "deliver-task names $needle" 'grep -qF -- "$needle" "$deliver"'
+done
+pending_part="$(sed -n '/^## Pending items/,$p' "$deliver")"
+pending_line_of() { printf '%s\n' "$pending_part" | grep -nF -- "$1" | head -1 | cut -d: -f1; }
+p_lock="$(pending_line_of 'contract-edit.sh" lock')"
+p_apply="$(pending_line_of 'contract-edit.sh" apply')"
+p_unlock="$(pending_line_of 'contract-edit.sh" unlock')"
+assert "pending: lock before apply" '[ -n "$p_lock" ] && [ -n "$p_apply" ] && [ "$p_lock" -lt "$p_apply" ]'
+assert "pending: apply before unlock" '[ -n "$p_unlock" ] && [ "$p_apply" -lt "$p_unlock" ]'
+assert "decision template links the tasks folder" 'grep -qF "task: \"[[{{tasks_dir}}/{{task_id}}/spec]]\"" "$decision_template"'
+
 finish
