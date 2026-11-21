@@ -83,4 +83,15 @@ for needle in 'contract.before.md' '_archive/' 'handover/' 'decisions/' 'set-ver
   assert "deliver Contract files names $needle" 'printf "%s\n" "$files_part" | grep -qF -- "$needle"'
 done
 
+step6_line="$(printf '%s\n' "$contract_part" | grep -E '^6\. ')"
+step3_line="$(printf '%s\n' "$contract_part" | grep -E '^3\. ')"
+assert "execute: step 6 sets verified_commit when it fills the template" 'printf "%s\n" "$step6_line" | grep -qF "verified_commit" && printf "%s\n" "$step6_line" | grep -qF "templates/contract.md"'
+assert "execute: step 3 keeps the SHA for step 6" 'printf "%s\n" "$step3_line" | grep -qF "step 6"'
+assert "execute: new-project questions are not in Execute" '! printf "%s\n" "$contract_part" | grep -qF "Ask the user one question"'
+assert "confirmation: contract new-project detection and questions" 'grep -qF "has no source files outside the team docs" "$confirmation" && grep -qF "planned path" "$confirmation" && grep -qF "project: new" "$confirmation"'
+assert "deliver: decisions are checked before the first change" '[ "$(printf "%s\n" "$files_part" | grep -nF "already exists in decisions/" | head -1 | cut -d: -f1)" -lt "$(printf "%s\n" "$files_part" | grep -nF "cp \"\$contract_file\" \"\$task_dir/contract.before.md" | head -1 | cut -d: -f1)" ]'
+assert "deliver: contract.before.md is write-once" 'printf "%s\n" "$files_part" | grep -qF "[ -f \"\$task_dir/contract.before.md\" ] || cp"'
+assert "deliver: archive never moves over a file" 'printf "%s\n" "$files_part" | grep -qF "[ ! -e \"\$archive_dir/\$(basename \"\$old_file\")\" ] || continue" && printf "%s\n" "$files_part" | grep -qF ".archived"'
+assert "deliver: empty decisions.draft does not fail" '! printf "%s\n" "$files_part" | grep -qF "decisions.draft\"/* \"\$contract_folder"'
+
 finish

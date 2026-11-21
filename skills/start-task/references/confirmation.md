@@ -29,14 +29,15 @@ The gate never changes the contract file. Step 9 does that, after approval.
 2. Find the unclear parts.
    - For a rough idea, ask the user one question at a time. Send one question, then end the reply and wait. Ask until you can fill all seven sections.
    - For a written spec, ask only about the unclear parts, one question at a time. If nothing is unclear, go on.
+   - For a `contract` task, do these steps first. Propose `base_branch` from the branch that recent pull requests target, and ask the user to approve it. Run `git -C "<repository folder>" fetch origin "<base_branch>"`. If `origin/<base_branch>` has no source files outside the team docs, the project is new. Then take each section of `${CLAUDE_PLUGIN_ROOT}/templates/contract.md` in turn. Ask the user one question at a time until the section has content. End the reply after each question and wait. Every `sources` glob is a planned path. Step 4 writes the answers under `## Contract changes`. If the project has such files, it exists: Execute absorbs the code, the team docs, and the vault docs.
 3. Fix `work_type` in the frontmatter if the answers change it.
 4. If `approved_at` is set, set it to empty first: `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" approved_at ""`. A changed spec needs a new approval. Then write the body of `spec.md` with these seven headings. Each one has content.
    - `## Goal`: what the result must do.
-   - `## Scope`: what is in and what is out.
+   - `## Scope`: what is in and what is out. For a `contract` task, also write `base_branch: <branch>` and `project: new` or `project: existing`.
    - `## Verification plan`: for each check, its name, its pass rule, and the evidence it produces.
    - `## Non-undoable steps`: every step that needs the user's approval. Write `None` if there is none.
    - `## Deliver targets`: where the result goes, for example `new Obsidian note` or `open a pull request`. For a `contract` task, write `write the contract files`.
-   - `## Contract changes`: the planned contract changes, or `None`.
+   - `## Contract changes`: the planned contract changes, or `None`. For a new `contract` project, write one line for each section: `<section>: <content>; sources: <planned globs>`.
    - `## Decisions`: each choice between named options, with the options and the reason, or `None`.
 
 Status stays `drafting` until the page exists.

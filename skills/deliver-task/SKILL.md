@@ -82,21 +82,31 @@ Use this for the `write the contract files` target of a `contract` task. The dra
    trap 'bash "$scripts/contract-edit.sh" unlock "$contract_file"' EXIT
    verified_commit="$(fm_get "$task_dir/contract.draft.md" verified_commit)"
    [ -n "$verified_commit" ] || { echo "contract.draft.md has no verified_commit" >&2; exit 1; }
-   [ ! -f "$contract_file" ] || cp "$contract_file" "$task_dir/contract.before.md"
-   mkdir -p "$archive_dir" "$contract_folder/decisions"
-   for old_file in "$contract_folder"/*; do
-     case "$(basename "$old_file")" in handover|decisions|_archive|*.lock) continue ;; esac
-     mv "$old_file" "$archive_dir/"
+   for draft_decision in "$task_dir/decisions.draft"/*; do
+     [ -e "$draft_decision" ] || continue
+     [ ! -e "$contract_folder/decisions/$(basename "$draft_decision")" ] || cmp -s "$draft_decision" "$contract_folder/decisions/$(basename "$draft_decision")" || { echo "decision $(basename "$draft_decision") already exists in decisions/" >&2; exit 1; }
    done
+   [ ! -f "$contract_file" ] || [ -f "$task_dir/contract.before.md" ] || cp "$contract_file" "$task_dir/contract.before.md"
+   mkdir -p "$archive_dir" "$contract_folder/decisions"
+   if [ ! -e "$archive_dir/.archived" ]; then
+     for old_file in "$contract_folder"/*; do
+       case "$(basename "$old_file")" in handover|decisions|_archive|*.lock) continue ;; esac
+       [ ! -e "$archive_dir/$(basename "$old_file")" ] || continue
+       mv "$old_file" "$archive_dir/"
+     done
+     touch "$archive_dir/.archived"
+   fi
    cp "$task_dir/contract.draft.md" "$contract_file"
    cp "$task_dir/plan.draft.md" "$contract_folder/plan.md"
-   [ ! -d "$task_dir/decisions.draft" ] || cp "$task_dir/decisions.draft"/* "$contract_folder/decisions/"
+   for draft_decision in "$task_dir/decisions.draft"/*; do
+     [ ! -e "$draft_decision" ] || cp "$draft_decision" "$contract_folder/decisions/"
+   done
    bash "$scripts/contract-edit.sh" set-verified "$contract_file" "$verified_commit"
    ```
 
    Exit 4 means the lock is busy. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"deliver"`, `"target":"write the contract files"`, and the stderr text as the reason. Set `status` to `waiting-user` and stop. Any other non-zero exit means a command failed after the lock. The trap already ran `unlock`. Write the same `stop` line and stop item with the stderr text, and stop.
-3. The block leaves `handover/`, `decisions/`, and `_archive/` in place. It adds files to `decisions/`, and it adds `_archive/<task_id>/`. `verified_commit` is the code that Execute read, never a fresh `rev-parse`.
-4. Record the target: `{"target":"write the contract files","url":"<contract_file>","undo":"delete <contract_file>, <contract folder>/plan.md, and the decision files copied from decisions.draft/, then move the files in <contract folder>/_archive/<task_id>/ back to <contract folder>, then restore <contract_file> from <task folder>/contract.before.md"}`. If `contract.before.md` does not exist, leave out its part.
+3. The block is safe to run again after a failure. It checks the decision names before it changes anything. A decision file that is already there with the same text is a copy from an earlier run, not a clash. `contract.before.md` is written once. A file that is already in `_archive/<task_id>/` is never moved over. The `.archived` marker there says that the move is done. The block leaves `handover/`, `decisions/`, and `_archive/` in place. It adds files to `decisions/`, and it adds `_archive/<task_id>/`. `verified_commit` is the code that Execute read, never a fresh `rev-parse`.
+4. Record the target: `{"target":"write the contract files","url":"<contract_file>","undo":"delete <contract_file>, <contract folder>/plan.md, and the decision files copied from decisions.draft/, then move the files (not `.archived`) in <contract folder>/_archive/<task_id>/ back to <contract folder>, then restore <contract_file> from <task folder>/contract.before.md"}`. If `contract.before.md` does not exist, leave out its part.
 
 ## Contract write-back
 
