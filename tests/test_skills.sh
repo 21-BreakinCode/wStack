@@ -3,7 +3,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$repo_root/tests/_assert.sh"
 
-expected_skills="build-review-page capture-evidence deliver-task run-retro start-task"
+expected_skills="build-review-page capture-evidence create-handover deliver-task init-org init-service run-retro start-task wrap-up-handovers"
 actual_skills="$(ls "$repo_root/skills" | sort | tr '\n' ' ' | sed 's/ $//')"
 assert "skill folders" '[ "$actual_skills" = "$expected_skills" ]'
 
@@ -24,4 +24,12 @@ old_status=0
 old_hits="$(git -C "$repo_root" grep -lE "$old_names" -- . ':!CHANGELOG.md' ':!docs/decisions.md' ':!docs/superpowers' ':!tests/test_skills.sh')" || old_status=$?
 assert "old-name search ran" '[ "$old_status" -le 1 ]'
 assert "no old skill names in current files" '[ -z "$old_hits" ]'
+for skill in create-handover init-org init-service run-retro start-task wrap-up-handovers; do
+  assert "$skill is user-invoked" 'grep -qx "disable-model-invocation: true" "$repo_root/skills/$skill/SKILL.md"'
+done
+for skill in build-review-page capture-evidence deliver-task; do
+  assert "$skill is a helper" 'grep -qx "user-invocable: false" "$repo_root/skills/$skill/SKILL.md"'
+done
+assert "no obsidian-kit names in skills" '! grep -rqE "obsidian-kit:|OBSIDIAN_KIT_|resolve_via_handover" "$repo_root/skills"'
+assert "init-service uses the exclude script" 'grep -q "scripts/handover/ensure-exclude.sh" "$repo_root/skills/init-service/SKILL.md"'
 finish
