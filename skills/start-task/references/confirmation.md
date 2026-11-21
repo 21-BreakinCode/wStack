@@ -35,7 +35,7 @@ The gate never changes the contract file. Step 9 does that, after approval.
    - `## Scope`: what is in and what is out.
    - `## Verification plan`: for each check, its name, its pass rule, and the evidence it produces.
    - `## Non-undoable steps`: every step that needs the user's approval. Write `None` if there is none.
-   - `## Deliver targets`: where the result goes, for example `new Obsidian note` or `open a pull request`.
+   - `## Deliver targets`: where the result goes, for example `new Obsidian note` or `open a pull request`. For a `contract` task, write `write the contract files`.
    - `## Contract changes`: the planned contract changes, or `None`.
    - `## Decisions`: each choice between named options, with the options and the reason, or `None`.
 

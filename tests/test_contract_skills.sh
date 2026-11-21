@@ -66,4 +66,21 @@ assert "deliver: undo leaves out a part without names" 'grep -qF "Leave out the 
 assert "deliver: apply exit 2 has a way out" 'grep -qF "the user can say to drop the item" "$deliver"'
 assert "deliver: None patch still writes decisions" 'grep -qF "Decisions do not depend on the patch" "$deliver"'
 
+execute="$repo_root/skills/start-task/references/execute.md"
+launch="$repo_root/skills/start-task/SKILL.md"
+contract_part="$(sed -n '/^## Contract work/,/^## Learning tasks/p' "$execute")"
+assert "execute.md: Contract work after Thinking and ops work" '[ -n "$(grep -nxF "## Contract work" "$execute" | head -1)" ] && [ "$(grep -nxF "## Thinking and ops work" "$execute" | head -1 | cut -d: -f1)" -lt "$(grep -nxF "## Contract work" "$execute" | head -1 | cut -d: -f1)" ]'
+for needle in 'contract.draft.md' 'plan.draft.md' 'decisions.draft/' 'templates/contract.md' 'Open questions' \
+  'fetch origin' 'rev-parse' 'verified_commit' 'next-decision-id' 'contract-path.sh' 'repository not mapped: run /wstack:init-service'; do
+  assert "execute.md Contract work names $needle" 'printf "%s\n" "$contract_part" | grep -qF -- "$needle"'
+done
+assert "verify.md names file:line for contract work" 'grep -qF "file:line" "$verify"'
+assert "SKILL.md launch names contract work type" 'grep -qF "\`contract\`" "$launch"'
+
+files_part="$(sed -n '/^### Contract files/,/^## /p' "$deliver")"
+assert "deliver has Contract files heading" 'grep -qxF "### Contract files" "$deliver"'
+for needle in 'contract.before.md' '_archive/' 'handover/' 'decisions/' 'set-verified' 'contract.draft.md' 'set -e' "trap 'bash" 'unlock' 'fm_get' 'contract-path.sh'; do
+  assert "deliver Contract files names $needle" 'printf "%s\n" "$files_part" | grep -qF -- "$needle"'
+done
+
 finish

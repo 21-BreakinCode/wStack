@@ -66,6 +66,24 @@ When a try fails, write a `retry` line, read `retries` from `run-log.md`, add 1,
 
 Write the result as a new note in `$vault`. Never overwrite an existing note. If the name is taken, add `-2`, `-3`, and so on. Undo means: delete that note.
 
+## Contract work
+
+Use this for a `contract` task. Execute writes drafts only, in the task folder. No file in the contract folder changes before Deliver.
+
+1. Read `repo`, `workspace_cwd`, and `base_branch` from the spec. The user approved `base_branch` with the spec. `<repository folder>` is `workspace_cwd`.
+2. Find the contract folder: `bash "$scripts/contract-path.sh" --vault "$vault" "<repository folder>"`. It prints the contract path. The contract folder is the folder of that path. The file can be missing. If it exits 1, write a `stop` line and append a stop item with the reason `repository not mapped: run /wstack:init-service`, as "Stop items" in `SKILL.md` says. Set `status` to `waiting-user` and stop. If it exits 2, stop the same way with the stderr text as the reason.
+3. Run `git -C "<repository folder>" fetch origin "<base_branch>"`. Run `git -C "<repository folder>" rev-parse "origin/<base_branch>"`. Write the output as `verified_commit` in the frontmatter of `contract.draft.md`. It is the code that this task absorbs from. Read the code with `git -C "<repository folder>" ls-tree -r --name-only "origin/<base_branch>"` and `git -C "<repository folder>" show "origin/<base_branch>:<path>"`. Never read the local `HEAD`.
+4. If `origin/<base_branch>` has no source files outside the team docs, the project is new. Take each section of `${CLAUDE_PLUGIN_ROOT}/templates/contract.md` in turn. Ask the user one question at a time until the section has content. Write every `sources` glob as a planned path. Go to step 6.
+5. Otherwise the project exists. Read the code, the team docs, and the vault docs in the contract folder (for example `PRD.md`, `DECISIONS.md`, or `docs/`). Sort each fact:
+   - The code shows it is true: it goes into the contract.
+   - It is a planned item that the code does not show yet: it goes into `plan.draft.md`. Use one `##` heading for each item, as `${CLAUDE_PLUGIN_ROOT}/templates/plan.md` says.
+   - It is a choice in a decisions file: it becomes one file in `decisions.draft/`.
+   - The code contradicts it: it goes under `## Open questions` in the contract.
+6. Write `contract.draft.md` from `${CLAUDE_PLUGIN_ROOT}/templates/contract.md`. Fill `app_name`, `repo`, `base_branch`, and `tags`. Put a `<!-- sources: a, b -->` comment on the line after each code section heading. `Consumers`, `Gotchas`, and `Open questions` have no sources comment. List each team doc under `## Team docs` as `- @<repo-relative path>`. State only what is true now, in the present tense.
+7. Write `plan.draft.md` from `${CLAUDE_PLUGIN_ROOT}/templates/plan.md`. For a new project with no planned item, write the template only.
+8. Write each decision to `decisions.draft/<id>-<slug>.md` from `${CLAUDE_PLUGIN_ROOT}/templates/decision.md`. Fill `{{tasks_dir}}` from `$tasks_dir`. Get the first `<id>` from `bash "$scripts/contract-edit.sh" next-decision-id "<contract folder>/decisions"`. Number the other files after it, so a copy into `decisions/` never overwrites a decision. If there is no decision file, do not make `decisions.draft/`. For a new project, write one file, `<id>-baseline.md`, that records the baseline choices from the answers.
+9. Vault docs that you absorbed stay where they are. Deliver moves them.
+
 ## Learning tasks
 
 - Input: find and prepare material for the user to read, watch, or study.

@@ -50,13 +50,13 @@ In this file `$vault` is the vault path, `$tasks_dir` is the tasks folder, and `
 The argument is a rough idea. Run these steps in order.
 
 1. Run `bash "$scripts/preflight.sh" base`. If it exits 1, print its output and stop. The output holds the install commands.
-2. Pick the work type: `code`, `ops`, `thinking`, `blog`, or `video`.
+2. Pick the work type: `code`, `ops`, `thinking`, `blog`, `video`, or `contract`. If the idea asks to set up, create, or rebuild a service contract, pick `contract`.
 3. Pick the slug. Write 2 to 4 English words from the idea, lowercase, joined by hyphens. It starts with a letter, holds only `a-z`, `0-9`, and `-`, and has 32 characters at most. For an idea in another language, use English words for its meaning.
 4. Run `bash "$scripts/free-agent-slug.sh" <slug>`. Use the slug it prints. It adds `-2`, `-3`, and so on when a herdr agent has the name.
-5. After steps 3 and 4, pick the repository when the type is `code`. Use the git repository of the current directory, or a repository that the idea names. Take the path from `git rev-parse --show-toplevel` and `owner/repo` from `gh repo view --json nameWithOwner -q .nameWithOwner`. If the task is code and no repository exists, ask the user one question and stop until they answer.
+5. After steps 3 and 4, pick the repository for a `code` or `contract` task. Use the git repository of the current directory, or a repository that the idea names. Take the path from `git rev-parse --show-toplevel` and `owner/repo` from `gh repo view --json nameWithOwner -q .nameWithOwner`. If the task is `code` or `contract` and no repository exists, ask the user one question and stop until they answer.
 6. Set mobile when the arguments contain `--mobile` or the word "mobile". Remove `--mobile` from the idea text.
 7. Run `bash "$scripts/new-task-folder.sh" --vault "$vault" --tasks-dir "$tasks_dir" --slug <slug> --work-type <type> [--repo owner/repo] [--mobile] --idea '<idea text>'`. The idea text is the arguments without `--mobile`. Put it in single quotes, and write each `'` in it as `'\''`. The last output line is `$task_dir`. The task id is the folder name.
-8. Run `bash "$scripts/launch-task.sh" --task-dir "$task_dir" [--repo-path <path>] [--mobile]`. Add `--repo-path` only for a code task with a repository. Act on the exit code:
+8. Run `bash "$scripts/launch-task.sh" --task-dir "$task_dir" [--repo-path <path>] [--mobile]`. Add `--repo-path` only for a `code` or `contract` task with a repository. Act on the exit code:
 
 | Exit | Meaning | Action |
 |---|---|---|

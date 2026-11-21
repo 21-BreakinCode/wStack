@@ -30,6 +30,7 @@ Read `## Deliver targets` in the spec. Match each line to a row of this table. T
 | thinking, ops | new Obsidian note | yes | no |
 | blog | draft on the blog platform | yes | no |
 | blog | publish | no | yes |
+| contract | write the contract files | yes | no |
 | video | rendered file in a folder | yes | no |
 | video | upload to a platform | no | yes |
 
@@ -61,6 +62,41 @@ Execute already wrote the note in `$vault`. Never write it again. Record it: `{"
 ### Blog draft and rendered video file
 
 Make the draft or the file. Record its URL or path and the undo, which is to delete the draft or the file.
+
+### Contract files
+
+Use this for the `write the contract files` target of a `contract` task. The drafts are in `$task_dir`: `contract.draft.md`, `plan.draft.md`, and `decisions.draft/`.
+
+1. Find the contract path: `bash "$scripts/contract-path.sh" --vault "$vault" "<workspace_cwd>"`. If it exits 1, stop as in "Stop" with the reason `repository not mapped: run /wstack:init-service`. If it exits 2, stop as in "Stop" with the stderr text. Otherwise `<contract_file>` is the path. `<contract folder>` is its folder.
+2. Write the files in one Bash call. Write the real values for the placeholders:
+
+   ```bash
+   set -e
+   scripts="${CLAUDE_PLUGIN_ROOT}/scripts"
+   task_dir="<task folder>"
+   contract_file="<contract_file>"
+   source "$scripts/lib/frontmatter.sh"
+   contract_folder="$(dirname "$contract_file")"
+   archive_dir="$contract_folder/_archive/<task_id>"
+   bash "$scripts/contract-edit.sh" lock "$contract_file"
+   trap 'bash "$scripts/contract-edit.sh" unlock "$contract_file"' EXIT
+   verified_commit="$(fm_get "$task_dir/contract.draft.md" verified_commit)"
+   [ -n "$verified_commit" ] || { echo "contract.draft.md has no verified_commit" >&2; exit 1; }
+   [ ! -f "$contract_file" ] || cp "$contract_file" "$task_dir/contract.before.md"
+   mkdir -p "$archive_dir" "$contract_folder/decisions"
+   for old_file in "$contract_folder"/*; do
+     case "$(basename "$old_file")" in handover|decisions|_archive|*.lock) continue ;; esac
+     mv "$old_file" "$archive_dir/"
+   done
+   cp "$task_dir/contract.draft.md" "$contract_file"
+   cp "$task_dir/plan.draft.md" "$contract_folder/plan.md"
+   [ ! -d "$task_dir/decisions.draft" ] || cp "$task_dir/decisions.draft"/* "$contract_folder/decisions/"
+   bash "$scripts/contract-edit.sh" set-verified "$contract_file" "$verified_commit"
+   ```
+
+   Exit 4 means the lock is busy. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"deliver"`, `"target":"write the contract files"`, and the stderr text as the reason. Set `status` to `waiting-user` and stop. Any other non-zero exit means a command failed after the lock. The trap already ran `unlock`. Write the same `stop` line and stop item with the stderr text, and stop.
+3. The block leaves `handover/`, `decisions/`, and `_archive/` in place. It adds files to `decisions/`, and it adds `_archive/<task_id>/`. `verified_commit` is the code that Execute read, never a fresh `rev-parse`.
+4. Record the target: `{"target":"write the contract files","url":"<contract_file>","undo":"delete <contract_file>, <contract folder>/plan.md, and the decision files copied from decisions.draft/, then move the files in <contract folder>/_archive/<task_id>/ back to <contract folder>, then restore <contract_file> from <task folder>/contract.before.md"}`. If `contract.before.md` does not exist, leave out its part.
 
 ## Contract write-back
 
