@@ -11,11 +11,13 @@ One-time setup per ORG. Creates `handover_handler__initiation.md` in `$LifeOS/01
 
 ## Vault location
 
-Resolve the vault path as the first bullet of "Config" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/SKILL.md` says. If it is not set, ask the user for it and stop. Then run:
+Resolve the vault path. Take the first value that is set and is not a literal `${user_config...}` text, in this order: the shell variable `WSTACK_VAULT_PATH`, then `EVAL_WSTACK_VAULT_PATH`, then `${user_config.vault_path}`. Print the two shell variables in one call:
 
-```bash
-export LIFEOS_ROOT="$vault"
+```sh
+printf '%s\n' "VAULT_PATH WSTACK=${WSTACK_VAULT_PATH:-} EVAL=${EVAL_WSTACK_VAULT_PATH:-}"
 ```
+
+If no value is set, ask the user for it and stop. If the value is a relative path, make it absolute with `cd <value> && pwd`. Each Bash call is a new shell. Start each Bash call that needs the vault with `vault=<the absolute path>; export LIFEOS_ROOT="$vault"`.
 
 ## Flow
 

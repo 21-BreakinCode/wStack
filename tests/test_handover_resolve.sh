@@ -69,4 +69,15 @@ assert "service not mapped" '[ "$service_status" = 1 ]'
 
 service_rc "$HOME/Projects/Appier/z" Nope
 assert "initiation missing" '[ "$service_status" = 2 ]'
+
+set +e; (cd "$HOME/other/y" && env -u LIFEOS_ROOT bash "$org_script" >/dev/null 2>&1); unset_org_status=$?
+env -u LIFEOS_ROOT bash "$service_script" "$HOME/other/y" Appier >/dev/null 2>&1; unset_service_status=$?; set -e
+assert "resolve-org LIFEOS_ROOT unset exits 3" '[ "$unset_org_status" = 3 ]'
+assert "resolve-service LIFEOS_ROOT unset exits 3" '[ "$unset_service_status" = 3 ]'
+
+parse_script="$repo_root/scripts/handover/parse-mapping.sh"
+empty_rows="$(bash "$parse_script" "$fixtures/initiation-empty.md")"
+appier_rows="$(bash "$parse_script" "$fixtures/initiation-appier.md" | wc -l | tr -d ' ')"
+assert "parse-mapping on empty table" '[ -z "$empty_rows" ]'
+assert "parse-mapping on appier fixture" '[ "$appier_rows" = 2 ]'
 finish

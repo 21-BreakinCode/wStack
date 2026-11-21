@@ -11,11 +11,13 @@ One-time per repo. It resolves the current org, and finds or appends the service
 
 ## Vault location
 
-Resolve the vault path as the first bullet of "Config" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/SKILL.md` says. If it is not set, ask the user for it and stop. Then run:
+Resolve the vault path. Take the first value that is set and is not a literal `${user_config...}` text, in this order: the shell variable `WSTACK_VAULT_PATH`, then `EVAL_WSTACK_VAULT_PATH`, then `${user_config.vault_path}`. Print the two shell variables in one call:
 
-```bash
-export LIFEOS_ROOT="$vault"
+```sh
+printf '%s\n' "VAULT_PATH WSTACK=${WSTACK_VAULT_PATH:-} EVAL=${EVAL_WSTACK_VAULT_PATH:-}"
 ```
+
+If no value is set, ask the user for it and stop. If the value is a relative path, make it absolute with `cd <value> && pwd`. Each Bash call is a new shell. Start each Bash call that needs the vault with `vault=<the absolute path>; export LIFEOS_ROOT="$vault"`.
 
 ## Flow
 
@@ -52,8 +54,15 @@ RESULT=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/resolve-service.sh" "$PWD"
 
 ### Phase 4 — Collect new mapping row values
 
+Find the repository root and the main checkout. They differ in a worktree and in a subfolder:
+
+```bash
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+MAIN_CHECKOUT="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+```
+
 Compute defaults:
-- `DEFAULT_APP_NAME` = the current folder name, used verbatim in kebab-case (for example, `creative-studio` → `creative-studio`, `bust-backend` → `bust-backend`). If the folder name is not kebab-case, lowercase it and replace `_`, spaces, and camelCase boundaries with `-`.
+- `DEFAULT_APP_NAME` = `basename "$MAIN_CHECKOUT"`, used verbatim in kebab-case, used verbatim in kebab-case (for example, `creative-studio` → `creative-studio`, `bust-backend` → `bust-backend`). If the folder name is not kebab-case, lowercase it and replace `_`, spaces, and camelCase boundaries with `-`.
 - `DEFAULT_LIFEOS_SUBPATH` = `Services/$DEFAULT_APP_NAME`.
 
 Ask with `AskUserQuestion` (batched, 2 questions in one call). The second question uses `$DEFAULT_APP_NAME`, not the answer to the first, because batched questions resolve at the same time:
@@ -63,7 +72,7 @@ Ask with `AskUserQuestion` (batched, 2 questions in one call). The second questi
 
 For an "Other..." answer, follow up with a free-form `AskUserQuestion`. If the user picked a non-default `app_name` in question 1 but accepted the default in question 2 (`Services/$DEFAULT_APP_NAME`), ask once more: "Use `Services/<app_name>` instead?" Adjust the answer to match.
 
-A new row for the `## Service Mapping` table in `$INIT` looks like this:
+Write the row repo_path in the `$HOME/...` form when `$MAIN_CHECKOUT` starts with `$HOME`. A new row for the `## Service Mapping` table in `$INIT` looks like this:
 
 ```
 | new-app | $HOME/Projects/Appier/appier/new-app | Services/new-app |
@@ -74,7 +83,7 @@ Single-space padding is enough. Obsidian tables tolerate it.
 ### Phase 4a — Confirm with user
 
 `AskUserQuestion`:
-- `question`: "Append this row to $INIT and create $vault/01Project/$ORG/$LIFEOS_SUBPATH/handover/?\n| $APP_NAME | $PWD | $LIFEOS_SUBPATH |"
+- `question`: "Append this row to $INIT and create $vault/01Project/$ORG/$LIFEOS_SUBPATH/handover/?\n| $APP_NAME | $MAIN_CHECKOUT | $LIFEOS_SUBPATH |"
 - `options`:
   - "Yes, write it"
   - "No, abort"
@@ -95,7 +104,7 @@ mkdir -p "$vault/01Project/$ORG/$LIFEOS_SUBPATH/handover"
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/ensure-symlink.sh" \
-    "$PWD/handover" \
+    "$REPO_ROOT/handover" \
     "$vault/01Project/$ORG/$LIFEOS_SUBPATH/handover"
 EXIT=$?
 ```
@@ -108,7 +117,7 @@ Handle exit codes:
 
 ### Phase 7 — Local exclude
 
-Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/ensure-exclude.sh" "$PWD"`. Report its output.
+Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/ensure-exclude.sh" "$REPO_ROOT"`. Report its output.
 
 ### Phase 8 — Report
 
@@ -117,7 +126,7 @@ Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/ensure-exclude.sh" "$PWD"`. Re
     ORG:            $ORG
     APP_NAME:       $APP_NAME
     LIFEOS path:    $vault/01Project/$ORG/$LIFEOS_SUBPATH/handover/
-    Symlink:        $PWD/handover -> (above)
+    Symlink:        $REPO_ROOT/handover -> (above)
     Local exclude:  /handover (added | already present)
 
 Next: /wstack:create-handover <topic>

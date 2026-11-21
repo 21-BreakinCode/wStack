@@ -45,6 +45,11 @@ new_repo; mkdir -p "$repo/src/handover"; echo x > "$repo/src/handover/keep.txt"
 run "$repo"
 assert "anchored entry" '[ "$out" = added ] && git -C "$repo" check-ignore -q handover && ! git -C "$repo" check-ignore -q src/handover/keep.txt'
 
+new_repo; mkdir "$repo/sub"
+run "$repo/sub"; first_out="$out"
+run "$repo/sub"
+assert "subfolder caller" '[ "$first_out" = added ] && [ "$out" = "already present" ] && [ "$(exclude_count "$repo")" = 1 ] && git -C "$repo" check-ignore -q handover'
+
 mkdir "$work_dir/plain"
 run "$work_dir/plain"
 assert "not a repository" '[ "$rc" = 2 ]'

@@ -8,7 +8,8 @@
 
 set -euo pipefail
 
-LIFEOS="${LIFEOS_ROOT:?resolve-org.sh: LIFEOS_ROOT not set}"
+[ -n "${LIFEOS_ROOT:-}" ] || { echo "resolve-org.sh: LIFEOS_ROOT not set" >&2; exit 3; }
+LIFEOS="$LIFEOS_ROOT"
 PROJECT_ROOT="$LIFEOS/01Project"
 [ -d "$PROJECT_ROOT" ] || exit 3
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

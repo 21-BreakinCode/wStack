@@ -2,6 +2,7 @@
 set -euo pipefail
 repo_dir="${1:?usage: ensure-exclude.sh <repo_dir>}"
 git -C "$repo_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "not a git work tree: $repo_dir" >&2; exit 2; }
+repo_dir="$(git -C "$repo_dir" rev-parse --show-toplevel)"
 if git -C "$repo_dir" check-ignore -q --no-index handover; then
   echo "already present"
   exit 0

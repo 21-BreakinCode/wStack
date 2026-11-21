@@ -18,7 +18,8 @@ set -euo pipefail
 cwd="${1:?usage: resolve-service.sh <cwd> <org>}"
 org="${2:?usage: resolve-service.sh <cwd> <org>}"
 
-LIFEOS="${LIFEOS_ROOT:?resolve-service.sh: LIFEOS_ROOT not set}"
+[ -n "${LIFEOS_ROOT:-}" ] || { echo "resolve-service.sh: LIFEOS_ROOT not set" >&2; exit 3; }
+LIFEOS="$LIFEOS_ROOT"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$LIFEOS/01Project"
 [ -d "$PROJECT_ROOT" ] || exit 3

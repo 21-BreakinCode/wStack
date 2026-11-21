@@ -1,6 +1,6 @@
 ---
 name: create-handover
-description: "Create a well-formed handover document under ./handover/ (= LifeOS via symlink) seeded from the current conversation context."
+description: "Create a well-formed handover document in the vault handover folder of the current service, seeded from the current conversation context."
 allowed-tools: ["Bash", "Read", "Write", "AskUserQuestion"]
 argument-hint: "<topic>"
 disable-model-invocation: true
@@ -8,15 +8,17 @@ disable-model-invocation: true
 
 # /wstack:create-handover
 
-Create a new handover document. The topic argument becomes the slug. Frontmatter, filename, and a seed body are filled in automatically. The new file lands under the canonical LifeOS path via the `./handover` symlink.
+Create a new handover document. The topic argument becomes the slug. Frontmatter, filename, and a seed body are filled in automatically. The new file lands in the vault handover folder of the service. It does not depend on the `./handover` symlink, so it works in a worktree.
 
 ## Vault location
 
-Resolve the vault path as the first bullet of "Config" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/SKILL.md` says. If it is not set, ask the user for it and stop. Then run:
+Resolve the vault path. Take the first value that is set and is not a literal `${user_config...}` text, in this order: the shell variable `WSTACK_VAULT_PATH`, then `EVAL_WSTACK_VAULT_PATH`, then `${user_config.vault_path}`. Print the two shell variables in one call:
 
-```bash
-export LIFEOS_ROOT="$vault"
+```sh
+printf '%s\n' "VAULT_PATH WSTACK=${WSTACK_VAULT_PATH:-} EVAL=${EVAL_WSTACK_VAULT_PATH:-}"
 ```
+
+If no value is set, ask the user for it and stop. If the value is a relative path, make it absolute with `cd <value> && pwd`. Each Bash call is a new shell. Start each Bash call that needs the vault with `vault=<the absolute path>; export LIFEOS_ROOT="$vault"`.
 
 ## Flow
 
@@ -26,6 +28,7 @@ export LIFEOS_ROOT="$vault"
 ORG=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/resolve-org.sh") || { echo "Could not resolve ORG"; exit 1; }
 RESULT=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/resolve-service.sh" "$PWD" "$ORG") || { echo "Could not resolve service"; exit 1; }
 APP_NAME="${RESULT%%|*}"
+LIFEOS_SUBPATH="${RESULT#*|}"
 ```
 
 ### Phase 2 — Build filename
@@ -131,7 +134,8 @@ Read the files above, confirm you understand the state, then proceed with the ne
 ### Phase 4 — Write
 
 ```bash
-TARGET="./handover/$FILENAME"
+TARGET="$vault/01Project/$ORG/$LIFEOS_SUBPATH/handover/$FILENAME"
+[ -d "$(dirname "$TARGET")" ] || { echo "Run /wstack:init-service first"; exit 1; }
 [ -e "$TARGET" ] && { echo "File already exists: $TARGET"; exit 1; }
 ```
 
@@ -142,7 +146,6 @@ Use `Write` to create the file at `$TARGET`.
 Print:
 ```
 Created: $TARGET
-  Resolved to LifeOS: $(readlink -f "$TARGET")
 
 Open it in Obsidian to refine TL;DR / To-Be.
 ```
