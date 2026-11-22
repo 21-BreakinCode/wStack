@@ -298,6 +298,13 @@ for shell in $test_shells; do
   run_block "$(retro_block "$retro_dir" '["Abilities","Interfaces"]' $'Abilities\nInterfaces')" "$shell"
   assert "$shell retro: all stale sections chosen, verified_commit moves ($out)" '[ "$rc" = 0 ] && [ "$(fm_get "$CONTRACT" verified_commit)" = checked123 ] && grep -qF "Retro abilities text." "$CONTRACT"'
   assert "$shell retro: the second run keeps the first before copy" 'cmp -s "$retro_dir/2026-W47.contract-before.md" "$world_dir/contract.orig"'
+  echo "$shell: run-retro all with a stale section that has no patch block"
+  setup_world "retro-all-$shell"
+  retro_dir="$VAULT/Retros"; mkdir -p "$retro_dir"
+  printf '## Interfaces\n<!-- sources: api/** -->\nOnly interfaces.\n' >"$retro_dir/2026-W47.contract-patch.md"
+  run_block "$(retro_block "$retro_dir" '["Abilities","Interfaces"]' 'Interfaces')" "$shell"
+  assert "$shell retro all: applies the block it has, verified_commit stays, names the section left ($out)" '[ "$rc" = 0 ] && section_of "$CONTRACT" Interfaces | grep -qF "Only interfaces." && [ "$(fm_get "$CONTRACT" verified_commit)" = "$FIRST_COMMIT" ] && printf "%s\n" "$out" | grep -qxF "Abilities"'
+  setup_world "retro-lock-$shell"
   mkdir "$CONTRACT.lock"
   run_block "$(retro_block "$retro_dir" '[]' 'Interfaces')" "$shell"
   assert "$shell retro: a busy lock exits 4" '[ "$rc" = 4 ]'
