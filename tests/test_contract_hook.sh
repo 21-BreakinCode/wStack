@@ -37,6 +37,8 @@ out="$(hook PostToolUse "$REPO" "git pullx")"
 assert "A1-12 git pullx does not match" '[ -z "$out" ]'
 out="$(hook PostToolUse "$REPO" 'echo "git pull"')"
 assert "an echoed git pull does not match" '[ -z "$out" ]'
+out="$(hook PostToolUse "$REPO" 'echo "x/git pull"')"
+assert "a quoted path before git pull does not match" '[ -z "$out" ]'
 
 space_repo="$work_dir/with space"; cp -R "$REPO" "$space_repo"
 out="$(hook SessionStart "$space_repo" "")"

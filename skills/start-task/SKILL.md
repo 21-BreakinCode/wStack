@@ -60,7 +60,7 @@ The argument is a rough idea. Run these steps in order.
 | Exit | Meaning | Action |
 |---|---|---|
 | 0 | launched | Print the task id, the workspace label, and the Remote Control name (both are the slug). Stop. The new session runs the work mode. |
-| 3 | not inside herdr | For a `code` task, read `workspace_cwd` from `$task_dir/spec.md`. It is a new worktree. Tell the user to run `cd "<workspace_cwd>" && claude "/wstack:start-task --task <task_id>"`. Stop, and do not run work mode in this session. For any other work type, run work mode in this session for `$task_dir`. |
+| 3 | not inside herdr | For a `code` task, read `workspace_cwd` from `$task_dir/spec.md`. It is a new worktree. Tell the user to run `cd "<workspace_cwd>" && claude "/wstack:start-task --task <task_id>"`. Stop, and do not run work mode in this session. For any other work type, run work mode in this session for `$task_dir`. `/wstack:init-service` hands a `contract` task off in the same way: it reads this Launch mode by file and handles exit 3 itself, so it never runs work mode. |
 | 4 | agent name taken (a race) | Tell the user that the name is taken. Stop. |
 | 5 | the agent did not start after the workspace was made | Print the workspace id and the cleanup commands from the script's stderr. Offer to resume with `bash "$scripts/resume-task.sh" --task-dir "$task_dir"`. Stop. |
 | 6 | herdr or git could not create the workspace or worktree | Print the error from stderr. Stop. |

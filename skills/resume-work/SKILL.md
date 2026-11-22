@@ -10,6 +10,8 @@ Usage: `/wstack:resume-work [<note path>]`. It works in any Claude Code session.
 
 ## Config
 
+If another skill read this file by path, `${CLAUDE_PLUGIN_ROOT}` in it is not replaced. Reuse the `$vault` and `$scripts` that the calling skill resolved, and skip the rest of this section.
+
 Resolve each value in this order. Take the first one that is set and is not a literal `${user_config...}` text.
 
 - Vault path: the shell variable `WSTACK_VAULT_PATH`, then `EVAL_WSTACK_VAULT_PATH`, then `${user_config.vault_path}`.
@@ -27,7 +29,7 @@ If a value is a relative path, make it absolute with `cd <value> && pwd`. If no 
 
 ## Find the note
 
-1. With a note path, use it. A note named `pause.md` that has a `spec.md` in its folder is a task note. Any other note is a session note.
+1. With a note path, use it. A note named `pause.md` that has a `spec.md` in its folder is a task note. Any other note is a session note. For a task note, set `$task_dir` to the folder of `pause.md`. The task id is the name of that folder.
 2. Without an argument, look for both kinds. Run `bash "$scripts/list-open-tasks.sh" --vault "$vault" --tasks-dir "$tasks_dir"`. For a task note, check that exactly one `workspace_cwd` is the current directory (`pwd`) and that its folder has a `pause.md`. Run `bash "$scripts/list-pause-notes.sh" "$(pwd)"`. It prints the session notes of the current folder, newest first.
 3. If only one kind exists, use it. For session notes, use the first line. If it printed more than one line, tell the user which note you use and list the others.
 4. If both kinds exist, list them and ask the user which one to resume.
@@ -45,16 +47,16 @@ Show the user the goal, done, in progress, and next steps of the note. Read each
 
 ## Step 3: mark the note as used
 
-- Task note: read the status with `(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" status)`. If the status is `paused`, restore the old status. If the status is any other value, leave it alone. Then clear `paused_from` and rename the note, so the history stays and the next pause starts clean.
+- Task note: read `paused_from` first, with `(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" paused_from)`. Does the status read `paused` while `paused_from` is empty? Then ask the user for the status now, before the block below runs. Start the block with `user_status=<answer>`. Read the status with `(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" status)`. If the status is `paused`, restore the old status. If the status is any other value, leave it alone. Then clear `paused_from` and rename the note, so the history stays and the next pause starts clean.
 
   ```sh
-  old_status="$(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" paused_from)"
+  old_status="${user_status:-$(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" paused_from)}"
   bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" status "$old_status"
   bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" paused_from ""
   mv "$task_dir/pause.md" "$task_dir/pause-<time>.md"
   ```
 
-  `<time>` is the `time` field of the note with `:` replaced by `-`. If the status is not `paused`, tell the user, change nothing, and still rename the note. If `paused_from` is empty, ask the user for the status.
+  `<time>` is the `time` field of the note with `:` replaced by `-`. If the status is not `paused`, tell the user, change nothing, and still rename the note.
 - Session note: rename it to `<name>.resumed-<time>.md` with `mv`, so the next resume does not pick it again. `<time>` comes from `date +%Y%m%d-%H%M%S`.
 
 ## Step 4: continue

@@ -123,7 +123,7 @@ Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/ensure-exclude.sh" "$REPO_ROOT
 
 ### Phase 8 — Service contract
 
-Run this phase for a mapped repo, also one that was mapped before this run. It runs after Phase 7, so it sees the row that Phase 5 wrote. Set `vault`, `LIFEOS_ROOT`, and `REPO_ROOT` again in this Bash call.
+Run this phase for a mapped repo, also one that was mapped before this run. It runs after Phase 7, so it sees the row that Phase 5 wrote. Set `vault` and `REPO_ROOT` again in this Bash call.
 
 ```bash
 contract_file=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/contract-path.sh" --vault "$vault" "$REPO_ROOT") && path_exit=0 || path_exit=$?

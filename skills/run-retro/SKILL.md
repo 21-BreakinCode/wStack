@@ -45,8 +45,8 @@ None yet.
 6. Run `bash "$scripts/render-page.sh" "$retro_dir/$retro_name.md" "$retro_dir/$retro_name.html"`.
    - Exit 0 or 1: the page exists. Exit 1 means the page is wider than 375 px. Tell the user the width.
    - Exit 2: print the stderr of the script as it is. Keep the `.md` file. Go on.
-7. Tell the user the path of the page (or of the `.md` file when the render failed). List each proposal with its number and title. Then run "Contract drift" below. With `No proposals.` and no stale section from the drift part, stop here.
-8. Ask which proposals to apply, by number. If the drift part found stale sections, also ask which contract sections to update: names, `all`, or `none`. Put both in one question. A reply with no section part means `none`. With `No proposals.`, ask only for the contract sections. End the reply. Wait.
+7. Tell the user the path of the page (or of the `.md` file when the render failed). List each proposal with its number and title. Then run "Contract drift" below. With `No proposals.` and no stale section that has a patch block, stop here.
+8. Ask which proposals to apply, by number. If at least one stale section has a patch block, also ask which contract sections to update: names, `all`, or `none`. Put both in one question. A reply with no section part means `none`. With `No proposals.`, ask only for the contract sections. End the reply. Wait.
 
 ## Contract drift
 
@@ -55,12 +55,12 @@ This part runs after step 7 and before step 8. It never stops the retro. Every o
 D1. Run `git rev-parse --show-toplevel`. It is `$repo`. If it fails, say `Contract: not a git project` and skip.
 D2. Run `contract_file="$(bash "$scripts/contract-path.sh" --vault "$vault" "$repo")"`.
    - Exit 1: say `Contract: not mapped` and skip.
-   - Exit 2: print the stderr text and skip.
+   - Exit 2: say `Contract: path check failed: <first stderr line>` and skip.
    - Exit 0 and the file `$contract_file` does not exist: say `Contract: missing`, point to `/wstack:init-service`, and skip.
 D3. Set `base_branch` with `source "$scripts/lib/frontmatter.sh"; fm_get "$contract_file" base_branch`. If `base_branch` is empty, say so and go on to D4. Otherwise run `git -C "$repo" fetch origin "$base_branch"`. If it fails, tell the user and go on with the local ref `origin/$base_branch`. The current branch is the output of `git -C "$repo" branch --show-current`. A detached HEAD prints nothing, so no fast-forward runs. If the current branch is `$base_branch` and `git -C "$repo" status --porcelain` prints nothing, also run `git -C "$repo" merge --ff-only "origin/$base_branch"`. If that fails, tell the user and go on. In every other case, say that only a fetch ran. The retro never merges, rebases, or stashes the work of the user.
 D4. Run `bash "$scripts/contract-check.sh" "$repo" "$contract_file"`.
    - Exit 0: say `Contract: fresh` and skip.
-   - Exit 2 or 3: print the cause and skip.
+   - Exit 2 or 3: say `Contract: check failed: <cause>` and skip.
    - Exit 1: go on.
 D5. If the `stale_sections:` line of the check is `[]`, the check is stale only by dependencies or unclaimed files. Say `Contract: stale (dependencies or unclaimed files), no section to update` and skip. Otherwise run `git -C "$repo" rev-parse "origin/$base_branch"`. It is `$checked_commit`. Dispatch the agent `wstack:contract-reader`. Give it `$repo`, `$contract_file`, the output of the check, and the goal `refresh the stale sections`. The reply is a brief, then the line `=== PATCH ===`, then the patch. If the part after the marker is `None`, say `Contract: stale, no patch` and skip. Otherwise write it to `$retro_dir/$retro_name.contract-patch.md`. List each stale section (the `stale_sections:` line of the check) with a one-line summary of the change that the patch proposes. A stale section with no block in the patch is listed as `no patch`.
 D6. After the answer to step 8, read the chosen sections. If the user chose none, write `Contract: stale, not updated` in the `## Contract` section of the retro file and skip. Otherwise update the contract in one Bash call. Write the real value for each `<...>` in single quotes, and write each `'` in a value as `'\''`. `<chosen section names, one per line>` holds each chosen name on its own line (`all` means every stale section that has a `## <name>` block in the patch). Drop any chosen name that has no such block. If no name is left, write `Contract: stale, no patch for the chosen sections` and skip.
