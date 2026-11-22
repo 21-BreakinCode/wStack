@@ -128,6 +128,7 @@ wstack/
 ├── themes/
 │   └── notion.json                Notion-style theme of the board page
 ├── templates/
+│   ├── retro-note.md              the RD exit note
 │   ├── contract.md                service contract
 │   ├── plan.md                    planned items that are not built yet
 │   ├── decision.md                one decision file
@@ -147,8 +148,11 @@ wstack/
 │   ├── contract-check.sh          drift check, no network call
 │   ├── contract-edit.sh           the only writer of contract files
 │   ├── contract-hook.sh           SessionStart and PostToolUse drift hook
-│   ├── board.sh                   one JSON row per open RD, for /wstack:board
+│   ├── board.sh                   one JSON row per open RD (a task session), for /wstack:board
 │   ├── board-watch.sh             live refresh loop on top of board.sh, for /wstack:board --watch
+│   ├── session-id-add.sh          adds a session id to session_ids in spec.md
+│   ├── transcript-stats.sh        tool use, errors and time range of the sessions of a task
+│   ├── lib/transcripts.sh         finds transcripts and subagent folders by session id
 │   ├── lib/repo.sh                main_checkout: finds the main checkout from a worktree
 │   ├── lib/frontmatter.sh         fm_get, fm_set, fm_append, fm_to_json: read and write frontmatter (fm_replace keeps the file mode)
 │   ├── lib/herdr.sh               herdr helpers that the task scripts share
@@ -186,7 +190,7 @@ One folder per task in the Obsidian vault. It holds text only. Media never goes 
   review.md     Verify: check results, evidence list with pass/fail, reviewer findings
   review.html   Verify: the review page
   report.md     Deliver: what shipped, where, and how to undo it
-  retro-note.md Deliver: the RD's exit note for the retro
+  retro-note.md Deliver: the RD's exit note for the retro (also written at a retry-limit cancel)
 ```
 
 A paused task adds these files. Section 6.2 describes the `paused` status.
@@ -589,7 +593,7 @@ If an upload fails, the agent keeps the R2 copy and writes the failure in `revie
 - Contract write: the retro applies the chosen sections under the contract lock. It first copies the contract once to `<retro>.contract-before.md` for undo. If every stale section was applied, `verified_commit` moves to the checked commit. The retro file gets a `## Contract` section with the status, the applied and still stale sections, and the undo.
 - Exit notes: each RD writes `retro-note.md` in its task folder at exit. The analyst reads it.
 - Transcript stats: `collect-week.sh` adds `transcript_stats` for each task with `session_ids`. The analyst compares the note and the run log with the counts, and finds `top_bash` commands that repeat across tasks.
-- Targeted reopen: where the evidence raises a question, the analyst writes it in a `## Questions` block. The retro asks a read-only fork of the last RD session (`--resume <id> --fork-session --tools Read,Grep,Glob`). The fork leaves the original session as it was. The answers go under `## RD answers` in the retro file, and the analyst revises the proposals with them. A failed fork writes its error as the answer, and the retro goes on.
+- Targeted reopen: where the evidence raises a question, the analyst writes it in a `## Questions` block. The retro asks a read-only fork of the last RD session (`--resume <id> --fork-session --tools Read,Grep,Glob --strict-mcp-config --no-session-persistence`). The fork leaves the original session as it was. The answers go under `## RD answers` in the retro file, and the analyst revises the proposals with them. A failed fork writes its error as the answer, and the retro goes on.
 
 The name is `retro`, not `review`, because "review" already means the final review inside Verify.
 

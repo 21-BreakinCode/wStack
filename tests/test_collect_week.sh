@@ -38,6 +38,13 @@ assert "only bad ids gives null" '[ "$(jq -c ".[] | select(.task_id == \"2026-11
 assert "other task keeps its stats" '[ "$(jq -r ".[] | select(.task_id == \"2026-11-18-with-sessions\") | .transcript_stats.found" <<<"$bad_id_out")" = 1 ]'
 assert "session_ids gives transcript_stats with found 1" '[ "$(jq -r ".[0].transcript_stats.found" <<<"$stats_out")" = 1 ]'
 assert "transcript_stats counts the compaction" '[ "$(jq -r ".[0].transcript_stats.compactions" <<<"$stats_out")" = 1 ]'
+# stats failure: an unreadable transcript gives null, one stderr line, exit 0
+chmod 000 "$stats_home/.claude/projects/-proj/$stats_session.jsonl"
+trap 'chmod 644 "$stats_home/.claude/projects/-proj/$stats_session.jsonl" 2>/dev/null || true; rm -rf "$stats_home" "$(dirname "$boundary_vault")"' EXIT
+fail_rc=0; fail_out="$(HOME="$stats_home" bash "$script" --vault "$stats_vault" --tasks-dir Tasks --today 2026-11-18 2>"$stats_home/err")" || fail_rc=$?
+assert "stats failure exits 0 with transcript_stats null" '[ "$fail_rc" = 0 ] && [ "$(jq -c ".[0].transcript_stats" <<<"$fail_out")" = null ]'
+assert "stats failure prints one stderr line naming the task (jq may add its own)" '[ "$(grep -c "transcript stats failed for 2026-11-18-with-sessions" "$stats_home/err")" = 1 ]'
+chmod 644 "$stats_home/.claude/projects/-proj/$stats_session.jsonl"
 rm -rf "$stats_home"
 assert "bad vault exits 1" '! bash "$script" --vault "$vault" --tasks-dir Nope --today 2026-11-18 2>/dev/null'
 finish

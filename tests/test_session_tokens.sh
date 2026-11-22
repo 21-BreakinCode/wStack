@@ -75,4 +75,18 @@ assert "subagent total sums both files in both folders (7+20)" '[ "$out" = "$(pr
 out="$(bash "$script" --session "$id_a" --session dddddddd-dddd-dddd-dddd-dddddddddddd 2>"$work_dir/warn.txt")"
 assert "missing id keeps the found total on stdout" '[ "$out" = "$(printf "100\n7")" ]'
 assert "missing id warns on stderr" 'grep -qx "session-tokens: no transcript for dddddddd-dddd-dddd-dddd-dddddddddddd" "$work_dir/warn.txt"'
+
+# A cut-off line is skipped in both modes.
+id_e=eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee
+{ usage_line me 40; echo '{"message":{"id":"cut","usa'; } > "$project_dir/$id_e.jsonl"
+out="$(bash "$script" --session "$id_e")"
+assert "--session skips a cut-off line" '[ "$out" = "$(printf "40\n0")" ]'
+{ cat "$project_dir/new.jsonl"; echo '{"message":{"id":"cut","usa'; } > "$project_dir/new2.jsonl"
+out="$(bash "$script" "$work_cwd")"
+assert "cwd mode skips a cut-off line" '[ "$out" = 110 ]'
+
+# transcript_subagent_dirs prints each existing subagents folder.
+source "$repo_root/scripts/lib/transcripts.sh"
+dirs="$(transcript_subagent_dirs "$id_a" "$id_c" "$id_b")"
+assert "transcript_subagent_dirs lists the folders that exist" '[ "$dirs" = "$(printf "%s\n%s" "$project_dir/$id_a/subagents" "$other_dir/$id_c/subagents")" ]'
 finish

@@ -45,6 +45,10 @@ for bad_value in '["not-a-uuid"]' '{"a":1}' '[oops'; do
   bash "$script" --task-dir "$task_dir" >/dev/null 2>"$work_dir/err"
   assert "bad session_ids $bad_value warns and uses --continue" 'grep -q "session_ids is not a list of session ids" "$work_dir/err" && grep -q -- "--continue" "$FAKE_LOG" && ! grep -q -- "--resume" "$FAKE_LOG"'
 done
+sed 's/^session_ids:.*/session_ids:\n  - 0f8fad5b-d9cb-469f-a165-70867728950e/' "$task_dir/spec.md" >"$work_dir/block.md" && cp "$work_dir/block.md" "$task_dir/spec.md"
+: >"$FAKE_LOG"
+bash "$script" --task-dir "$task_dir" >/dev/null 2>"$work_dir/err"
+assert "block-style session_ids warns and uses --continue" 'grep -q "session_ids is not a list of session ids" "$work_dir/err" && grep -q -- "--continue" "$FAKE_LOG" && ! grep -q -- "--resume" "$FAKE_LOG"'
 
 fm_set "$task_dir/spec.md" workspace_cwd "$work_dir/gone"
 rc=0; bash "$script" --task-dir "$task_dir" >/dev/null 2>"$work_dir/err" || rc=$?

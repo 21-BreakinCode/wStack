@@ -88,8 +88,7 @@ activity_json() {  # <spec file>
   last_tool=null
   [ -z "$main_file" ] || last_tool="$(last_tool_of "$main_file")"
   now="$(date +%s)"
-  for sub_dir in "$HOME"/.claude/projects/*/"$id"/subagents; do
-    [ -d "$sub_dir" ] || continue
+  transcript_subagent_dirs "$id" | while IFS= read -r sub_dir; do
     find "$sub_dir" -name 'agent-*.jsonl' -mmin "-$active_minutes" -exec stat -f '%m %N' {} +
   done | while IFS=' ' read -r modified_at sub_file; do
     # One jq call per agent. A missing or non-JSON meta file makes --slurpfile fail, and that skips the agent.

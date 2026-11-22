@@ -26,3 +26,13 @@ transcript_subagent_files() {  # <id>...: print each existing subagent transcrip
   done
   return 0
 }
+
+transcript_subagent_dirs() {  # <id>...: print each existing subagents folder, one per line
+  local id dir
+  for id in "$@"; do
+    for dir in "$HOME"/.claude/projects/*/"$id"/subagents; do
+      [ -d "$dir" ] && printf '%s\n' "$dir"
+    done
+  done
+  return 0
+}

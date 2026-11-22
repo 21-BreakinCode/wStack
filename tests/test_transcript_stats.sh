@@ -27,8 +27,8 @@ assert "found counts transcripts that exist" '[ "$(field .found)" = 2 ]'
 assert "tool_calls by name" '[ "$(field .tool_calls)" = "{\"Bash\":5,\"Read\":1}" ]'
 assert "tool_errors counts is_error true only" '[ "$(field .tool_errors)" = 1 ]'
 assert "top_bash row 1 is git status x3 (newline splits words)" '[ "$(field ".top_bash[0]")" = "{\"command\":\"git status\",\"count\":3}" ]'
-assert "top_bash tie: ab cd sorts before ls -la" '[ "$(field ".top_bash[1]")" = "{\"command\":\"ab cd\",\"count\":1}" ]'
-assert "top_bash row 3 is ls -la x1" '[ "$(field ".top_bash[2]")" = "{\"command\":\"ls -la\",\"count\":1}" ]'
+assert "top_bash tie: ab cd sorts before ls" '[ "$(field ".top_bash[1]")" = "{\"command\":\"ab cd\",\"count\":1}" ]'
+assert "top_bash row 3 is ls x1 (option word dropped)" '[ "$(field ".top_bash[2]")" = "{\"command\":\"ls\",\"count\":1}" ]'
 assert "top_bash has three rows" '[ "$(field ".top_bash | length")" = 3 ]'
 assert "compactions" '[ "$(field .compactions)" = 1 ]'
 assert "user_turns skips results, meta and compact summary" '[ "$(field .user_turns)" = 3 ]'
@@ -44,6 +44,15 @@ cp "$fixtures/session-e-part2.jsonl" "$folder_two/$session_e.jsonl"
 bad_out="$(bash "$script" "$session_e")"
 assert "bad lines: exit 0 and good lines from both files count" '[ "$(jq -c .tool_calls <<<"$bad_out")" = "{\"Bash\":1,\"Read\":1}" ]'
 assert "one id in two folders: sessions 1, found 1" '[ "$(jq -c "[.sessions, .found]" <<<"$bad_out")" = "[1,1]" ]'
+
+# top_bash keeps no secrets: NAME=value words drop, odd second words drop
+session_f=ffffffff-ffff-4fff-8fff-ffffffffffff
+bash_line() { jq -nc --arg cmd "$1" '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:$cmd}}]}}'; }
+{ bash_line 'TOKEN=abc git status'; bash_line 'secret=xyz curl -s https://u:p@h'; } >"$folder_one/$session_f.jsonl"
+secret_out="$(bash "$script" "$session_f")"
+assert "top_bash drops a leading NAME=value word" '[ "$(jq -r ".top_bash[].command" <<<"$secret_out" | grep -cx "git status")" = 1 ]'
+assert "top_bash keeps only curl when the second word is an option" 'jq -r ".top_bash[].command" <<<"$secret_out" | grep -qx curl'
+assert "no output holds the secrets" '! grep -q -e abc -e xyz -e "u:p" <<<"$secret_out"'
 
 unknown_out="$(bash "$script" "$unknown")"
 assert "unknown id gives found 0" '[ "$(jq -r .found <<<"$unknown_out")" = 0 ]'

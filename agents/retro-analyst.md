@@ -23,7 +23,7 @@ Use Bash for read-only commands. Never edit any file.
 
 1. Repeated agent steps. The same step text, or the same kind of step, appears in two or more tasks. A script or a tool can replace it.
 2. Hand-started tasks. Tasks with the same goal, `work_type`, or slug words, started by the user two or more times. A fixed workflow can replace them.
-3. Extra tokens. A task whose `run_log.tokens_used` is far above the other tasks of the same `work_type`, or above the median of the week. Say why from the steps.
+3. Extra tokens. A task whose `run_log.tokens_used` is far above the other tasks of the same `work_type`, or above the median of the week. Say why from the steps. Also read `run_log.subagent_tokens`. It is empty on old tasks.
 4. Retries and blocking findings. Look at `run_log.retries`, `run_log.stopped_for_user`, `review.blocking_findings`, and `stop` lines. Say which part of the spec or the checks was weak.
 5. A mismatch between the note or the run log and `transcript_stats`. An example is a note that says there were no retries, while `tool_errors` is high.
 6. The same `top_bash` command in two or more tasks. It is a script candidate.

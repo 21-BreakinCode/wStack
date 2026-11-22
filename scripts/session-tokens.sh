@@ -10,9 +10,10 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]:-$0}")/lib/transcripts.sh"
 
-# <file>...: sum the usage of all files, each message.id once (last line wins). Prints nothing when no usage.
+# <file>...: sum the usage of all files, each message.id once (last line wins). Lines that are not JSON are skipped. Prints nothing when no usage.
 sum_usage() {
-  jq -s '[.[]|select(.message.usage!=null)]|group_by(.message.id)|map(.[-1].message.usage)|map((.input_tokens//0)+(.cache_creation_input_tokens//0)+(.cache_read_input_tokens//0)+(.output_tokens//0))|add // empty' "$@"
+  local file
+  for file in "$@"; do jq -R 'fromjson? // empty' "$file"; done | jq -s '[.[]|select(.message.usage!=null)]|group_by(.message.id)|map(.[-1].message.usage)|map((.input_tokens//0)+(.cache_creation_input_tokens//0)+(.cache_read_input_tokens//0)+(.output_tokens//0))|add // empty'
 }
 
 if [ "${1:-}" = "--session" ]; then

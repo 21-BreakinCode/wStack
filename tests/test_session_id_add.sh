@@ -41,6 +41,11 @@ bad_spec="$work_dir/bad.md"
 sed 's/^session_ids:.*/session_ids: [oops/' "$spec" >"$bad_spec"
 rc=0; bash "$script" "$bad_spec" "$first_id" 2>"$work_dir/err" || rc=$?
 assert "invalid stored JSON exits 4 and names the field" '[ "$rc" = 4 ] && grep -q "session_ids" "$work_dir/err"'
+block_spec="$work_dir/block.md"
+sed 's/^session_ids:.*/session_ids:\n  - 0f8fad5b-d9cb-469f-a165-70867728950e/' "$spec" >"$block_spec"
+block_before="$(cat "$block_spec")"
+rc=0; bash "$script" "$block_spec" "$second_id" 2>"$work_dir/err" || rc=$?
+assert "block-style list exits 4, names the field, leaves the file" '[ "$rc" = 4 ] && grep -q "one-line JSON list" "$work_dir/err" && [ "$(cat "$block_spec")" = "$block_before" ]'
 rc=0; bash "$script" "$work_dir/none.md" "$first_id" 2>/dev/null || rc=$?
 assert "missing file exits 1" '[ "$rc" = 1 ]'
 finish

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Usage: resume-task.sh --task-dir <abs>
-# Prints "focused" if the task agent is live, "restarted" if it started a new one.
+# Prints "focused" if the task agent is live, "restarted" if it started a new one
+# (claude --resume <last id> when session_ids has ids, else claude --continue).
 # Exit: 1 working directory gone or bad input, 5 agent did not start or the workspace could
 # not be focused (a restarted workspace stays open, stderr prints the cleanup command),
 # 6 herdr could not create the workspace or printed unexpected output.
@@ -38,6 +39,7 @@ abort_with_cleanup_hint() {  # <reason>
 }
 last_session_id=""
 session_ids_value="$(fm_get "$task_dir/spec.md" session_ids)"
+if [ -z "$session_ids_value" ] && fm_has_block_list "$task_dir/spec.md" session_ids; then session_ids_value="(block-style list)"; fi
 if [ -n "$session_ids_value" ]; then
   last_session_id="$(jq -r 'if type == "array" then (.[-1] // empty) else error("not an array") end' <<<"$session_ids_value" 2>/dev/null)" || last_session_id="bad"
   if [ -n "$last_session_id" ] && ! session_id_ok "$last_session_id"; then

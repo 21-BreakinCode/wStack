@@ -42,7 +42,8 @@ slurp_files "$main_files" | jq \
       found: $found,
       tool_calls: ($tool_uses | group_by(.name) | map({key: .[0].name, value: length}) | from_entries),
       tool_errors: (items("user"; "tool_result") | map(select(.is_error == true)) | length),
-      top_bash: ([$tool_uses[] | select(.name == "Bash") | .input.command | strings | [scan("\\S+")] | .[:2] | join(" ")]
+      top_bash: ([$tool_uses[] | select(.name == "Bash") | .input.command | strings | [scan("\\S+")] | until(.[0] // "" | test("^[A-Za-z_][A-Za-z0-9_]*=") | not; .[1:])
+          | if (.[1] // "" | test("^-|[=:@\"'"'"'`]")) then .[:1] else .[:2] end | join(" ")]
         | group_by(.) | map({command: .[0], count: length})
         | sort_by([-.count, .command]) | .[:10]),
       compactions: ([.[] | select(.type == "system" and .subtype == "compact_boundary")] | length),
