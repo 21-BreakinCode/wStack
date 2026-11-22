@@ -28,4 +28,11 @@ status=0; /bin/bash "$script" --vault "$vault" --tasks-dir T --once --interval 0
 assert "a zero interval exits 1" '[ "$status" = 1 ]'
 status=0; /bin/bash "$script" --vault "$vault" --tasks-dir T --once --interval abc >/dev/null 2>&1 || status=$?
 assert "a text interval exits 1" '[ "$status" = 1 ]'
+fake_bin="$work_dir/bin"; mkdir -p "$fake_bin"
+status=0; frame="$(WSTACK_BOARD_ACTIVE_MINUTES=abc /bin/bash "$script" --vault "$vault" --tasks-dir T --once 2>&1)" || status=$?
+assert "a board.sh warning shows in the frame" 'grep -q "positive integer" <<<"$frame"'
+cp "$repo_root/scripts/board-watch.sh" "$work_dir/board-watch.sh"
+printf '#!/usr/bin/env bash\necho "boom from board" >&2\nexit 4\n' > "$work_dir/board.sh"
+status=0; frame="$(/bin/bash "$work_dir/board-watch.sh" --vault "$vault" --tasks-dir T --once 2>&1)" || status=$?
+assert "a board.sh failure shows its stderr and exits 1 with --once" '[ "$status" = 1 ] && grep -q "boom from board" <<<"$frame"'
 finish

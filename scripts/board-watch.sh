@@ -26,7 +26,12 @@ done
 
 print_frame() {
   local rows
-  rows="$(bash "$script_dir/board.sh" --vault "$vault" --tasks-dir "$tasks_dir")" || { echo "board-watch: board.sh failed"; return 1; }
+  local errors_file status=0
+  errors_file="$(mktemp)"
+  rows="$(bash "$script_dir/board.sh" --vault "$vault" --tasks-dir "$tasks_dir" 2>"$errors_file")" || status=$?
+  if [ "$status" != 0 ] || [ -s "$errors_file" ]; then cat "$errors_file"; fi
+  rm -f "$errors_file"
+  [ "$status" = 0 ] || { echo "board-watch: board.sh failed"; return 1; }
   [ -n "$rows" ] || { echo "no RD is open"; return 0; }
   jq -r '
     def hint_of: if . == null then "-" else "\(.tool)  \(.hint)" end;

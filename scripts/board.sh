@@ -52,42 +52,54 @@ group_of() {  # <status> <herdr state>: the first group that matches
   esac
 }
 
-# Reads the last 200 lines of a transcript. Prints {tool, hint, at} of its last tool_use, or null.
-# A Bash command shows only its first word, because a command can hold a token.
-last_tool_of() {  # <transcript file>
-  tail -n 200 "$1" | jq -Rn '
-    def filled: strings | select(length > 0);
-    [inputs | fromjson? | select(type == "object" and .type == "assistant")
+active_minutes="${WSTACK_BOARD_ACTIVE_MINUTES:-15}"
+if ! [[ "$active_minutes" =~ ^[1-9][0-9]*$ ]]; then
+  echo "board: WSTACK_BOARD_ACTIVE_MINUTES must be a positive integer, using 15" >&2
+  active_minutes=15
+fi
+
+# jq definitions: clean cuts a text to one line of 60 characters, last_tool_of reads transcript lines.
+# A Bash command shows only its first word after any NAME=value words, because those can hold a token.
+transcript_jq_defs='
+  def filled: strings | select(length > 0);
+  def clean: gsub("[[:cntrl:][:space:]]+"; " ") | gsub("^ +| +$"; "") | .[:60];
+  def last_tool_of:
+    [.[] | fromjson? | select(type == "object" and .type == "assistant")
       | .timestamp as $at | .message.content | arrays | .[] | select(.type? == "tool_use")
       | {tool: .name, at: $at, input: ((.input | objects) // {})}] | last
     | if . == null then null else
-        {tool, at, hint: ((.input.description | filled)
+        {tool, at, hint: (((.input.description | filled)
           // (.input.file_path | filled | split("/") | last)
           // (.input.pattern | filled | .[:40])
-          // ([.input.command | filled | scan("\\S+")] | first) // "")
-          | gsub("\\s+"; " ") | .[:60]}
-      end'
+          // ([.input.command | filled | scan("\\S+") | select(test("^[A-Za-z_][A-Za-z0-9_]*=") | not)] | first) // "")
+          | clean)}
+      end;'
+
+last_tool_of() {  # <transcript file>: {tool, hint, at} of the last tool_use in its last 200 lines, or null
+  tail -n 200 "$1" | jq -Rsc "$transcript_jq_defs"' split("\n") | last_tool_of'
 }
 
 # Prints {last_tool, subagents} for the newest session id of a spec.
 activity_json() {  # <spec file>
-  local id main_file last_tool sub_file meta_file idle_seconds
-  local active_seconds=$(( ${WSTACK_BOARD_ACTIVE_MINUTES:-15} * 60 ))
-  id="$(fm_get "$1" session_ids | jq -r 'last // empty' 2>/dev/null)" || id=""
+  local id main_file last_tool sub_dir sub_file modified_at now
+  id="$(fm_get "$1" session_ids)"  # a JSON list such as ["id1","id2"]
+  id="${id//[\[\]\" ]/}"; id="${id##*,}"
   if ! session_id_ok "$id"; then echo '{"last_tool":null,"subagents":[]}'; return 0; fi
-  main_file="$(transcript_main_files "$id" | head -n 1)"
+  main_file="$(transcript_main_files "$id")"; main_file="${main_file%%$'\n'*}"
   last_tool=null
   [ -z "$main_file" ] || last_tool="$(last_tool_of "$main_file")"
-  while IFS= read -r sub_file; do
-    [ -n "$sub_file" ] || continue
-    meta_file="${sub_file%.jsonl}.meta.json"
-    idle_seconds=$(( $(date +%s) - $(stat -f %m "$sub_file") ))
-    [ "$idle_seconds" -lt "$active_seconds" ] || continue
-    jq -c --argjson idle "$idle_seconds" --argjson last_tool "$(last_tool_of "$sub_file")" '
-      select(.finished != true)
-      | {type: (.agentType // ""), description: (.description // ""), idle_seconds: $idle, last_tool: $last_tool}' \
-      "$meta_file" 2>/dev/null || true
-  done < <(transcript_subagent_files "$id") | jq -sc --argjson last_tool "$last_tool" '{last_tool: $last_tool, subagents: .}'
+  now="$(date +%s)"
+  for sub_dir in "$HOME"/.claude/projects/*/"$id"/subagents; do
+    [ -d "$sub_dir" ] || continue
+    find "$sub_dir" -name 'agent-*.jsonl' -mmin "-$active_minutes" -exec stat -f '%m %N' {} +
+  done | while IFS=' ' read -r modified_at sub_file; do
+    # One jq call per agent. A missing or non-JSON meta file makes --slurpfile fail, and that skips the agent.
+    # A finished agent stops at the first select, before the transcript is read.
+    tail -n 200 "$sub_file" | jq -Rsc --slurpfile meta "${sub_file%.jsonl}.meta.json" --argjson idle "$(( now - modified_at ))" \
+      "$transcript_jq_defs"' . as $raw | $meta[0] | select(.finished != true)
+      | {type: ((.agentType | clean) // ""), description: ((.description | clean) // ""), idle_seconds: $idle}
+        + {last_tool: ($raw | split("\n") | last_tool_of)}' 2>/dev/null || true
+  done | jq -sc --argjson last_tool "$last_tool" '{last_tool: $last_tool, subagents: .}'
 }
 
 # One jq object per task. Add a row field here and nowhere else.

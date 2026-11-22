@@ -112,4 +112,51 @@ assert "the newest session id is the one read" '[ "$(field rd-twice .last_tool.h
 rows="$(WSTACK_BOARD_ACTIVE_MINUTES=100000 /bin/bash "$script" --vault "$vault" --tasks-dir T)"
 assert "a long active window brings the stale subagent back" '[ "$(field rd-1 "[.subagents[].type] | sort | join(\",\")" "$rows")" = "Explore,Plan" ]'
 assert "a finished subagent never shows" '[ "$(field rd-1 "[.subagents[].type] | index(\"code-reviewer\")" "$rows")" = null ]'
+
+# secrets, scan speed, bad settings, odd transcripts
+P=aaaaaaaa-0000-4000-8000-0000000000
+add_session() {  # <slug> <session id>
+  bash "$repo_root/scripts/session-id-add.sh" "$(new_task "$1" executing)/spec.md" "$2"
+}
+add_session env-one "${P}05"; add_session env-two "${P}06"; add_session env-only "${P}07"
+add_session no-file "${P}08"; add_session ctrl-agent "${P}11"
+add_session far-back "${P}09"
+projects="$HOME/.claude/projects/-fake-project"
+{ printf '{"type":"assistant","timestamp":"2026-11-23T05:00:00Z","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/seen/never.ts"}}]}}\n'
+  for line_number in $(seq 1 250); do printf '{"type":"user","timestamp":"2026-11-23T05:00:01Z","message":{"content":"x"}}\n'; done; } > "$projects/${P}09.jsonl"
+many="${P}10"; mkdir -p "$projects/$many/subagents"
+echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/a/b.ts"}}]}}' > "$projects/${P}10.jsonl"
+for agent_number in $(seq 1 120); do
+  echo '{"type":"assistant","timestamp":"2026-11-23T05:00:00Z","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/a/old.ts"}}]}}' > "$projects/$many/subagents/agent-$agent_number.jsonl"
+  echo "{\"agentType\":\"T$agent_number\",\"description\":\"d$agent_number\"}" > "$projects/$many/subagents/agent-$agent_number.meta.json"
+  [ "$agent_number" -le 3 ] || touch -t "$(date -v-2H +%Y%m%d%H%M)" "$projects/$many/subagents/agent-$agent_number.jsonl"
+done
+echo '{"agentType":"T3","description":"d3","finished":true}' > "$projects/$many/subagents/agent-3.meta.json"
+add_session many-one "$many"; add_session many-two "$many"
+now_ms() { perl -MTime::HiRes=time -e 'printf "%d", time * 1000'; }
+big_vault="$vault"; vault="$work_dir/Timing Vault"; mkdir -p "$vault"
+add_session timing-one "$many"; add_session timing-two "$many"
+elapsed_ms=999999  # the best of 3 runs, so a busy machine does not fail the test
+for run in 1 2 3; do
+  started_ms="$(now_ms)"
+  /bin/bash "$script" --vault "$vault" --tasks-dir T >/dev/null
+  run_ms=$(( $(now_ms) - started_ms ))
+  [ "$run_ms" -ge "$elapsed_ms" ] || elapsed_ms=$run_ms
+done
+echo "  info: two RDs on one 120-file session took (best of 3) ${elapsed_ms} ms"
+vault="$big_vault"
+rows="$(/bin/bash "$script" --vault "$vault" --tasks-dir T)"
+assert "an env word before a command never shows" '[ "$(field env-one .last_tool.hint "$rows")" = cmd ] && [ "$(field env-two .last_tool.hint "$rows")" = psql ]'
+assert "a command of env words only has an empty hint" '[ "$(field env-only .last_tool.hint "$rows")" = "" ] && [ "$(field env-only .last_tool.tool "$rows")" = Bash ]'
+assert "no secret appears in any output" '! grep -qE "abc123|ghp_SECRET9|pw77" <<<"$rows"'
+assert "120 subagent files: only the 2 fresh unfinished-less agents show" '[ "$(field many-one "[.subagents[].type] | sort | join(\",\")" "$rows")" = "T1,T2" ] && [ "$(field many-two ".subagents | length" "$rows")" = 2 ]'
+assert "two RDs on one 120-file session finish in under 500 ms" '[ "$elapsed_ms" -lt 500 ]'
+assert "a tool_use older than the last 200 lines is not seen" '[ "$(field far-back .last_tool "$rows")" = null ]'
+assert "a valid id with no transcript file has last_tool null and no subagents" '[ "$(field no-file .last_tool "$rows")" = null ] && [ "$(field no-file ".subagents | length" "$rows")" = 0 ]'
+assert "a missing or non-JSON meta file skips the agent" '[ "$(field rd-1 ".subagents | length" "$rows")" = 1 ]'
+assert "type and description lose newlines and escape characters" '[ "$(field ctrl-agent ".subagents[0].type" "$rows")" = "Ex plore" ] && [ "$(field ctrl-agent ".subagents[0].description" "$rows")" = "line1 line2 [31mred" ] && ! grep -q "$(printf "\033")" <<<"$rows"'
+for bad_minutes in 1.5 abc; do
+  rows="$(WSTACK_BOARD_ACTIVE_MINUTES=$bad_minutes /bin/bash "$script" --vault "$vault" --tasks-dir T 2>"$work_dir/err")"
+  assert "setting $bad_minutes warns once and uses 15" '[ "$(wc -l <"$work_dir/err" | tr -d " ")" = 1 ] && grep -q "positive integer" "$work_dir/err" && [ "$(field rd-1 ".subagents | length" "$rows")" = 1 ]'
+done
 finish
