@@ -19,7 +19,7 @@ fm_set() {  # <file> <key> <value>
     inside && $0 == "---" { if (!done) print key ": " ENVIRON["FM_VALUE"]; inside = 0; done = 1; print; next }
     inside && index($0, key ":") == 1 && !done { print key ": " ENVIRON["FM_VALUE"]; done = 1; next }
     { print }
-  ' "$file" >"$tmp" && mv "$tmp" "$file"
+  ' "$file" >"$tmp" && mv "$tmp" "$file" || { rm -f "$tmp"; return 1; }
 }
 
 fm_append() {  # <file> <key> <json-object>

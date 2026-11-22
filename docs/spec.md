@@ -236,7 +236,7 @@ task_id: 2026-11-18-fix-login-timeout
 result: pass               # pass | fail | waiting
 blocking_findings: 0
 non_blocking_findings: 0
-evidence_location: r2      # r2 | local
+evidence_location: r2      # r2 | local only
 ---
 ```
 

@@ -42,4 +42,11 @@ rc=0; bash "$repo_root/scripts/frontmatter-set.sh" "$sample" status verifying ||
 assert "set script accepts good status" '[ "$rc" = "0" ] && [ "$(fm_get "$sample" status)" = "verifying" ]'
 bash "$repo_root/scripts/frontmatter-set.sh" --append "$sample" stopped_for_user '{"at":"x","reason":"y"}'
 assert "set script --append" '[ "$(fm_get "$sample" stopped_for_user | jq length)" = "3" ]'
+# A3-9: a failed write leaves no temp file next to the file
+mkdir -p "$work_dir/failbin" "$work_dir/failcase"
+printf '#!/bin/sh\nexit 1\n' > "$work_dir/failbin/awk"; chmod +x "$work_dir/failbin/awk"
+cp "$fixture" "$work_dir/failcase/spec.md"
+rc=0; (PATH="$work_dir/failbin:$PATH"; fm_set "$work_dir/failcase/spec.md" status executing) 2>/dev/null || rc=$?
+assert "failed fm_set returns non-zero" '[ "$rc" != "0" ]'
+assert "failed fm_set leaves no temp file" '[ "$(ls "$work_dir/failcase")" = "spec.md" ]'
 finish

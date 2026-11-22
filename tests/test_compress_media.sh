@@ -32,6 +32,19 @@ message="$(bash "$script" --target gh --max-mb 0.001 "$work_dir/clip.webm" "$gh_
 assert "too large exits 1" '[ "$status" -eq 1 ]'
 assert "too large message" '[[ "$message" == *"cannot fit"* ]]'
 
+# A3-11: the fit loop never scales a small video up
+ffmpeg -loglevel error -f lavfi -i testsrc=duration=2:size=320x180:rate=30 -c:v libvpx "$work_dir/small.webm"
+small_dir="$work_dir/small-out"
+status=0
+bash "$script" --target gh --max-mb 0.0001 "$work_dir/small.webm" "$small_dir" >/dev/null 2>&1 || status=$?
+assert "small video that cannot fit exits 1" '[ "$status" -eq 1 ]'
+assert "small video is not scaled up" '[ "$(probe height "$small_dir/small.mp4")" = "180" ]'
+
+# A3-12: a gh image is checked against --max-mb like a video
+status=0
+message="$(bash "$script" --target gh --max-mb 0.00001 "$work_dir/shot.png" "$gh_dir" 2>&1)" || status=$?
+assert "too large image exits 1 with cannot fit" '[ "$status" -eq 1 ] && [[ "$message" == *"cannot fit shot.png"* ]]'
+
 # I11: a GIF is rejected for both targets, so a terminal recording is never turned into one still image
 ffmpeg -loglevel error -f lavfi -i testsrc=duration=1:size=320x180:rate=5 "$work_dir/term.gif"
 for gif_target in r2 gh; do
