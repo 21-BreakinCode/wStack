@@ -24,6 +24,8 @@ start='(^|[^[:alnum:]_.-])'
 space='[[:space:]]+'
 optional_quote='["'"'"'"'"'"']?'
 # cf accepts global flags (with an optional value) between any two command words
+# words that may stand in front of a command: env assignments, wrappers, shell keywords, "bash -c"
+command_prefix='(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|env|command|sudo|nice|time|exec|eval|then|do|else|\{|!|bash|sh|zsh|-c)[[:space:]]+)*'
 cf_flags='([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*'
 
 default_branch="$(git -C "$cwd" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)"
@@ -76,7 +78,7 @@ push_is_risky() {  # <words...>, starting at the word "git"
 judge_segment() {
   local segment="$1" deploy_command bare first_word
   for bare in "${default_branches[@]}"; do
-    [[ "$segment" =~ ^[[:space:]]*([^[:space:]]*/)?git${cf_flags}${space}(checkout|switch)([[:space:]]+-[^[:space:]]+)*${space}${optional_quote}${bare}${optional_quote}([^[:alnum:]_./-]|$) ]] && switches_to_default=1
+    [[ "$segment" =~ ^[[:space:]]*${command_prefix}${optional_quote}([^[:space:]]*/)?git${optional_quote}${cf_flags}${space}(checkout|switch)([[:space:]]+-[^[:space:]]+)*${space}${optional_quote}${bare}${optional_quote}([^[:alnum:]_./-]|$) ]] && switches_to_default=1
   done
   if [[ "$segment" =~ ${start}gh${cf_flags}${space}pr${cf_flags}${space}merge ]]; then
     reason="a pull request merge"

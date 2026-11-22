@@ -41,4 +41,7 @@ rebase_line="$(grep -nF 'git pull --rebase origin main' "$workflow" | head -1 | 
 assert "git diff --cached --quiet guards the commit" '[ -n "$diff_line" ] && [ "$diff_line" -lt "$commit_line" ]'
 assert "a rebase onto cc-plugins main sits between the commit and the push" '[ -n "$rebase_line" ] && [ "$commit_line" -lt "$rebase_line" ] && [ "$rebase_line" -lt "$push_line" ]'
 assert "a failed rebase fails the run" 'grep -F "git pull --rebase origin main" "$workflow" | grep -qF "exit 1"'
+verify_count="$(grep -cF 'cicd.sh VERIFY' "$workflow")"
+last_verify_line="$(grep -nF 'cicd.sh VERIFY' "$workflow" | tail -1 | cut -d: -f1)"
+assert "VERIFY runs again after the rebase and before the push" '[ "$verify_count" -eq 2 ] && [ "$rebase_line" -lt "$last_verify_line" ] && [ "$last_verify_line" -lt "$push_line" ]'
 finish

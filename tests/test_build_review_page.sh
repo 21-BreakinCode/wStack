@@ -18,17 +18,19 @@ line_of() { grep -n "$2" "$1" | head -n 1 | cut -d: -f1; }
 
 # Opens a built page at a width and prints the result of a JS function. Test-only server and session.
 page_probe() {  # <page> <width> <js arrow function> [screenshot png]
-  local page="$1" width="$2" js="$3" shot="${4:-}" port session server_pid result
+  local page="$1" width="$2" js="$3" shot="${4:-}" port session server_pid result probe_origin="$PWD" probe_dir
   port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
   session="wstack-test-probe-$$-$width"
   python3 -m http.server --bind 127.0.0.1 --directory "$(dirname "$page")" "$port" >/dev/null 2>&1 &
   server_pid=$!
   for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fs -o /dev/null "http://127.0.0.1:$port/$(basename "$page")" && break; sleep 0.5; done
+  probe_dir="$(mktemp -d)"; cd "$probe_dir"  # playwright-cli writes .playwright-cli/ into its folder
   playwright-cli -s "$session" open "http://127.0.0.1:$port/$(basename "$page")" >/dev/null 2>&1 || true
   playwright-cli -s "$session" resize "$width" 500 >/dev/null 2>&1 || true
   result="$(playwright-cli -s "$session" --raw eval "$js" 2>&1 || true)"
   [ -z "$shot" ] || playwright-cli -s "$session" screenshot --filename "$shot" >/dev/null 2>&1 || true
   playwright-cli -s "$session" close >/dev/null 2>&1 || true
+  cd "$probe_origin"; rm -rf "$probe_dir"
   kill "$server_pid" 2>/dev/null || true
   echo "$result"
 }

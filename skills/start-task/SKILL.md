@@ -60,7 +60,7 @@ The argument is a rough idea. Run these steps in order.
 | Exit | Meaning | Action |
 |---|---|---|
 | 0 | launched | Print the task id, the workspace label, and the Remote Control name (both are the slug). Stop. The new session runs the work mode. |
-| 3 | not inside herdr | Run work mode in this session for `$task_dir`. |
+| 3 | not inside herdr | For a `code` task, read `workspace_cwd` from `$task_dir/spec.md`. It is a new worktree. Tell the user to run `cd "<workspace_cwd>" && claude "/wstack:start-task --task <task_id>"`. Stop, and do not run work mode in this session. For any other work type, run work mode in this session for `$task_dir`. |
 | 4 | agent name taken (a race) | Tell the user that the name is taken. Stop. |
 | 5 | the agent did not start after the workspace was made | Print the workspace id and the cleanup commands from the script's stderr. Offer to resume with `bash "$scripts/resume-task.sh" --task-dir "$task_dir"`. Stop. |
 | 6 | herdr could not create the workspace or worktree | Print the herdr error from stderr. Stop. |
@@ -112,7 +112,7 @@ No arguments.
 1. Run `bash "$scripts/list-open-tasks.sh" --vault "$vault" --tasks-dir "$tasks_dir"`. Each line is `task_id`, `status`, `workspace_cwd`, and `folder`, split by tabs.
 2. If there are no lines, tell the user there is no open task. Stop.
 3. Ask the user which task to resume. Show the task id and the status of each.
-4. Read `echo "${HERDR_ENV:-}"`. If it is not `1`, run work mode for the chosen task in this session, and skip the steps below.
+4. Read `echo "${HERDR_ENV:-}"`. If it is not `1`, skip the steps below. For a `code` task, tell the user to run `cd "<workspace_cwd>" && claude "/wstack:start-task --task <task_id>"`, and stop. For any other work type, run work mode for the chosen task in this session.
 5. Run `bash "$scripts/resume-task.sh" --task-dir "<folder>"`. It prints `focused` or `restarted`. Tell the user which one.
 6. If it exits 1, tell the user that the working directory of the task is gone, and print the stderr.
 7. If it exits 5 or 6, print the stderr. Stop.

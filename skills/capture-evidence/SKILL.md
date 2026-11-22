@@ -32,15 +32,15 @@ The text log is the main evidence. The user reads the exact data from it.
 
 ### Web check
 
-1. Pick a free port: `port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"`. Serve a local page with `python3 -m http.server --bind 127.0.0.1 "$port"` in the build folder. Run it in the background. When the check ends, stop it. Playwright CLI blocks `file://` URLs, so never open a file path directly.
-2. Open the page: `playwright-cli -s <slug> open <url>`.
-3. When the plan asks for phone width, run `playwright-cli -s <slug> resize 375 800`.
-4. Start the video: `playwright-cli -s <slug> video-start /tmp/wstack-evidence/<task_id>/raw/<name>.webm`.
-5. Take the screenshot: `playwright-cli -s <slug> screenshot --filename=/tmp/wstack-evidence/<task_id>/raw/<name>.webp`.
-6. Stop the video: `playwright-cli -s <slug> video-stop`.
-7. Close the session: `playwright-cli -s <slug> close`.
+1. Pick a free port and print it: `python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])'`. Use that number as `<port>` in every later command, because a shell variable does not carry over between commands. Serve a local page with `python3 -m http.server --bind 127.0.0.1 <port>` in the build folder. Run it in the background. When the check ends, stop it. Playwright CLI blocks `file://` URLs, so never open a file path directly.
+2. Open the page: `cd "/tmp/wstack-evidence/<task_id>" && playwright-cli -s <slug> open <url>`.
+3. When the plan asks for phone width, run `cd "/tmp/wstack-evidence/<task_id>" && playwright-cli -s <slug> resize 375 800`.
+4. Start the video: `cd "/tmp/wstack-evidence/<task_id>" && playwright-cli -s <slug> video-start /tmp/wstack-evidence/<task_id>/raw/<name>.webm`.
+5. Take the screenshot: `cd "/tmp/wstack-evidence/<task_id>" && playwright-cli -s <slug> screenshot --filename=/tmp/wstack-evidence/<task_id>/raw/<name>.webp`.
+6. Stop the video: `cd "/tmp/wstack-evidence/<task_id>" && playwright-cli -s <slug> video-stop`.
+7. Close the session: `cd "/tmp/wstack-evidence/<task_id>" && playwright-cli -s <slug> close`.
 
-Use the task slug for `<slug>`, so parallel tasks do not share a browser. To read the page width, run `playwright-cli -s <slug> --raw eval "() => document.documentElement.scrollWidth"`. It prints the bare number.
+Use the task slug for `<slug>`, so parallel tasks do not share a browser. To read the page width, run `cd "/tmp/wstack-evidence/<task_id>" && playwright-cli -s <slug> --raw eval "() => document.documentElement.scrollWidth"`. It prints the bare number.
 
 `video-start` needs the Playwright ffmpeg build. If it fails with "Executable doesn't exist ... ffmpeg", tell the user to run `playwright-cli install-browser ffmpeg`. Do not run it yourself.
 
