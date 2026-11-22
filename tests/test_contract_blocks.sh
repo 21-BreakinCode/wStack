@@ -255,6 +255,14 @@ for shell in $test_shells; do
   assert "$shell Contract files: the archive keeps the original" 'cmp -s "$contract_folder/_archive/$task_id/svc.md" "$world_dir/contract.orig" && [ -f "$contract_folder/_archive/$task_id/PRD.md" ]'
   assert "$shell Contract files: the new contract and decision are in" 'grep -qxF "New text." "$CONTRACT" && [ -f "$contract_folder/decisions/0001-baseline.md" ]'
   assert "$shell Contract files A2-19: the copied decision is listed once" '[ "$(cat "$task/decisions.copied.txt")" = 0001-baseline.md ]'
+  # the recorded undo, step by step
+  rm -f "$CONTRACT" "$contract_folder/plan.md"
+  while IFS= read -r copied_name; do rm -f "$contract_folder/decisions/$copied_name"; done <"$task/decisions.copied.txt"
+  for archived in "$contract_folder/_archive/$task_id"/*; do mv "$archived" "$contract_folder/"; done
+  rm -rf "$contract_folder/_archive/$task_id"
+  for empty_folder in "$contract_folder/_archive" "$contract_folder/decisions"; do rmdir "$empty_folder" 2>/dev/null || true; done
+  cp "$task/contract.before.md" "$CONTRACT"
+  assert "$shell Contract files undo: no empty decisions/ or _archive/ is left" '[ ! -e "$contract_folder/decisions" ] && [ ! -e "$contract_folder/_archive" ] && [ -f "$contract_folder/PRD.md" ]'
 
   for clash in other-name same-text; do
     echo "$shell: Contract files with a decision id clash ($clash)"

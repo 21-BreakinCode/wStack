@@ -4,8 +4,9 @@
 # Exit: 0 fresh, 1 stale, 2 error (stderr names the cause), 3 contract file missing.
 set -euo pipefail
 
-repo_dir="${1:?usage: contract-check.sh <repo_dir> <contract_file>}"
-contract_file="${2:?usage: contract-check.sh <repo_dir> <contract_file>}"
+[ "$#" -ge 2 ] || { echo "usage: contract-check.sh <repo_dir> <contract_file>" >&2; exit 2; }
+repo_dir="$1"
+contract_file="$2"
 plugin_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$plugin_root/scripts/lib/frontmatter.sh"
 max_listed_files=10

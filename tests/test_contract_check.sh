@@ -145,4 +145,7 @@ assert "one-line ignore still works" '[ $rc = 0 ]'
 new_world; sed -i.bak '/^ignore: /d' "$CONTRACT"; run
 assert "missing ignore still works" '[ $rc = 0 ]'
 
+set +e; bash "$script" >/dev/null 2>"$work_dir/err"; no_arg_rc=$?; bash "$script" "$REPO" >/dev/null 2>>"$work_dir/err"; one_arg_rc=$?; set -e
+assert "missing arguments exit 2 with a usage line" '[ $no_arg_rc = 2 ] && [ $one_arg_rc = 2 ] && grep -q "usage: contract-check.sh" "$work_dir/err"'
+
 finish

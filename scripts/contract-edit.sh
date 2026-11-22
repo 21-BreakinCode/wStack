@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# contract-edit.sh <subcommand> ...  The only writer of contract files.
+# contract-edit.sh <subcommand> ...  The only script that edits contract sections, frontmatter, and the lock.
+# Deliver "Contract files" also writes whole files with cp, under the lock from this script.
 #   lock|unlock <contract_file>
 #   apply <target_file> <patch_file> [--sections "A,B"] [--section "A, with comma"]...
 #   delete-section <target_file> <heading>

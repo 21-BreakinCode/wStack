@@ -86,6 +86,17 @@ check ask  'bash "/Users/me/.claude/plugins/wstack/scripts/evidence-delete.sh" -
 check ask  'cd x && bash scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
 check pass 'bash /p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b --dry-run'
 check pass 'bash /p/scripts/evidence-upload.sh --task-id 2000-01-02-x --dir d'
+# named, not run: a command that only names a guarded command passes
+check pass 'cat -n scripts/evidence-delete.sh'
+check pass 'for f in scripts/evidence-delete.sh scripts/evidence-upload.sh; do cat -n "$f"; done'
+check ask  'bash scripts/evidence-delete.sh x'
+check ask  './scripts/evidence-delete.sh x'
+check ask  'scripts/evidence-delete.sh x'
+check pass 'grep -n "gh pr merge" notes.md'
+check pass 'echo npm publish'
+check pass 'cat docs/terraform apply.md'
+check ask  'npx wrangler deploy'
+check ask  'echo done && sudo npm publish'
 # I5: forms the first word walk missed
 check ask  'PATH=~/.local/git/bin:$PATH git push -f origin x'
 check ask  'GIT_SSH_COMMAND="ssh -i ~/.ssh/github" git push --force origin main'
