@@ -21,6 +21,9 @@ verified_commit="$(fm_get "$contract_file" verified_commit)"
 [ -n "$base_branch" ] || fail "contract has no base_branch: $contract_file"
 [ -n "$verified_commit" ] || fail "contract has no verified_commit: $contract_file"
 [[ "$verified_commit" =~ ^[0-9a-fA-F]{4,64}$ ]] || fail "verified_commit is not a hex SHA: $verified_commit"
+for list_key in pending ignore; do
+  ! fm_has_block_list "$contract_file" "$list_key" || fail "$list_key must be a one-line JSON list, like $list_key: [\"tests/**\"]"
+done
 pending_json="$(fm_get "$contract_file" pending)"
 pending_json="$(jq -c . <<<"${pending_json:-[]}" 2>/dev/null)" || fail "pending is not JSON: $contract_file"
 ignore_json="$(fm_get "$contract_file" ignore)"

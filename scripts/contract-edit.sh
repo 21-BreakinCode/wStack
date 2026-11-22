@@ -16,6 +16,7 @@ usage() { echo "usage: contract-edit.sh <lock|unlock|apply|delete-section|pendin
 require_pr() { [[ "$1" =~ ^[0-9]+$ ]] || { echo "contract-edit.sh: pr is not an integer: $1" >&2; exit 2; }; }
 pending_array() {  # <contract_file>: print the pending list as one-line JSON, exit 2 when it is not an array
   local current
+  ! fm_has_block_list "$1" pending || { echo "contract-edit.sh: pending must be a one-line JSON list, like pending: []" >&2; exit 2; }
   current="$(fm_get "$1" pending)"
   jq -ce 'select(type == "array")' <<<"${current:-[]}" 2>/dev/null || { echo "contract-edit.sh: pending is not a JSON array: $1" >&2; exit 2; }
 }

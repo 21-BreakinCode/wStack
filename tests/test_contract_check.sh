@@ -132,4 +132,17 @@ new_world; sed -i.bak 's|^<!-- sources: cmd/\*\* -->|<!-- sources: -->|' "$CONTR
 set_key "$CONTRACT" verified_commit 0123456789abcdef0123456789abcdef01234567; run
 assert "empty sources comment: section not stale" '[ $rc = 1 ] && [ "$(field stale_sections)" = "[\"Team docs\",\"Interfaces\"]" ]'
 
+# Block-style YAML lists are rejected, not read as empty
+new_world; sed -i.bak 's|^ignore: .*|ignore:\n  - tests/**\n  - evals/**|' "$CONTRACT"; run
+assert "block-style ignore exits 2" '[ $rc = 2 ] && printf "%s" "$err" | grep -q "ignore must be a one-line JSON list"'
+
+new_world; sed -i.bak 's|^pending: .*|pending:\n  - pr: 12|' "$CONTRACT"; run
+assert "block-style pending exits 2" '[ $rc = 2 ] && printf "%s" "$err" | grep -q "pending must be a one-line JSON list"'
+
+new_world; set_key "$CONTRACT" ignore '["tests/**", "evals/**"]'; run
+assert "one-line ignore still works" '[ $rc = 0 ]'
+
+new_world; sed -i.bak '/^ignore: /d' "$CONTRACT"; run
+assert "missing ignore still works" '[ $rc = 0 ]'
+
 finish

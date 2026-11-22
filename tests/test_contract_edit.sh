@@ -249,4 +249,10 @@ assert "--section applies one comma name only" "grep -q new2 '$work/odd.md' && g
 bash "$edit" apply "$work/odd-before.md" "$work/patch.md" --section 'Plan, step 2' --section Other >/dev/null
 assert "--section repeats" "grep -q new2 '$work/odd-before.md' && grep -q changed '$work/odd-before.md'"
 
+echo "block-style pending"
+printf -- '---\nbase_branch: main\npending:\n  - pr: 12\n---\n# App\n' >"$work/block.md"
+set +e; bash "$edit" pending-add "$work/block.md" 13 t1 >/dev/null 2>"$work/err"; add_rc=$?
+bash "$edit" pending-remove "$work/block.md" 12 >/dev/null 2>>"$work/err"; remove_rc=$?; set -e
+assert "block-style pending: add and remove exit 2" "[ $add_rc = 2 ] && [ $remove_rc = 2 ] && grep -q 'pending must be a one-line JSON list' '$work/err'"
+
 finish

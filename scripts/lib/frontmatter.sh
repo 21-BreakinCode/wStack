@@ -19,6 +19,16 @@ fm_get() {  # <file> <key>
   ' "$1"
 }
 
+fm_has_block_list() {  # <file> <key>: succeed when the key is empty and the next line is an indented "- " item
+  awk -v key="$2" '
+    { sub(/\r$/, "") }
+    NR == 1 { if ($0 != "---") exit 1; next }
+    $0 == "---" { exit 1 }
+    found { exit ($0 ~ /^[ \t]+- /) ? 0 : 1 }
+    $0 == key ":" || $0 == key ": " { found = 1 }
+  ' "$1"
+}
+
 fm_set() {  # <file> <key> <value>
   local file="$1" tmp
   tmp="$(mktemp "${file}.XXXXXX")"
