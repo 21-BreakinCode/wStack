@@ -100,6 +100,14 @@ check ask  'echo npm publish'
 check pass 'grep -rn "gh pr merge" .'
 check pass 'git diff -- scripts/evidence-delete.sh'
 check pass 'less scripts/evidence-delete.sh'
+check ask  "sed -n 'e gh pr merge 5' f"
+check ask  "sed -n 's/.*/gh pr merge 5/e' f"
+check ask  "git grep -O'gh pr merge 5' -e x"
+check ask  "git grep --open-files-in-pager='npm publish' x"
+check ask  "bat --paging=always --pager 'gh pr merge 5' f"
+check ask  "git -c core.pager='gh pr merge 5' log"
+check pass 'git log -p scripts/evidence-delete.sh'
+check pass 'cat scripts/evidence-delete.sh'
 # fail closed: wrappers, flags, keywords, and fan-out stay guarded
 check ask  'echo 5 | xargs gh pr merge'
 check ask  'nohup gh pr merge 5'

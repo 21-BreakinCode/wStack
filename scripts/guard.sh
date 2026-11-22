@@ -94,15 +94,14 @@ is_read_only_segment() {  # <segment>
     for) [[ "${words[*]}" =~ ^for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in([[:space:]]|$) ]]; return ;;
   esac
   case "${word##*/}" in
-    cat|less|more|head|tail|grep|rg|wc|ls|file|stat|diff|nl|bat) return 0 ;;
-    sed) [ "${words[1]:-}" = "-n" ]; return ;;
+    cat|less|more|head|tail|grep|rg|wc|ls|file|stat|diff|nl) return 0 ;;
     git)
       words=("${words[@]:1}")
       while [ "${#words[@]}" -gt 0 ]; do
         case "${words[0]}" in
-          -C|-c) words=("${words[@]:2}") ;;
+          -C) words=("${words[@]:2}") ;;
           -*) words=("${words[@]:1}") ;;
-          diff|show|log|grep|blame|status) return 0 ;;
+          diff|show|log|blame|status) return 0 ;;
           *) return 1 ;;
         esac
       done ;;

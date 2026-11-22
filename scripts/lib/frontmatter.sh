@@ -19,11 +19,12 @@ fm_get() {  # <file> <key>
   ' "$1"
 }
 
-fm_has_block_list() {  # <file> <key>: succeed when the key is empty and the next line is a "- " item, indented or not
+fm_has_block_list() {  # <file> <key>: succeed when the key is empty and the next non-blank, non-comment line is a "- " item, indented or not
   awk -v key="$2" '
     { sub(/\r$/, "") }
     NR == 1 { if ($0 != "---") exit 1; next }
     $0 == "---" { exit 1 }
+    found && /^[ \t]*(#.*)?$/ { next }
     found { exit ($0 ~ /^[ \t]*-([ \t]|$)/) ? 0 : 1 }
     index($0, key ":") == 1 && substr($0, length(key) + 2) ~ /^[ \t]*$/ { found = 1 }
   ' "$1"

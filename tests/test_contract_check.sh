@@ -154,6 +154,12 @@ assert "block-style ignore with no indent exits 2" '[ $rc = 2 ] && printf "%s" "
 new_world; sed -i.bak 's|^pending: .*|pending:   \n  - pr: 12|' "$CONTRACT"; run
 assert "block-style pending after trailing spaces exits 2 with its own example" '[ $rc = 2 ] && printf "%s" "$err" | grep -qF "like pending: []"'
 
+new_world; sed -i.bak 's|^pending: .*|pending:\n\n  - x|' "$CONTRACT"; run
+assert "block-style pending after a blank line exits 2" '[ $rc = 2 ] && printf "%s" "$err" | grep -qF "like pending: []"'
+
+new_world; sed -i.bak 's|^pending: .*|pending:\n  # note\n  - x|' "$CONTRACT"; run
+assert "block-style pending after a comment line exits 2" '[ $rc = 2 ] && printf "%s" "$err" | grep -qF "like pending: []"'
+
 set +e; bash "$script" "" "$CONTRACT" >/dev/null 2>&1; empty_repo_rc=$?; bash "$script" "$REPO" "" >/dev/null 2>&1; empty_contract_rc=$?; set -e
 assert "an empty argument exits 2" '[ $empty_repo_rc = 2 ] && [ $empty_contract_rc = 2 ]'
 
