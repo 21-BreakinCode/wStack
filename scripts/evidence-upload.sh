@@ -35,10 +35,8 @@ if [ -z "$bucket" ]; then
   echo "r2_bucket is empty, so nothing was uploaded."
   exit 0
 fi
-if [ -n "$repo" ]; then  # an empty repo would match the ",," of an empty list
-  case ",$local_only_repos," in
-    *",$repo,"*) echo "local only: $dir"; echo "repo $repo is in local_evidence_only_repos, so nothing was uploaded."; exit 0 ;;
-  esac
+if bash "$(dirname "${BASH_SOURCE[0]}")/repo-is-local-only.sh" "$repo" "$local_only_repos"; then
+  echo "local only: $dir"; echo "repo $repo is in local_evidence_only_repos, so nothing was uploaded."; exit 0
 fi
 if [ -z "$domain" ]; then
   echo "local only: $dir"
