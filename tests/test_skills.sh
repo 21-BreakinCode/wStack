@@ -104,4 +104,16 @@ work_section="$(sed -n '/^## Work mode/,/^## Stop items/p' "$start_skill")"
 add_line="$(grep -nF -- "$add_text" <<<"$work_section" | head -1 | cut -d: -f1)"
 status_line="$(grep -nF -- "$status_text" <<<"$work_section" | head -1 | cut -d: -f1)"
 assert "start-task work mode records the session id before it reads the status" '[ -n "$add_line" ] && [ -n "$status_line" ] && [ "$add_line" -lt "$status_line" ]'
+note_template="$repo_root/templates/retro-note.md"
+assert "retro-note template has its frontmatter keys and five headings in order" '[ -f "$note_template" ] && grep -q "^task_id:" "$note_template" && grep -q "^written_at:" "$note_template" && [ "$(grep "^## " "$note_template" | tr "\n" "|")" = "## Slow or repeated steps|## Would script|## Spec gaps|## Tool and guard friction|## Surprises|" ]'
+deliver_skill="$repo_root/skills/deliver-task/SKILL.md"
+finish_note_line="$(sed -n '/^## Finish/,/^## Stop/p' "$deliver_skill" | grep -n 'templates/retro-note.md' | head -1 | cut -d: -f1)"
+finish_status_line="$(sed -n '/^## Finish/,/^## Stop/p' "$deliver_skill" | grep -n 'Set `status` to `delivered`' | head -1 | cut -d: -f1)"
+assert "deliver Finish writes retro-note.md before it sets status to delivered" '[ -n "$finish_note_line" ] && [ -n "$finish_status_line" ] && [ "$finish_note_line" -lt "$finish_status_line" ]'
+assert "deliver Finish note step carries the rules and the written_at command" 'grep -qF "date -u +%Y-%m-%dT%H:%M:%SZ" <(sed -n "/^## Finish/,/^## Stop/p" "$deliver_skill" | grep "retro-note.md") && grep -qF "None." <(sed -n "/^## Finish/,/^## Stop/p" "$deliver_skill")'
+verify_ref="$repo_root/skills/start-task/references/verify.md"
+cancel_retry_line="$(grep -n 'retro-note.md' "$verify_ref" | head -1 | cut -d: -f1)"
+assert "verify retry-limit Cancel writes retro-note.md before status cancelled, other Cancel unchanged" '[ -n "$cancel_retry_line" ] && grep -n "^- Cancel:" "$verify_ref" | head -1 | grep -q "retro-note.md.*cancelled" && [ "$(grep -c "^- Cancel: set .status. to .cancelled.\.$" "$verify_ref")" = 1 ]'
+assert "execute.md holds the herdr pane rule" 'grep -qF "herdr pane split --current" "$repo_root/skills/start-task/references/execute.md" && grep -qF "close it before Deliver" "$repo_root/skills/start-task/references/execute.md"'
+assert "spec lists retro-note.md" 'grep -q "retro-note.md  Deliver" "$repo_root/docs/spec.md"'
 finish

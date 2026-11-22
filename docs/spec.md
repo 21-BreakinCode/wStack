@@ -181,6 +181,7 @@ One folder per task in the Obsidian vault. It holds text only. Media never goes 
   review.md     Verify: check results, evidence list with pass/fail, reviewer findings
   review.html   Verify: the review page
   report.md     Deliver: what shipped, where, and how to undo it
+  retro-note.md  Deliver: the RD's exit note for the retro
 ```
 
 A paused task adds these files. Section 6.2 describes the `paused` status.
@@ -335,6 +336,7 @@ Purpose: do the work without the user.
 - The agent works and iterates on its own. It does not stop for questions that the spec already answers.
 - The agent stops only before a non-undoable step. It sets `status: waiting-user`, writes the reason in `run-log.md`, and asks the user.
 - The agent writes each step, each retry, and each stop into `run-log.md`.
+- If the agent opens a herdr pane, it opens the pane in its own workspace with `herdr pane split --current --direction right --no-focus`, and it closes the pane before Deliver.
 - ASSUME: for code tasks, the agent works on a new branch named `wstack/<slug>`. It never commits to the default branch.
 
 Done when: the agent believes the spec is met and `run-log.md` lists every step.

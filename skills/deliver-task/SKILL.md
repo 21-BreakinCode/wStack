@@ -218,8 +218,14 @@ After each target, look for a remaining target. Ship a remaining target that nee
 3. Set `delivered_at` and `approval_needed` in `report.md`. Set `delivered_at` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Keep `approval_needed` as `true` only if a target waited for the user.
 4. Set `ended_at` in `run-log.md` to the same kind of time.
 5. Count the tokens. If `session_ids` in `spec.md` is not empty, run `bash "$scripts/session-tokens.sh"` with one `--session <id>` per id. Set `tokens_used` in `run-log.md` to line 1 and `subagent_tokens` to line 2. Otherwise run `bash "$scripts/session-tokens.sh" "<workspace_cwd>"`, set `tokens_used` to the number, and leave `subagent_tokens` empty. If the script exits 2, leave `tokens_used` and `subagent_tokens` empty and write a `step` line: `tokens_used not available`.
-6. Set `status` to `delivered` in `spec.md`.
-7. Tell the user what shipped, where, and how to undo it. Ask nothing.
+6. Write the exit note. Copy `${CLAUDE_PLUGIN_ROOT}/templates/retro-note.md` to `$task_dir/retro-note.md`. Set `task_id`. Set `written_at` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Write it now, while you still remember the work. The retro of next week reads it. Each bullet names its evidence: a `run-log.md` line, a file and line, or a command. A section with nothing to say holds `None.`
+   - `## Slow or repeated steps`: what took long or ran again, and why.
+   - `## Would script`: each step that you did by hand more than once, with the script that can replace it.
+   - `## Spec gaps`: what the spec questions did not ask, and what that cost.
+   - `## Tool and guard friction`: prompts, guard asks, failed commands, and waits.
+   - `## Surprises`: anything else the next task needs to know.
+7. Set `status` to `delivered` in `spec.md`.
+8. Tell the user what shipped, where, and how to undo it. Ask nothing.
 
 ## Stop
 
