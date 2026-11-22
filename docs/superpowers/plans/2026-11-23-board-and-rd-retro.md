@@ -239,6 +239,40 @@
 - [ ] **Step 9: Run** `bash tests/run-all.sh`. Expected: all pass.
 - [ ] **Step 10: Commit** `feat: add /wstack:board, the overview of open RDs`.
 
+### Task 7: Live monitor
+
+**Files:**
+- Modify: `scripts/board.sh` (two new row fields), `skills/board/SKILL.md` (`--watch`), `README.md`, `docs/spec.md`
+- Create: `scripts/board-watch.sh`, `tests/fixtures/board-transcripts/` (small jsonl and meta files)
+- Test: `tests/test_board.sh`, `tests/test_board_watch.sh`
+
+**Interfaces:**
+- Consumes: `board.sh` rows from Task 6, `transcript_main_files` and `transcript_subagent_files` from `scripts/lib/transcripts.sh`, `spec.session_ids` from Task 1.
+- Produces: each `board.sh` row also has `last_tool` (`{"tool","hint","at"}` or `null`) and `subagents` (list of `{"type","description","idle_seconds","last_tool"}`), as design F1 says. `board-watch.sh` as design F2 says.
+
+- [ ] **Step 1: Write fixtures.** Write three RD sessions, each with a different last `tool_use`:
+  - a Bash call with a `description`
+  - a Bash call with no description and a long command that holds `token=abc123`
+  - a Read of `/a/b/login.ts`
+
+  Under one session's `subagents/`: a finished agent (meta has `finished: true`), a running agent (fresh file), and a stale agent (`touch -t` to an old time, no `finished`). Each meta file holds `agentType` and `description`.
+- [ ] **Step 2: Write the failing tests** in `tests/test_board.sh` (temp `HOME`, temp vault, fake herdr):
+  - `last_tool.tool` is `Bash` and `last_tool.hint` is the description.
+  - With no description, the hint is the first word of the command only, and the output never holds `abc123`.
+  - A Read shows the hint `login.ts`.
+  - `subagents` holds only the running agent, with its `type` and `description`. The finished and the stale agents are left out.
+  - A hint is 60 characters at most and holds no newline.
+  - A task with no `session_ids` has `last_tool: null` and `subagents: []`.
+  - `WSTACK_BOARD_ACTIVE_MINUTES=100000` brings the stale agent back.
+- [ ] **Step 3: Write the failing tests** in `tests/test_board_watch.sh`: `board-watch.sh --once` prints one header line per open RD with its slug and group, a tool line with the hint, and one line per running subagent. It exits 0. A bad `--interval` (not a positive integer) exits 1.
+- [ ] **Step 4: Run** both test files. Expected: FAIL.
+- [ ] **Step 5: Implement** the two fields in `board.sh` and the script `scripts/board-watch.sh`. Read only the last 200 lines of each transcript with `tail -n 200`. Skip lines that are not JSON, as `transcript-stats.sh` does. The loop clears with `printf '\033[H\033[2J'`, prints a frame, and sleeps `--interval` seconds.
+- [ ] **Step 6: Board skill `--watch`.** Add the design F3 steps to `skills/board/SKILL.md`. Add a `tests/test_skills.sh` assertion that the skill holds `board-watch.sh`, `herdr pane split --current --direction down --no-focus`, and `herdr pane run`.
+- [ ] **Step 7: Docs.** Describe `--watch` in `README.md` and `docs/spec.md`.
+- [ ] **Step 8: Lint** the changed Markdown by hand. Fix every new hit.
+- [ ] **Step 9: Run** `bash tests/run-all.sh`. Expected: all pass.
+- [ ] **Step 10: Commit** `feat: add a live monitor of the open RDs`.
+
 ## Release (controller, after the final review)
 
 Bump `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and `tests/test_manifest.sh` to `0.5.0`. Add a `## 0.5.0 - <date>` CHANGELOG entry with `- **feat:**`, `- **change:**`, and `- **docs:**` bullets. Run the suite, merge, push, watch the catalog sync, and update the installed plugin.

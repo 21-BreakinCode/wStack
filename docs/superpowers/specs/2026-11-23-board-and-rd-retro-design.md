@@ -156,6 +156,19 @@ env -u HERDR_ENV -u HERDR_WORKSPACE_ID -u HERDR_TAB_ID -u HERDR_PANE_ID \
 - E1. `skills/start-task/references/execute.md` gets one rule: if you open a herdr pane, open it in your own workspace with `herdr pane split --current ... --no-focus`, and close it before Deliver.
 - E2. pause-work already stops the background work of a session. No change.
 
+### Part F. Live monitor
+
+The user asked for a live view of the open RDs: what each one does, which subagents it runs right now, and which tools they call. The view updates by itself.
+
+Call: a herdr pane that runs a bash refresh loop, not a Claude Code mod. The mod API is early access, its pane docks beside the chat only in the fullscreen layout, and it loads in every RD session too. A bash loop reuses `board.sh`, runs in any terminal, and fits the existing bash tests. A mod can read the same `board.sh` output later.
+
+- F1. `board.sh` rows gain `last_tool` and `subagents`. The data comes from the newest transcript in `session_ids`, found with `scripts/lib/transcripts.sh`. The script reads only the last 200 lines of each transcript, because a transcript can hold tens of megabytes.
+  - `last_tool` is `{"tool", "hint", "at"}` for the last `tool_use` item. The hint takes the first field that is set, in this order: `input.description`, the base name of `input.file_path`, `input.pattern` cut to 40 characters, and the first word of `input.command`. It is cut to 60 characters, with newlines removed. Call: a Bash command never shows past its first word, because a command can hold a secret.
+  - `subagents` lists the subagents that run now: an `agent-*.jsonl` file under `<session id>/subagents/` whose `.meta.json` has no `finished: true` and that changed in the last `WSTACK_BOARD_ACTIVE_MINUTES` minutes (default 15). Each item is `{"type", "description", "idle_seconds", "last_tool"}`, with `type` and `description` from the meta file.
+  - A task with no `session_ids` or no transcript gets `last_tool: null` and `subagents: []`.
+- F2. New script `scripts/board-watch.sh --vault <abs> --tasks-dir <rel> [--interval <seconds>] [--once]` clears the screen and prints one frame every `--interval` seconds (default 3). A frame shows, per RD, one header line (group, slug, stage, herdr state, age), one tool line, and one line per running subagent. `--once` prints one frame without clearing and exits, for tests. Ctrl-C ends the loop.
+- F3. `/wstack:board --watch` opens the monitor. Inside herdr, it runs `herdr pane split --current --direction down --no-focus`, then `herdr pane run <pane id> "bash <scripts>/board-watch.sh ..."`, and prints the pane id and `herdr pane close <pane id>`. Outside herdr, it prints the command to run in another terminal.
+
 ## Check first
 
 1. `${CLAUDE_SESSION_ID}` is replaced in plugin skill text and matches the transcript file name. If not, use the A2 fallback.
@@ -182,3 +195,4 @@ env -u HERDR_ENV -u HERDR_WORKSPACE_ID -u HERDR_TAB_ID -u HERDR_PANE_ID \
 - Counting in a script, reading in the agent.
 - Reopen only with a question from the evidence. All questions for one task go in one prompt.
 - The board's only write is the workspace close that the user picked, and a worktree with changes is skipped.
+- The live monitor is a herdr pane with a bash refresh loop, not a Claude Code mod. Tool hints never show a Bash command past its first word.
