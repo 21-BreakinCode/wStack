@@ -203,6 +203,21 @@ for eval_name in confirm-stale-contract gate-applies-merged-patch; do
 done
 assert "deliver-contract-pending grader gives the real reason for the unchanged body" 'grep -qF "because the contract gate does not run again after Deliver" "$repo_root/evals/deliver-contract-pending/graders/patch-and-pending.md"'
 
+# init-service contract phase
+init_skill="$repo_root/skills/init-service/SKILL.md"
+init_contract_part="$(slice "$init_skill" '### Phase 8' '### Phase 9')"
+init_report_part="$(slice "$init_skill" '### Phase 9' '## Non-negotiable rules')"
+for needle in 'contract-path.sh" --vault "$vault"' 'contract-check.sh' 'Set up the service contract now?' 'Launch a contract task' 'Not now' 'Launch mode' 'skills/start-task/SKILL.md' 'set up the contract' 'WSTACK_TASKS_DIR' 'EVAL_WSTACK_TASKS_DIR' 'Workflow/Tasks'; do
+  assert "init-service contract phase names $needle" 'has "$init_contract_part" "$needle"'
+done
+assert "init-service contract phase comes after Phase 7" '[ -n "$(grep -n "^### Phase 8 " "$init_skill" | cut -d: -f1)" ] && [ "$(grep -n "^### Phase 7 " "$init_skill" | cut -d: -f1)" -lt "$(grep -n "^### Phase 8 " "$init_skill" | cut -d: -f1)" ]'
+assert "init-service never runs work mode and prints the resume command outside herdr" 'has "$init_contract_part" "Never run work mode in this session." && has "$init_contract_part" "created, not launched (not inside herdr)" && has "$init_contract_part" "claude \"/wstack:start-task --task <task_id>\""'
+assert "init-service maps the launch exit codes" 'has "$init_contract_part" "exit 5" && has "$init_contract_part" "exit 1, 4, or 6" && has "$init_contract_part" "cleanup hint"'
+assert "init-service checks the file explicitly and runs gh from the repo" 'has "$init_contract_part" "file=yes" && has "$init_contract_part" "from \`\$REPO_ROOT\`"'
+assert "init-service reads contract-check status for exit 0 or 1" 'has "$init_contract_part" "Exit 0 or 1 prints a \`status:\` line." && has "$init_contract_part" "Exit 2 or 3 is an error"'
+assert "Contract: line appears only in Phase 8 text and the Phase 9 report block" '[ "$(grep -c "^    Contract: " "$init_skill")" = 1 ] && has "$init_report_part" "    Contract: "'
+assert "init-service report has a Contract: line" 'has "$init_report_part" "Contract:"'
+
 # glob_blocks_without_null_glob <file>...: counts bash blocks that loop over a glob and lack the setopt line
 glob_blocks_without_null_glob() {
   awk '/^[[:space:]]*```bash/ { in_block = 1; has_glob = 0; has_setopt = 0; next }

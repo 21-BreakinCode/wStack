@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 # /wstack:init-service
 
-One-time per repo. It resolves the current org, and finds or appends the service mapping row for this repo. If the LifeOS handover folder is missing, it creates one. It symlinks `./handover` to that folder, and writes `/handover` to the local git exclude file.
+One-time per repo. It resolves the current org, and finds or appends the service mapping row for this repo. If the LifeOS handover folder is missing, it creates one. It symlinks `./handover` to that folder, and writes `/handover` to the local git exclude file. Last, it offers to set up the service contract.
 
 ## Vault location
 
@@ -51,7 +51,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 MAIN_CHECKOUT="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
 ```
 
-Each Bash call is a new shell. If Phase 6 or Phase 7 runs in a later Bash call, set these two variables again there.
+Each Bash call is a new shell. If Phase 6 or Phase 7 runs in a later Bash call, set these two variables again there. Phase 8 needs only `REPO_ROOT` and `vault`.
 
 ```bash
 RESULT=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/resolve-service.sh" "$PWD" "$ORG") && EXIT=$? || EXIT=$?
@@ -121,7 +121,41 @@ Handle exit codes:
 
 Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/ensure-exclude.sh" "$REPO_ROOT"`. Report its output.
 
-### Phase 8 — Report
+### Phase 8 — Service contract
+
+Run this phase for a mapped repo, also one that was mapped before this run. It runs after Phase 7, so it sees the row that Phase 5 wrote. Set `vault`, `LIFEOS_ROOT`, and `REPO_ROOT` again in this Bash call.
+
+```bash
+contract_file=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/contract-path.sh" --vault "$vault" "$REPO_ROOT") && path_exit=0 || path_exit=$?
+echo "path_exit=$path_exit contract_file=$contract_file"
+[ -f "$contract_file" ] && echo file=yes || echo file=no
+```
+
+- **Exit 1:** set the `Contract:` line to `not mapped`. Go to Phase 9.
+- **Exit 2:** set the `Contract:` line to the stderr text. Go to Phase 9.
+- **Exit 0 and the file exists:** run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/contract-check.sh" "$REPO_ROOT" "$contract_file"`. Exit 0 or 1 prints a `status:` line. Set the `Contract:` line to `present (<status>)`, with that value. Exit 2 or 3 is an error: set the line to its stderr text. Change nothing. Go to Phase 9.
+- **Exit 0 and the file does not exist:** ask one `AskUserQuestion`: "Set up the service contract now?" with the options "Launch a contract task" and "Not now". On "Not now", set the `Contract:` line to `not set up` and go to Phase 9.
+
+On "Launch a contract task", resolve the tasks folder as start-task does. Take the first value that is set and is not a literal `${user_config...}` text: the shell variable `WSTACK_TASKS_DIR`, then `EVAL_WSTACK_TASKS_DIR`, then `${user_config.tasks_dir}`, then `Workflow/Tasks`. Print the two shell variables in one call:
+
+```sh
+printf '%s\n' "TASKS_DIR WSTACK=${WSTACK_TASKS_DIR:-} EVAL=${EVAL_WSTACK_TASKS_DIR:-}"
+```
+
+Then read "Launch mode" in `${CLAUDE_PLUGIN_ROOT}/skills/start-task/SKILL.md` (a user-invoked skill, so read the file and follow it). Set `$tasks_dir` to the tasks folder and `$scripts` to `${CLAUDE_PLUGIN_ROOT}/scripts`. Run its steps with the idea `set up the contract`, the work type `contract`, and the repository `$REPO_ROOT`. Run the `gh repo view` command from `$REPO_ROOT`.
+
+Never run work mode in this session. Set the `Contract:` line from the result of Launch mode:
+
+| Result | `Contract:` line |
+|---|---|
+| `launch-task.sh` exit 0 | `task <task_id> launched` |
+| `launch-task.sh` exit 3 (not inside herdr) | `task <task_id> created, not launched (not inside herdr)`. Print `cd "$REPO_ROOT" && claude "/wstack:start-task --task <task_id>"`. |
+| `launch-task.sh` exit 5 | The first stderr line. Print the cleanup hint from stderr. |
+| `launch-task.sh` exit 1, 4, or 6, or a failed preflight | The first stderr line (or output line for the preflight). |
+
+In every case go to Phase 9.
+
+### Phase 9 — Report
 
 ```
 ✓ Service initialized:
@@ -130,6 +164,7 @@ Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/ensure-exclude.sh" "$REPO_ROOT
     LIFEOS path:    $vault/01Project/$ORG/$LIFEOS_SUBPATH/handover/
     Symlink:        $REPO_ROOT/handover -> (above)
     Local exclude:  /handover (added | already present)
+    Contract:       present (<status>) | task <task_id> launched | not set up | <error>
 
 Next: /wstack:create-handover <topic>
 ```
