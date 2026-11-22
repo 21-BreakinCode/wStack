@@ -143,6 +143,8 @@ wstack/
 │   ├── contract-edit.sh           the only writer of contract files
 │   ├── contract-hook.sh           SessionStart and PostToolUse drift hook
 │   ├── lib/repo.sh                main_checkout: finds the main checkout from a worktree
+│   ├── lib/frontmatter.sh         fm_get, fm_set, fm_append: read and write frontmatter
+│   ├── lib/herdr.sh               herdr helpers for launch-task.sh and resume-task.sh
 │   └── handover/                  resolvers, exclude and symlink scripts, Python helpers
 ├── docs/
 │   └── decisions.md               changes to ASSUME rules, with reasons
@@ -182,7 +184,7 @@ One folder per task in the Obsidian vault. It holds text only. Media never goes 
 A task with a contract adds these files. Section 7.2 describes the gate.
 
 ```
-  contract-brief.md             Confirmation: gate state in frontmatter (contract_file, base_branch, checked_commit, check_exit, stale_sections), then the reader's brief. No file means the task has no contract
+  contract-brief.md             Confirmation: gate state in frontmatter (contract_file, base_branch, checked_commit, stale_sections), then the reader's brief. No file means the task has no contract
   contract.gate-patch.md        Confirmation: the reader's patch for stale sections and built plan items
   contract.before.md            Confirmation: copy of the contract before the gate patch, for undo. A contract task writes it in Deliver
   plan.before.md                Confirmation: copy of plan.md before the gate removes built items, for undo
@@ -193,7 +195,7 @@ A task with a contract adds these files. Section 7.2 describes the gate.
 
 Each copy is written once. The write-back has its own copies, so its undo keeps the gate change.
 
-A `contract` task adds `contract.draft.md`, `plan.draft.md`, and `decisions.draft/`. Execute writes them. Deliver copies them into the vault.
+A `contract` task adds `contract.draft.md`, `plan.draft.md`, and `decisions.draft/`. Execute writes them. Deliver copies them into the vault. Deliver also writes `decisions.copied.txt`, the names of the decision files that it copied, so the undo deletes only those.
 
 Each agent reads the files from the steps before it. `/wstack:run-retro` reads every folder from the past week.
 
@@ -302,7 +304,7 @@ Contract gate. For a `code` or `ops` task, the gate runs before the spec is writ
 
 1. Find the contract of the repository. If the repository has no service mapping, write `Contract: not mapped` to `run-log.md` and go on. The task has no contract. If the contract file does not exist, go to step 4.
 2. Fetch `origin/<base_branch>`. If the fetch fails, go on with the local ref and say so.
-3. Resolve the pending items, as "Pending items" in the `deliver-task` skill says. A merged pull request moves its patch into the contract. A closed one drops its item and its patch.
+3. Resolve the pending items, as "Pending items" in the `deliver-task` skill says. A merged pull request moves its patch into the contract. A closed one drops its item and its patch, and sets the decision files of its task to `status: withdrawn`.
 4. Run the drift check. If the contract file is missing or the check fails, ask the user to set up a contract first or to go on without one. To go on without one, the agent writes the spec with no `contract-brief.md`. Otherwise dispatch the `contract-reader` agent. The gate writes `contract-brief.md`. If sections are stale, it also writes `contract.gate-patch.md`.
 5. When the agent writes the spec, it reads the brief with the vault notes. The spec adds a `## Contract changes` section.
 6. If the check exited 0 or 1, the agent applies the gate patch after approval and removes the built plan items from `plan.md`. If the patch has a block for each stale section, it sets `verified_commit` to `checked_commit`. This is the commit that the gate checked. Otherwise `verified_commit` stays, and the agent names the sections that stay stale. Every contract write takes the lock folder `<contract>.lock`. If the lock is busy, the task stops.
@@ -571,7 +573,8 @@ The agent asks the user before these actions, and never otherwise:
 3. A non-undoable deliver target (section 11). Merge always.
 4. After `retry_limit` failed tries.
 5. When the spec is wrong or unclear.
-6. Writing the contract. The approved spec covers the gate's contract update, and the write after a merge. A `contract` task covers `write the contract files` as a deliver target. Every write takes the lock folder `<contract>.lock`. A busy lock stops the task, and the agent never writes without the lock.
+
+A contract write needs no new approval. The approved spec covers the gate's contract update, and the write after a merge. A `contract` task covers `write the contract files` as a deliver target. Every write takes the lock folder `<contract>.lock`. A busy lock stops the task, and the agent never writes without the lock.
 
 The user approves in the Claude Code session, in the terminal or in the Claude app. The review page "copy reply" text is one way to give that answer.
 

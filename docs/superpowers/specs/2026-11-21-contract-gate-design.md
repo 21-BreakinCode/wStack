@@ -170,7 +170,7 @@ Rules for the contract:
 
 - The body states only what is true now, in the present tense. It holds no dates and no "was" or "changed".
 - An `@` path is relative to the repository root, not to the contract file. Agents read the contract with the Read tool and follow each `@` path themselves.
-- Every section except `Team docs` and `Open questions` has a `sources` comment. The check also watches each `@` target.
+- Every section except `Team docs`, `Consumers`, `Gotchas`, and `Open questions` has a `sources` comment. `Consumers` and `Gotchas` describe things outside the code. The check also watches each `@` target.
 - The contract never copies text from a team doc. It adds only what the team docs lack.
 - `base_branch` names the branch that feature PRs target. The contract describes that branch, not the local `HEAD`.
 - `verified_commit` is a commit on `base_branch`. Every section matches the code at that commit.
