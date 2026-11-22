@@ -108,6 +108,7 @@ wstack/
 ├── skills/
 │   ├── start-task/SKILL.md        user command: /wstack:start-task
 │   ├── run-retro/SKILL.md         user command: /wstack:run-retro
+│   ├── pause-task/SKILL.md        user command: /wstack:pause-task
 │   ├── init-org/SKILL.md          user command: /wstack:init-org
 │   ├── init-service/SKILL.md      user command: /wstack:init-service
 │   ├── create-handover/SKILL.md   user command: /wstack:create-handover
@@ -268,6 +269,7 @@ ASSUME: `spec.md` holds the current status. The worker agent updates it at each 
 | `awaiting-deliver-approval` | Deliver: a non-undoable target waits for the user's approval. |
 | `delivered` | All targets are done. |
 | `cancelled` | The user stopped the task, or the launch failed. |
+| `paused` | The user ran `/wstack:pause-task`. `paused_from` in `spec.md` holds the old status, and `pause.md` in the task folder holds where the task stopped. |
 
 ## 7. Pipeline
 
