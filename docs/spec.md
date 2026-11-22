@@ -224,6 +224,7 @@ repo: owner/repo           # code and ops tasks only
 mobile: false              # true when the user asked for mobile mode
 status: awaiting-approval  # see 6.2
 paused_from:               # the status before /wstack:pause-work; empty when the task is not paused
+session_ids: []            # every Claude session that worked on the task, newest last
 approved_at:               # ISO 8601 time, set when the user approves
 created_at: 2026-11-18T22:10:00+08:00
 ---

@@ -98,4 +98,10 @@ assert "start-task exit 3 row says init-service hands a contract task off" 'grep
 assert "init-service Phase 8 intro does not name LIFEOS_ROOT" '! grep -qF "Set \`vault\`, \`LIFEOS_ROOT\`" "$repo_root/skills/init-service/SKILL.md" && grep -qF "Set \`vault\` and \`REPO_ROOT\` again" "$repo_root/skills/init-service/SKILL.md"'
 assert "new-section check strips a trailing space and carriage return" 'grep -qF "trailing space and a trailing carriage return" "$repo_root/skills/start-task/references/confirmation.md" && grep -qF "trailing space and a trailing carriage return" "$repo_root/skills/deliver-task/SKILL.md"'
 assert "run-evals fills __PLUGIN_ROOT__ and the contract evals use it for plugin scripts" 'grep -qF "s|__PLUGIN_ROOT__|" "$repo_root/tests/run-evals.sh" && for e in confirm-stale-contract gate-applies-merged-patch; do grep -qF "__PLUGIN_ROOT__/scripts/new-task-folder.sh" "$repo_root/evals/$e/prompt.md" && grep -qF "__PLUGIN_ROOT__/scripts/frontmatter-set.sh" "$repo_root/evals/$e/prompt.md" || exit 1; done'
+add_text='session-id-add.sh "$task_dir/spec.md" "${CLAUDE_SESSION_ID}"'
+status_text='fm_get "$task_dir/spec.md" status'
+work_section="$(sed -n '/^## Work mode/,/^## Stop items/p' "$start_skill")"
+add_line="$(grep -nF -- "$add_text" <<<"$work_section" | head -1 | cut -d: -f1)"
+status_line="$(grep -nF -- "$status_text" <<<"$work_section" | head -1 | cut -d: -f1)"
+assert "start-task work mode records the session id before it reads the status" '[ -n "$add_line" ] && [ -n "$status_line" ] && [ "$add_line" -lt "$status_line" ]'
 finish

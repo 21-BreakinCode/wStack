@@ -35,6 +35,8 @@ abort_with_cleanup_hint() {  # <reason>
   echo "workspace $workspace_id is still open. To clean up: $(herdr_cli_prefix) workspace close $workspace_id" >&2
   exit 5
 }
-herdr_start_claude "$slug" "$pane_id" --continue || abort_with_cleanup_hint "agent $slug did not start"
+last_session_id="$(fm_get "$task_dir/spec.md" session_ids | jq -r '.[-1] // empty' 2>/dev/null || true)"
+if [ -n "$last_session_id" ]; then resume_flags=(--resume "$last_session_id"); else resume_flags=(--continue); fi
+herdr_start_claude "$slug" "$pane_id" "${resume_flags[@]}" || abort_with_cleanup_hint "agent $slug did not start"
 herdr_cmd workspace focus "$workspace_id" >/dev/null || abort_with_cleanup_hint "could not focus workspace $workspace_id"
 echo restarted
