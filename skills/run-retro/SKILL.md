@@ -45,8 +45,49 @@ None yet.
 6. Run `bash "$scripts/render-page.sh" "$retro_dir/$retro_name.md" "$retro_dir/$retro_name.html"`.
    - Exit 0 or 1: the page exists. Exit 1 means the page is wider than 375 px. Tell the user the width.
    - Exit 2: print the stderr of the script as it is. Keep the `.md` file. Go on.
-7. Tell the user the path of the page (or of the `.md` file when the render failed). List each proposal with its number and title. If the reply was `No proposals.`, stop here.
-8. Ask which proposals to apply, by number. End the reply. Wait.
+7. Tell the user the path of the page (or of the `.md` file when the render failed). List each proposal with its number and title. Then run "Contract drift" below. With `No proposals.` and no stale section from the drift part, stop here.
+8. Ask which proposals to apply, by number. If the drift part found stale sections, also ask which contract sections to update: names, `all`, or `none`. Put both in one question. With `No proposals.`, ask only for the contract sections. End the reply. Wait.
+
+## Contract drift
+
+This part runs after step 7 and before step 8. It never stops the retro. When a step below says "skip", go on to step 8 with no contract sections.
+
+D1. Run `git rev-parse --show-toplevel`. It is `$repo`. If it fails, say `Contract: not a git project` and skip.
+D2. Run `contract_file="$(bash "$scripts/contract-path.sh" --vault "$vault" "$repo")"`.
+   - Exit 1: say `Contract: not mapped` and skip.
+   - Exit 2: print the stderr text and skip.
+   - Exit 0 and the file `$contract_file` does not exist: say that the contract is missing, point to `/wstack:init-service`, and skip.
+D3. Set `base_branch` with `source "$scripts/lib/frontmatter.sh"; fm_get "$contract_file" base_branch`. Run `git -C "$repo" fetch origin "$base_branch"`. If it fails, tell the user and go on with the local ref `origin/$base_branch`. If the current branch is `$base_branch` and `git -C "$repo" status --porcelain` prints nothing, also run `git -C "$repo" merge --ff-only "origin/$base_branch"`. If that fails, tell the user and go on. In every other case, say that only a fetch ran. The retro never merges, rebases, or stashes the work of the user.
+D4. Run `bash "$scripts/contract-check.sh" "$repo" "$contract_file"`.
+   - Exit 0: say `Contract: fresh` and skip.
+   - Exit 2 or 3: print the cause and skip.
+   - Exit 1: go on.
+D5. Run `git -C "$repo" rev-parse "origin/$base_branch"`. It is `$checked_commit`. Dispatch the agent `wstack:contract-reader`. Give it `$repo`, `$contract_file`, the output of the check, and the goal `refresh the stale sections`. The reply is a brief, then the line `=== PATCH ===`, then the patch. If the part after the marker is not `None`, write it to `$retro_dir/$retro_name.contract-patch.md`. List each stale section (the `stale_sections:` line of the check) with a one-line summary of the change that the patch proposes. A stale section with no block in the patch is listed as `no patch`.
+D6. After the answer to step 8, read the chosen sections. If the user chose none, write `Contract: stale, not updated` in the `## Contract` section of the retro file and skip. Otherwise update the contract in one Bash call. Write the real value for each `<...>` in single quotes, and write each `'` in a value as `'\''`. `<chosen section names, one per line>` holds each chosen name on its own line (for `all`, every stale section that has a block in the patch).
+
+   ```bash
+   set -e
+   scripts='<scripts folder>'
+   retro_dir='<retro folder>'
+   retro_name='<retro name>'
+   contract_file='<contract file>'
+   checked_commit='<checked commit>'
+   stale_sections='<stale_sections JSON>'
+   chosen_sections='<chosen section names, one per line>'
+   patch="$retro_dir/$retro_name.contract-patch.md"
+   section_args=()
+   while IFS= read -r name; do section_args+=(--section "$name"); done <<<"$chosen_sections"
+   bash "$scripts/contract-edit.sh" lock "$contract_file"
+   trap 'bash "$scripts/contract-edit.sh" unlock "$contract_file"' EXIT
+   [ -f "$retro_dir/$retro_name.contract-before.md" ] || cp "$contract_file" "$retro_dir/$retro_name.contract-before.md"
+   bash "$scripts/contract-edit.sh" apply "$contract_file" "$patch" "${section_args[@]}"
+   still_stale="$(jq -r '.[]' <<<"${stale_sections:-[]}" | CHOSEN="$chosen_sections" awk -v patch="$patch" 'BEGIN { n = split(ENVIRON["CHOSEN"], names, "\n"); for (i = 1; i <= n; i++) chosen[names[i]] = 1; while ((getline line < patch) > 0) if (line ~ /^## / && (substr(line, 4) in chosen)) applied[substr(line, 4)] = 1 } !($0 in applied)')"
+   if [ -z "$still_stale" ]; then bash "$scripts/contract-edit.sh" set-verified "$contract_file" "$checked_commit"; else printf 'still stale:\n%s\n' "$still_stale"; fi
+   ```
+
+   If every stale section was applied, run `set-verified` (the block does it). When the block prints `still stale:` and names, `verified_commit` stays, because the contract still drifts. Tell the user which sections stay stale. `apply` prints the applied names, and a warning on stderr for each section it adds as new.
+   Exit 4 means the lock is busy. Tell the user, write `Contract: not updated, the lock is busy` in the `## Contract` section, and go on. Any other non-zero exit means a command failed after the lock. The trap already ran `unlock`. Print the stderr text, write `Contract: update failed` in the `## Contract` section, and go on.
+D7. After step 8 is done and before the retro file is final, add a `## Contract` section to `$retro_dir/$retro_name.md`: the status (`updated` or `still stale`), the applied section names, the still stale names, and the undo. Build the undo as step 9 of `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/confirmation.md` does, with `$retro_dir/$retro_name.contract-before.md` as the before copy: the old-section command, then the new-section command for each warned name, then the commit command (only after a run of `set-verified`). Render the page again as in step 6.
 
 ## After the user picks
 

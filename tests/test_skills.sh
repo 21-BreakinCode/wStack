@@ -32,6 +32,17 @@ for skill in build-review-page capture-evidence deliver-task; do
 done
 assert "run-retro names the -2 rule for a second retro in a week" 'grep -qF "write \`\$week-2\` instead, then \`\$week-3\`" "$repo_root/skills/run-retro/SKILL.md"'
 assert "run-retro uses retro_name in every retro file path" '! grep -qF "\$retro_dir/\$week" "$repo_root/skills/run-retro/SKILL.md"'
+# Contract drift in run-retro
+retro_skill="$repo_root/skills/run-retro/SKILL.md"
+assert "run-retro: step 7 hands over to Contract drift, step 8 asks after it" '[ "$(grep -n "^7\. .*Contract drift" "$retro_skill" | head -1 | cut -d: -f1)" -lt "$(grep -n "^## Contract drift" "$retro_skill" | cut -d: -f1)" ] && [ "$(grep -n "^## Contract drift" "$retro_skill" | cut -d: -f1)" -lt "$(grep -n "^## After the user picks" "$retro_skill" | cut -d: -f1)" ]'
+assert "run-retro drift skips a non-git directory, an unmapped repository, and a missing contract" 'grep -qF "Contract: not a git project" "$retro_skill" && grep -qF "Contract: not mapped" "$retro_skill" && grep -qF "/wstack:init-service" "$retro_skill"'
+assert "run-retro drift uses contract-path.sh and contract-check.sh" 'grep -qF "contract-path.sh" "$retro_skill" && grep -qF "contract-check.sh" "$retro_skill"'
+assert "run-retro drift fetches, and fast-forwards only on a clean base branch" 'grep -qF "fetch origin" "$retro_skill" && grep -qF "merge --ff-only" "$retro_skill" && grep -qF "status --porcelain" "$retro_skill" && ! grep -qE "git (-C [^ ]+ )?(rebase|stash|pull)( |$)" "$retro_skill"'
+assert "run-retro drift dispatches contract-reader and writes the patch and before copy in retro_dir" 'grep -qF "wstack:contract-reader" "$retro_skill" && grep -qF "\$retro_name.contract-patch.md" "$retro_skill" && grep -qF "\$retro_name.contract-before.md" "$retro_skill"'
+assert "run-retro drift applies under the lock pattern with a write-once copy and --section" 'grep -qF "contract-edit.sh\" lock" "$retro_skill" && grep -qF "trap '"'"'bash \"\$scripts/contract-edit.sh\" unlock" "$retro_skill" && grep -qF "[ -f \"\$retro_dir/\$retro_name.contract-before.md\" ] || cp" "$retro_skill" && grep -qF -- "--section" "$retro_skill"'
+assert "run-retro drift writes a Contract section into the retro file" 'grep -qF "## Contract" "$retro_skill" && grep -qF "the undo" "$retro_skill"'
+assert "run-retro drift runs set-verified only if every stale section was applied" 'grep -qF "If every stale section was applied, run \`set-verified\`" "$retro_skill" && grep -qF "set-verified" "$retro_skill"'
+assert "run-retro step 8 asks for proposals and contract sections in one question" 'grep -qF "contract sections" "$retro_skill" && grep -qF "\`all\`" "$retro_skill" && grep -qF "\`none\`" "$retro_skill"'
 assert "no obsidian-kit names in skills" '! grep -rqE "obsidian-kit:|OBSIDIAN_KIT_|resolve_via_handover" "$repo_root/skills"'
 for s in init-org init-service create-handover wrap-up-handovers; do assert "$s reads vault_path" 'grep -qF "\${user_config.vault_path}" "$repo_root/skills/$s/SKILL.md"'; done
 assert "init-service sets REPO_ROOT before the mapped skip" '[ "$(grep -n "REPO_ROOT=" "$repo_root/skills/init-service/SKILL.md" | head -1 | cut -d: -f1)" -lt "$(grep -n "skip to Phase 5" "$repo_root/skills/init-service/SKILL.md" | head -1 | cut -d: -f1)" ]'

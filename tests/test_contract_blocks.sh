@@ -279,4 +279,29 @@ for shell in $test_shells; do
   done
 done
 
+retro_skill="$repo_root/skills/run-retro/SKILL.md"
+retro_block() {  # <retro folder> <stale JSON> <chosen names, one per line>
+  fill "$(block_after "$retro_skill" 'D6. After the answer')" '<scripts folder>' "$repo_root/scripts" '<retro folder>' "$1" '<retro name>' 2026-W47 \
+    '<contract file>' "$(quote "$CONTRACT")" '<checked commit>' checked123 '<stale_sections JSON>' "$2" '<chosen section names, one per line>' "$3"
+}
+for shell in $test_shells; do
+  echo "$shell: run-retro contract drift block"
+  setup_world "retro-$shell"
+  retro_dir="$VAULT/Retros"; mkdir -p "$retro_dir"
+  printf '## Interfaces\n<!-- sources: api/** -->\nRetro interfaces text.\n\n## Abilities\n<!-- sources: cmd/** -->\nRetro abilities text.\n' >"$retro_dir/2026-W47.contract-patch.md"
+  cp "$CONTRACT" "$world_dir/contract.orig"
+  run_block "$(retro_block "$retro_dir" '["Abilities","Interfaces"]' 'Interfaces')" "$shell"
+  assert "$shell retro: only some sections chosen, exit 0 ($out)" '[ "$rc" = 0 ]'
+  assert "$shell retro: the chosen section is applied, the other is not" 'section_of "$CONTRACT" Interfaces | grep -qF "Retro interfaces text." && ! grep -qF "Retro abilities text." "$CONTRACT"'
+  assert "$shell retro: verified_commit does not move" '[ "$(fm_get "$CONTRACT" verified_commit)" = "$FIRST_COMMIT" ] && printf "%s\n" "$out" | grep -qxF "Abilities"'
+  assert "$shell retro: the before copy is the original and no lock is left" 'cmp -s "$retro_dir/2026-W47.contract-before.md" "$world_dir/contract.orig" && [ ! -e "$CONTRACT.lock" ]'
+  run_block "$(retro_block "$retro_dir" '["Abilities","Interfaces"]' $'Abilities\nInterfaces')" "$shell"
+  assert "$shell retro: all stale sections chosen, verified_commit moves ($out)" '[ "$rc" = 0 ] && [ "$(fm_get "$CONTRACT" verified_commit)" = checked123 ] && grep -qF "Retro abilities text." "$CONTRACT"'
+  assert "$shell retro: the second run keeps the first before copy" 'cmp -s "$retro_dir/2026-W47.contract-before.md" "$world_dir/contract.orig"'
+  mkdir "$CONTRACT.lock"
+  run_block "$(retro_block "$retro_dir" '[]' 'Interfaces')" "$shell"
+  assert "$shell retro: a busy lock exits 4" '[ "$rc" = 4 ]'
+  rmdir "$CONTRACT.lock"
+done
+
 finish
