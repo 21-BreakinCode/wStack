@@ -163,9 +163,11 @@ for shell in $test_shells; do
   printf '## Interfaces\n<!-- sources: api/** -->\nGET /health answers 204.\n\n## Health checks\nGET /health is the probe.\n\n## Remove from plan\n- Gate item\n' >"$task/contract.gate-patch.md"
   run_block "$(filled_block step9 "$task" "Gate item" 0)" "$shell"
   assert "$shell step 9 I4: verified_commit moves when every stale section has a block" '[ "$rc" = 0 ] && [ "$(fm_get "$CONTRACT" verified_commit)" = checked123 ]'
+  run_block "$(filled_block step9 "$task" "Gate item" 0)" "$shell"
+  assert "$shell step 9 second run: exit 0, and the snapshot still lacks the new section" '[ "$rc" = 0 ] && ! grep -qxF "## Health checks" "$task/contract.before.md"'
   undo_old="$(fill "$(code_after "$confirmation" 'The old-section command:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
     '<task folder>' "$task" '<applied names, joined by commas>' Interfaces)"
-  undo_new="$(fill "$(code_after "$confirmation" 'once for each name that a warning named:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" '<name>' 'Health checks')"
+  undo_new="$(fill "$(code_after "$confirmation" 'once for each new name:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" '<name>' 'Health checks')"
   undo_commit="$(fill "$(code_after "$confirmation" 'add the commit command:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
     '<verified_commit>' "$(fm_get "$task/contract.before.md" verified_commit)")"
   run_block "$undo_old && $undo_new && $undo_commit" "$shell"
