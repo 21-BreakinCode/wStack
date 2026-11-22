@@ -238,7 +238,7 @@ task_id: 2026-11-18-fix-login-timeout
 result: pass               # pass | fail | waiting
 blocking_findings: 0
 non_blocking_findings: 0
-evidence_location: r2      # r2 | local
+evidence_location: r2      # r2 | local only
 ---
 ```
 
@@ -267,7 +267,7 @@ ASSUME: `spec.md` holds the current status. The worker agent updates it at each 
 | `verifying` | Verify: checks, evidence, and review run. |
 | `awaiting-deliver-approval` | Deliver: a non-undoable target waits for the user's approval. |
 | `delivered` | All targets are done. |
-| `cancelled` | The user stopped the task. |
+| `cancelled` | The user stopped the task, or the launch failed. |
 
 ## 7. Pipeline
 
@@ -277,6 +277,7 @@ ASSUME: `spec.md` holds the current status. The worker agent updates it at each 
 - The worker agent works out the work type (section 9) and the steps. The user does not choose a type.
 - Mobile mode: if the user asks for mobile, the task runs in mobile mode. ASSUME: the user writes `--mobile` anywhere in the arguments, or uses the word "mobile" in the request. The agent sets `mobile: true` in `spec.md`.
 - The agent creates the task folder with `scripts/new-task-folder.sh`.
+- Outside herdr, a `code` task gets a worktree at `~/.wstack/tasks/<task_id>`, recorded as `workspace_cwd`. The current session cannot work there, so the agent tells the user to run `claude` from that folder and stops. Other work types run in the current session.
 - Repeating jobs ("fixed workflows") also start by hand with `/wstack:start-task`.
 
 ### 7.2 Confirmation (confirmed)

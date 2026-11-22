@@ -187,13 +187,13 @@ If no remaining target needs approval, go to "Finish".
 This rule runs the same way in the same session and in a resumed task. If `status` is `waiting-user`, a target failed. Go to "Retry a failed target". Otherwise find the first remaining target that needs approval and handle only that one. Ask the user about the next one in the same reply when the user has not answered it yet.
 
 - No: keep `status` as `awaiting-deliver-approval`. Ask what to change. If the user wants to drop the target, remove it from the spec's `## Deliver targets` first. A dropped target does not remain. Then go on as in "When no target remains".
-- Yes: set `approved_at` in `report.md` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Run the target with the prefix `WSTACK_APPROVED=1`. Add the prefix only after the yes. Never add it before.
+- Yes: set `approved_at` in `report.md` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Run the target.
 
 ### Merge
 
 1. Find the pull request number with `gh pr list --head wstack/<slug> --state open --json number,url`.
-2. Run `WSTACK_APPROVED=1 gh pr merge <number> --merge`. Always use `--merge`. Never squash.
-3. If the merge works, delete the evidence in R2. Skip this if `r2_bucket` is empty or the repository is in the local-only list: `WSTACK_APPROVED=1 bash "$scripts/evidence-delete.sh" --task-id <task_id> --bucket "<r2_bucket>"`. The merge question named this delete, so the yes to the merge covers it. In the default `ask` mode, the guard still asks before the merge and before the delete.
+2. Run `gh pr merge <number> --merge`. Always use `--merge`. Never squash.
+3. If the merge works, delete the evidence in R2. Skip this if `r2_bucket` is empty or the repository is in the local-only list: `bash "$scripts/evidence-delete.sh" --task-id <task_id> --bucket "<r2_bucket>"`. The merge question named this delete, so the yes to the merge covers it. The guard still asks before the merge and before the delete.
 4. Record the target: `{"target":"merge","url":"<pull request url>","undo":"gh pr revert <number>, other people can see the merge first"}`.
 
 ### Other targets
@@ -204,7 +204,7 @@ Run the target. Record its URL and its undo, or `"undo":"none"` if it has none.
 
 The failed target is the `target` of the last stop item, and `status` is `waiting-user`.
 
-- Yes: set `status` to `verifying`, so a resumed task comes back to Deliver through Verify. For a target that needs approval, set `approved_at` in `report.md` and add the prefix `WSTACK_APPROVED=1`. Never do either for a target that needs no approval. For `open a pull request`, run the steps of "Pull request" again from step 1. For another target, run its steps again. Record the target as usual. If it fails again, stop again as in "Stop".
+- Yes: set `status` to `verifying`, so a resumed task comes back to Deliver through Verify. For a target that needs approval, set `approved_at` in `report.md`. Never do this for a target that needs no approval. For `open a pull request`, run the steps of "Pull request" again from step 1. For another target, run its steps again. Record the target as usual. If it fails again, stop again as in "Stop".
 - No: keep `status` as `waiting-user`. Ask what to change. If the user wants to drop the target, remove it from the spec's `## Deliver targets` first. Then go on as in "When no target remains".
 
 ### When no target remains
@@ -214,7 +214,7 @@ After each target, look for a remaining target. Ship a remaining target that nee
 ## Finish
 
 1. Fill `## What shipped`, `## Where`, and `## How to undo` in `report.md`. List each target with its URL, and each undo step.
-2. If `HERDR_ENV` is `1` and the task has a worktree or a workspace, add the cleanup command under `## How to undo`. Run `herdr workspace list` to find the workspace whose label is the task slug. Write `herdr worktree remove --workspace <id>` for a code task with a worktree. Write `herdr workspace close <id>` for any other task. Write the command only. Never run it.
+2. If `HERDR_ENV` is `1` and the task has a worktree or a workspace, add the cleanup command under `## How to undo`. Run `herdr workspace list` to find the workspace whose label is the task slug. Write `herdr worktree remove --workspace <id>` for a code task with a worktree. Write `herdr workspace close <id>` for any other task. Write the command only. Never run it. If `HERDR_ENV` is not `1` and the task is a code task, write `git -C "<repository folder>" worktree remove "<workspace_cwd>"` instead.
 3. Set `delivered_at` and `approval_needed` in `report.md`. Set `delivered_at` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Keep `approval_needed` as `true` only if a target waited for the user.
 4. Set `ended_at` in `run-log.md` to the same kind of time.
 5. Count the tokens: `bash "$scripts/session-tokens.sh" "<workspace_cwd>"`. Set `tokens_used` in `run-log.md` to the number. If the script exits 2, leave `tokens_used` empty and write a `step` line: `tokens_used not available`.

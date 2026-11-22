@@ -50,6 +50,10 @@ case "$extension" in
       output="$out_dir/$base_name.jpg"
       fail_if_output_is_input "$output"
       sips -s format jpeg "$input" --out "$output" >/dev/null
+      if is_too_large "$output"; then
+        echo "cannot fit $file_name under $max_mb MB" >&2
+        exit 1
+      fi
     fi
     echo "$output"
     ;;
@@ -68,7 +72,7 @@ case "$extension" in
     if is_too_large "$output"; then
       fitted=0
       for height in 1080 720 480 360; do
-        encode_h264 -vf "scale=-2:$height"
+        encode_h264 -vf "scale=-2:'min($height,ih)'"  # never scale up
         if ! is_too_large "$output"; then fitted=1; break; fi
       done
       if [ "$fitted" -eq 0 ]; then

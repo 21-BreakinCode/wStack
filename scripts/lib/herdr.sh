@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# herdr helpers shared by launch-task.sh and resume-task.sh. Source this file.
+# herdr helpers shared by launch-task.sh, resume-task.sh and new-task-folder.sh. Source this file.
 set -euo pipefail
 
 herdr_cmd() {

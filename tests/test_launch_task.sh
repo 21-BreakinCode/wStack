@@ -50,15 +50,28 @@ assert "outside herdr exits 3" '[ "$rc" = 3 ] && grep -q "not running inside her
 outside_dir="$work_dir/outside dir"; mkdir -p "$outside_dir"
 rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$think_dir" >/dev/null 2>&1) || rc=$?
 assert "outside herdr, thinking: exit 3 sets workspace_cwd to the current folder" '[ "$rc" = 3 ] && [ "$(fm_get "$think_dir/spec.md" workspace_cwd)" = "$outside_dir" ]'
+# A3-3: outside herdr a code task gets its own worktree on wstack/<slug>, not the main checkout
+real_repo="$work_dir/real repo"
+git init -q -b main "$real_repo"
+git -C "$real_repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
 outside_code_dir="$(new_task outside-code code)"
-rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$outside_code_dir" --repo-path "$work_dir/repo dir" >/dev/null 2>&1) || rc=$?
-assert "outside herdr, code: exit 3 sets workspace_cwd to the repository" '[ "$rc" = 3 ] && [ "$(fm_get "$outside_code_dir/spec.md" workspace_cwd)" = "$work_dir/repo dir" ]'
+rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$outside_code_dir" --repo-path "$real_repo" >/dev/null 2>&1) || rc=$?
+code_worktree="$HOME/.wstack/tasks/2026-11-18-outside-code"
+assert "outside herdr, code: exit 3 sets workspace_cwd to a worktree under ~/.wstack/tasks" '[ "$rc" = 3 ] && [ "$(fm_get "$outside_code_dir/spec.md" workspace_cwd)" = "$code_worktree" ]'
+assert "outside herdr, code: the worktree is on wstack/outside-code" '[ "$(git -C "$code_worktree" symbolic-ref --short HEAD)" = wstack/outside-code ]'
+assert "outside herdr, code: the main checkout stays on main" '[ "$(git -C "$real_repo" symbolic-ref --short HEAD)" = main ]'
+rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$outside_code_dir" --repo-path "$real_repo" >/dev/null 2>&1) || rc=$?
+assert "outside herdr, code: a second launch reuses the worktree" '[ "$rc" = 3 ] && [ "$(fm_get "$outside_code_dir/spec.md" workspace_cwd)" = "$code_worktree" ]'
+bad_code_dir="$(new_task outside-bad code)"
+rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$bad_code_dir" --repo-path "$work_dir/repo dir" >/dev/null 2>"$work_dir/err") || rc=$?
+assert "outside herdr, code: not a git repository exits 6 and cancels" '[ "$rc" = 6 ] && grep -q "could not create worktree" "$work_dir/err" && [ "$(fm_get "$bad_code_dir/spec.md" status)" = cancelled ]'
 outside_contract_dir="$(new_task outside-contract contract)"
 rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$outside_contract_dir" --repo-path "$work_dir/repo dir" >/dev/null 2>&1) || rc=$?
 assert "outside herdr, contract: exit 3 sets workspace_cwd to the repository" '[ "$rc" = 3 ] && [ "$(fm_get "$outside_contract_dir/spec.md" workspace_cwd)" = "$work_dir/repo dir" ]'
 
 rc=0; FAKE_AGENT_EXISTS=1 bash "$script" --task-dir "$think_dir" >/dev/null 2>"$work_dir/err" || rc=$?
 assert "name taken exits 4" '[ "$rc" = 4 ] && grep -q "agent name taken" "$work_dir/err"'
+assert "name taken sets status cancelled" '[ "$(fm_get "$think_dir/spec.md" status)" = cancelled ]'
 
 : >"$FAKE_LOG"; rm -f "$FAKE_LOG.started"
 FAKE_NOT_READY=trust bash "$script" --task-dir "$think_dir" >/dev/null
@@ -79,11 +92,13 @@ assert "exit 5 prints workspace id and close command" 'grep -q "workspace w3 is 
 rm -f "$FAKE_LOG.started"
 rc=0; FAKE_NOT_READY=other bash "$script" --task-dir "$code_dir" --repo-path "$work_dir/repo dir" >/dev/null 2>"$work_dir/err" || rc=$?
 assert "code exit 5 prints worktree remove and branch delete" 'grep -q "worktree remove --workspace w2" "$work_dir/err" && grep -q "branch -D wstack/fix-login" "$work_dir/err"'
+assert "exit 5 hint quotes the repository path" 'grep -qF "git -C \"$work_dir/repo dir\" branch -D" "$work_dir/err"'
 assert "exit 5 closes nothing" '! grep -qE "workspace close|worktree remove" "$FAKE_LOG"'
 
 failing_code_dir="$(new_task fail-code code)"
 rc=0; FAKE_CREATE_FAIL=1 bash "$script" --task-dir "$failing_code_dir" --repo-path "$work_dir/repo dir" >/dev/null 2>"$work_dir/err" || rc=$?
 assert "worktree create failure exits 6" '[ "$rc" = 6 ] && grep -q "could not create workspace: herdr: boom" "$work_dir/err"'
+assert "worktree create failure sets status cancelled" '[ "$(fm_get "$failing_code_dir/spec.md" status)" = cancelled ]'
 failing_think_dir="$(new_task fail-think thinking)"
 rc=0; FAKE_CREATE_FAIL=1 bash "$script" --task-dir "$failing_think_dir" >/dev/null 2>"$work_dir/err" || rc=$?
 assert "workspace create failure exits 6" '[ "$rc" = 6 ] && grep -q "could not create workspace: herdr: boom" "$work_dir/err"'

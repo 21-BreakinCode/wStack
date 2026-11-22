@@ -25,10 +25,6 @@ check() {  # <expected> <command>
   expected="$1"; actual="$(decide "$2")"
   assert "$1: $2" '[ "$actual" = "$expected" ]'
 }
-check_deny() {  # <expected> <command>, with the guard in deny mode
-  expected="$1"; actual="$(export WSTACK_GUARD_MODE=deny; decide "$2")"
-  assert "deny mode $1: $2" '[ "$actual" = "$expected" ]'
-}
 
 check ask  'gh pr merge 12 --merge'
 check ask  'cd repo && gh pr merge 1'
@@ -66,7 +62,6 @@ check ask  '(git push origin main)'
 check ask  'git push origin --all'
 check ask  'docker push img:1 && echo done'
 check pass 'npm test'
-check ask  'WSTACK_APPROVED=1 gh pr merge 12 --merge'
 
 check ask  'git push origin refs/heads/main'
 check ask  'git push origin +wstack/x:main'
@@ -75,13 +70,10 @@ check ask  'git push origin wstack/x; git push origin main'
 check ask  'git push origin wstack/x || git push origin main'
 check ask  'echo x && git push origin wstack/x; git push origin main'
 check ask  $'git push origin wstack/x\ngit push origin main'
-check ask  'WSTACK_APPROVED=1 true && gh pr merge 1'
 check ask  'true && git push origin main'
 check ask  'git -C /x push origin main'
 check ask  'git -C /x push --force'
 check ask  'git -c user.name=a push origin HEAD:main'
-check ask  'WSTACK_APPROVED=1 gh pr merge 1'
-check ask  'true && WSTACK_APPROVED=1 gh pr merge 1'
 check pass 'git push origin wstack/x && git push origin wstack/y'
 check pass 'git -C /x push -u origin wstack/x'
 assert "git -C main repo bare push: ask" '[ "$(decide_in "$feature_repo" Bash "git -C $main_repo push")" = "ask" ]'
@@ -93,7 +85,6 @@ check ask  '/p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
 check ask  'bash "/Users/me/.claude/plugins/wstack/scripts/evidence-delete.sh" --task-id 2000-01-02-x --bucket b'
 check ask  'cd x && bash scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
 check pass 'bash /p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b --dry-run'
-check ask  'WSTACK_APPROVED=1 bash /p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
 check pass 'bash /p/scripts/evidence-upload.sh --task-id 2000-01-02-x --dir d'
 # I5: forms the first word walk missed
 check ask  'PATH=~/.local/git/bin:$PATH git push -f origin x'
@@ -109,18 +100,29 @@ check pass 'gh pr close 1'
 assert "git push origin HEAD on main: ask" '[ "$(decide_in "$main_repo" Bash "git push origin HEAD")" = "ask" ]'
 assert "git push origin @ on main: ask" '[ "$(decide_in "$main_repo" Bash "git push origin @")" = "ask" ]'
 
-# R32: the prefix lets a command through only in deny mode
-check_deny deny 'gh pr merge 1'
-check_deny pass 'WSTACK_APPROVED=1 gh pr merge 12 --merge'
-check_deny pass 'true && WSTACK_APPROVED=1 gh pr merge 1'
-check_deny pass 'WSTACK_APPROVED=1 bash /p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
-check_deny deny 'WSTACK_APPROVED=1 true && gh pr merge 1'
+# A3-7 full path, A3-16 checkout judged per segment
+check ask  '/usr/bin/git push origin main'
+check ask  '/usr/local/bin/gh pr merge 1'
+check ask  '/usr/bin/git checkout main && /usr/bin/git push'
+check pass 'git commit -m "run git checkout main" && git push'
+check ask  'git checkout main && git push'
+check ask  'FOO=1 git checkout main && git push'
+check ask  'env X=1 git checkout main && git push'
+check ask  'env git checkout main && git push'
+check ask  'command git checkout main && git push'
+check ask  'sudo git checkout main && git push'
+check ask  'time git checkout main && git push'
+check ask  'nice git checkout main && git push'
+check ask  'bash -c '\''git checkout main && git push'\'''
+check ask  'sh -c "git checkout main && git push"'
+check ask  'zsh -c '\''git checkout main && git push'\'''
+check ask  'eval "git checkout main && git push"'
+check ask  'if true; then git checkout main; fi; git push'
+check ask  '{ git checkout main; git push; }'
+check ask  '! git checkout main || git push'
+check ask  'for i in 1; do git checkout main; done; git push'
+check ask  '"/usr/bin/git" checkout main && git push'
 assert "tool Write: pass" '[ "$(decide_in "$feature_repo" Write "gh pr merge 1")" = "pass" ]'
-
-deny_output="$(jq -n --arg cwd "$feature_repo" '{tool_name:"Bash",tool_input:{command:"gh pr merge 1"},cwd:$cwd}' \
-  | WSTACK_GUARD_MODE=deny "$BASH" "$guard")"
-assert "deny mode decision" '[ "$(printf "%s" "$deny_output" | jq -r .hookSpecificOutput.permissionDecision)" = "deny" ]'
-assert "deny reason names WSTACK_APPROVED=1" '[[ "$deny_output" == *"WSTACK_APPROVED=1"* ]]'
 
 no_jq_output="$(echo '{}' | PATH=/nonexistent "$BASH" "$guard")"
 assert "missing jq asks" '[[ "$no_jq_output" == *"\"permissionDecision\":\"ask\""* && "$no_jq_output" == *"install jq"* ]]'

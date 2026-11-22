@@ -54,4 +54,12 @@ assert "fm_set edits a CRLF file" '[ "$(fm_get "$crlf" status)" = "executing" ]'
 mode_file="$work_dir/mode.md"; cp "$fixture" "$mode_file"; chmod 644 "$mode_file"
 fm_set "$mode_file" status executing
 assert "fm_set keeps mode 644" '[ "$(stat -f %Lp "$mode_file" 2>/dev/null || stat -c %a "$mode_file")" = 644 ]'
+
+# A3-9: a failed write leaves no temp file next to the file
+mkdir -p "$work_dir/failbin" "$work_dir/failcase"
+printf '#!/bin/sh\nexit 1\n' > "$work_dir/failbin/awk"; chmod +x "$work_dir/failbin/awk"
+cp "$fixture" "$work_dir/failcase/spec.md"
+rc=0; (PATH="$work_dir/failbin:$PATH"; fm_set "$work_dir/failcase/spec.md" status executing) 2>/dev/null || rc=$?
+assert "failed fm_set returns non-zero" '[ "$rc" != "0" ]'
+assert "failed fm_set leaves no temp file" '[ "$(ls "$work_dir/failcase")" = "spec.md" ]'
 finish

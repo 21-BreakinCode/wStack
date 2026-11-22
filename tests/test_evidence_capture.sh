@@ -41,6 +41,7 @@ capture() {  # <preflight script> <name>
       capture_output="SKIP video steps: playwright ffmpeg missing. Run: playwright-cli install-browser ffmpeg"
       echo "$capture_output" ;;
   esac
+  playwright_origin="$PWD"; mkdir -p "$work_dir/pw"; cd "$work_dir/pw"  # playwright-cli writes .playwright-cli/ into its folder
   playwright-cli -s "$session" open "http://127.0.0.1:$port/" >/dev/null
   playwright-cli -s "$session" resize 375 800 >/dev/null
   page_width="$(playwright-cli -s "$session" --raw eval "() => document.documentElement.scrollWidth")"
@@ -48,6 +49,7 @@ capture() {  # <preflight script> <name>
   playwright-cli -s "$session" screenshot --filename="$task_dir/raw/check-1.webp" >/dev/null
   [ "$have_ffmpeg" = "0" ] || playwright-cli -s "$session" video-stop >/dev/null
   playwright-cli -s "$session" close >/dev/null
+  cd "$playwright_origin"
   r2_webp="$(bash "$repo_root/scripts/compress-media.sh" --target r2 "$task_dir/raw/check-1.webp" "$task_dir" | tail -n 1)"
   if [ "$have_ffmpeg" = "1" ]; then
     r2_mp4="$(bash "$repo_root/scripts/compress-media.sh" --target r2 "$task_dir/raw/flow.webm" "$task_dir" | tail -n 1)"

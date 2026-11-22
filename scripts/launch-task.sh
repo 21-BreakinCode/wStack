@@ -3,11 +3,13 @@
 # Opens a herdr workspace named after the task and starts a claude session there.
 # Exit codes:
 #   1 bad input
-#   3 not running inside herdr (sets workspace_cwd to the repository or the current folder first)
+#   3 not running inside herdr (sets workspace_cwd first: for a code task with a repository, a new
+#     worktree at ~/.wstack/tasks/<task_id> on branch wstack/<slug>; else the repository or the current folder)
 #   4 agent name taken
 #   5 the claude agent did not start or take the prompt. The workspace stays open and
 #     stderr prints the workspace id and the cleanup commands. Nothing is closed automatically.
-#   6 herdr could not create the workspace or worktree ("could not create workspace: <herdr stderr>")
+#   6 herdr (or git, outside herdr) could not create the workspace or worktree ("could not create workspace: <stderr>")
+# Exit 4 and 6 set status to cancelled first, so the task leaves the open list.
 # Prints {"workspace_id","agent","cwd"} on success.
 set -euo pipefail
 
@@ -15,6 +17,10 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 source "$script_dir/lib/frontmatter.sh"
 source "$script_dir/lib/herdr.sh"
 fail() { echo "launch-task: $1" >&2; exit "${2:-1}"; }
+cancel_and_fail() {  # <message> <exit code>
+  fm_set "$task_dir/spec.md" status cancelled
+  fail "$1" "$2"
+}
 
 task_dir="" repo_path="" mobile=false
 while [ "$#" -gt 0 ]; do
@@ -29,16 +35,26 @@ done
 [[ "$task_dir" = /* ]] && [ -f "$task_dir/spec.md" ] || fail "no spec.md in task dir: $task_dir"
 task_id="$(fm_get "$task_dir/spec.md" task_id)"
 work_type="$(fm_get "$task_dir/spec.md" work_type)"
-if [ "${HERDR_ENV:-}" != 1 ]; then  # this session does the work, so resume and token counts need its folder
+if [ "${HERDR_ENV:-}" != 1 ]; then  # this session does the work in session_cwd
   session_cwd="$PWD"
   if [ -n "$repo_path" ] && { [ "$work_type" = code ] || [ "$work_type" = contract ]; }; then session_cwd="$repo_path"; fi
+  if [ -n "$repo_path" ] && [ "$work_type" = code ]; then  # a worktree keeps two tasks in one repository apart
+    session_cwd="$HOME/.wstack/tasks/$task_id"
+    task_branch="wstack/${task_id:11}"
+    if [ ! -e "$session_cwd/.git" ]; then
+      mkdir -p "$HOME/.wstack/tasks"
+      worktree_output="$(git -C "$repo_path" worktree add -b "$task_branch" "$session_cwd" 2>&1 \
+        || git -C "$repo_path" worktree add "$session_cwd" "$task_branch" 2>&1)" \
+        || cancel_and_fail "could not create worktree: $worktree_output" 6
+    fi
+  fi
   fm_set "$task_dir/spec.md" workspace_cwd "$session_cwd"
   fail "not running inside herdr" 3
 fi
 slug="${task_id:11}"
 [[ "$slug" =~ ^[a-z][a-z0-9-]{0,31}$ ]] || fail "bad slug in task_id: $task_id"
 
-if herdr_cmd agent get "$slug" >/dev/null 2>&1; then fail "agent name taken: $slug" 4; fi
+if herdr_cmd agent get "$slug" >/dev/null 2>&1; then cancel_and_fail "agent name taken: $slug" 4; fi
 
 if [ "$work_type" = code ] && [ -n "$repo_path" ]; then
   create_args=(worktree create --cwd "$repo_path" --branch "wstack/$slug" --label "$slug" --no-focus)
@@ -50,11 +66,11 @@ else
   mkdir -p "$cwd"
   create_args=(workspace create --cwd "$cwd" --label "$slug" --no-focus)
 fi
-created="$(herdr_cmd "${create_args[@]}" 2>&1)" || fail "could not create workspace: $created" 6
-workspace_id="$(json_field "$created" '.result.workspace.workspace_id')" || fail "unexpected herdr output: $created" 6
-pane_id="$(json_field "$created" '.result.root_pane.pane_id')" || fail "unexpected herdr output: $created" 6
+created="$(herdr_cmd "${create_args[@]}" 2>&1)" || cancel_and_fail "could not create workspace: $created" 6
+workspace_id="$(json_field "$created" '.result.workspace.workspace_id')" || cancel_and_fail "unexpected herdr output: $created" 6
+pane_id="$(json_field "$created" '.result.root_pane.pane_id')" || cancel_and_fail "unexpected herdr output: $created" 6
 if [ "${create_args[0]}" = worktree ]; then
-  cwd="$(json_field "$created" '.result.worktree.path')" || fail "unexpected herdr output: $created" 6
+  cwd="$(json_field "$created" '.result.worktree.path')" || cancel_and_fail "unexpected herdr output: $created" 6
 fi
 
 cli="$(herdr_cli_prefix)"
@@ -65,7 +81,7 @@ abort_with_cleanup_hint() {  # <reason>
     echo "  $cli workspace close $workspace_id"
     if [ "${create_args[0]}" = worktree ]; then
       echo "  $cli worktree remove --workspace $workspace_id"
-      echo "  git -C $repo_path branch -D wstack/$slug"
+      echo "  git -C \"$repo_path\" branch -D wstack/$slug"
     fi
   } >&2
   exit 5

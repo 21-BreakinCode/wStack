@@ -14,9 +14,13 @@ page_dir="$(cd "$(dirname "$page")" && pwd)"
 page_name="$(basename "$page")"
 session="wstack-width-$$"
 server_pid=""
+# playwright-cli writes .playwright-cli/page-*.yml into its working folder. Run it in a throwaway folder.
+scratch_dir="$(mktemp -d)"
+cd "$scratch_dir"
 cleanup() {
-  playwright-cli -s "$session" close >/dev/null 2>&1 || true
+  playwright-cli -s "$session" close >/dev/null 2>&1 || true  # close first: it fails from a deleted folder
   [ -z "$server_pid" ] || kill "$server_pid" 2>/dev/null || true
+  rm -rf "$scratch_dir"
 }
 trap cleanup EXIT
 

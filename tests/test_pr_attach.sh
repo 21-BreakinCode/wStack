@@ -43,7 +43,7 @@ assert "upload failure prints url" '[[ "$out" == *"/pull/1"* ]]'
 : > "$FAKE_LOG"
 out="$(MAX_MB=0.0001 run)"
 assert "unfit file still creates pr" 'grep -q "pr create" "$FAKE_LOG"'
-assert "unfit run keeps other attachment" 'grep -q -- "--attach [^ ]*shot.jpg" "$FAKE_LOG" && ! grep -q "clip.mp4" "$FAKE_LOG"'
+assert "unfit image and video are both skipped" '! grep -q -- "--attach" "$FAKE_LOG" && [[ "$out" == *"attachment upload failed: $work_dir/shot.webp"* && "$out" == *"attachment upload failed: $work_dir/clip.webm"* ]]'
 assert "unfit file named" '[[ "$out" == *"attachment upload failed: $work_dir/clip.webm"* ]]'
 assert "unfit reason printed" '[[ "$out" == *"/pull/1"* ]]'
 

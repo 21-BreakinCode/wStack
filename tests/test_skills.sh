@@ -36,4 +36,8 @@ assert "no obsidian-kit names in skills" '! grep -rqE "obsidian-kit:|OBSIDIAN_KI
 for s in init-org init-service create-handover wrap-up-handovers; do assert "$s reads vault_path" 'grep -qF "\${user_config.vault_path}" "$repo_root/skills/$s/SKILL.md"'; done
 assert "init-service sets REPO_ROOT before the mapped skip" '[ "$(grep -n "REPO_ROOT=" "$repo_root/skills/init-service/SKILL.md" | head -1 | cut -d: -f1)" -lt "$(grep -n "skip to Phase 5" "$repo_root/skills/init-service/SKILL.md" | head -1 | cut -d: -f1)" ]'
 assert "init-service uses the exclude script" 'grep -q "scripts/handover/ensure-exclude.sh" "$repo_root/skills/init-service/SKILL.md"'
+# A3-8: a later Verify round replaces the evidence lines
+assert "verify clears old evidence lines first" 'grep -q "First delete every line under .## Evidence." "$repo_root/skills/start-task/references/verify.md"'
+# Controller ruling: outside herdr a code task is handed to the user, not run in the main checkout session
+assert "start-task exit 3 hands a code task to a new session in the worktree" 'grep -q "cd \"<workspace_cwd>\" && claude \"/wstack:start-task --task <task_id>\"" "$repo_root/skills/start-task/SKILL.md" && grep -q "do not run work mode in this session" "$repo_root/skills/start-task/SKILL.md"'
 finish
