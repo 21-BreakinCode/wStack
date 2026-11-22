@@ -40,6 +40,8 @@ rc=0; bash "$repo_root/scripts/frontmatter-set.sh" "$sample" status "drafting aw
 assert "set script rejects multi-word status" '[ "$rc" = "1" ] && [ "$(cat "$sample")" = "$before" ]'
 rc=0; bash "$repo_root/scripts/frontmatter-set.sh" "$sample" status verifying || rc=$?
 assert "set script accepts good status" '[ "$rc" = "0" ] && [ "$(fm_get "$sample" status)" = "verifying" ]'
+rc=0; bash "$repo_root/scripts/frontmatter-set.sh" "$sample" status paused || rc=$?
+assert "set script accepts paused" '[ "$rc" = "0" ] && [ "$(fm_get "$sample" status)" = "paused" ]'
 bash "$repo_root/scripts/frontmatter-set.sh" --append "$sample" stopped_for_user '{"at":"x","reason":"y"}'
 assert "set script --append" '[ "$(fm_get "$sample" stopped_for_user | jq length)" = "3" ]'
 

@@ -18,7 +18,7 @@ fi
 
 if [ "$key" = status ]; then
   case "$value" in
-    drafting|awaiting-approval|executing|waiting-user|verifying|awaiting-deliver-approval|delivered|cancelled) ;;
+    drafting|awaiting-approval|executing|waiting-user|verifying|awaiting-deliver-approval|delivered|cancelled|paused) ;;
     *) echo "invalid status: $value" >&2; exit 1 ;;
   esac
 fi

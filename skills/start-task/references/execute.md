@@ -15,7 +15,7 @@ Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontma
 
 Write one line to `run-log.md` under `## Steps` for each step, each retry, and each stop:
 
-`- <ISO time> <step|retry|stop> <text>`
+`- <ISO time> <step|retry|stop|pause> <text>`
 
 Use `date -u +%Y-%m-%dT%H:%M:%SZ` for the time. Append the line after the step succeeds.
 

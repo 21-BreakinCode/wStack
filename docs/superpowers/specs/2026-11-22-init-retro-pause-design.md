@@ -1,4 +1,4 @@
-# Contract setup in init-service, drift walk in run-retro, and pause-task: design
+# Contract setup in init-service, drift walk in run-retro, and pause-work and resume-work: design
 
 Date: 2026-11-22. Size: three small features in wStack 0.4.0. The user asked for all three and left the design calls to Claude. Each call is marked "Call:".
 
@@ -34,17 +34,19 @@ Call: the retro pulls only with `--ff-only` on a clean base branch. It never mer
 
 Call: drift sections and proposals are asked in one question, so the retro still ends with one reply from the user.
 
-## 3. pause-task: stop a task in the middle and resume it later
+## 3. pause-work and resume-work: stop work in the middle and resume it later
 
-Intent: the user must sometimes stop in the middle of a task, for example to close the computer. In the contract-gate session, the controller wrote notes but left an agent and its shells running, and the user had to ask why.
+Intent: the user must sometimes stop in the middle of work, for example to close the computer. In the contract-gate session, the controller wrote notes but left 3 shells and 2 subagents running, because compacting a conversation does not stop background agents. The user had to ask why. The fix must work in any Claude Code session, not only in a wStack task.
 
 Design:
-- A new user-invoked skill, `/wstack:pause-task [--task <task_id>]`. Without `--task`, it uses the task of the current session: the open task whose `workspace_cwd` is the current directory, from `list-open-tasks.sh`.
-- Step 1, stop background work. Stop every background agent and shell of this session with the TaskStop tool. Then look for a test run that started from the task workspace (`pgrep -fl` on the workspace path), and stop it.
-- Step 2, save the state in `<task folder>/pause.md`. It holds the time, the status before the pause, and the step in progress. It also holds the git HEAD, the uncommitted paths of the workspace, what was stopped, and the next step.
-- Step 3, set `status: paused` and `paused_from: <old status>` in `spec.md`, and add a `pause` line to `run-log.md`.
-- Step 4, tell the user how to resume: `/wstack:start-task --task <task_id>`.
-- If `status` is `paused`, work mode in start-task reads `pause.md` first. It restores the old status and compares the git HEAD and the uncommitted paths with the note. It shows the note and goes on from the next step. Then it renames `pause.md` to `pause-<time>.md`, so the history stays and the next pause starts clean.
+- Two user-invoked skills: `/wstack:pause-work [--task <task_id>]` and `/wstack:resume-work [<note path>]`.
+- Step 1 of pause-work, find the context. It is a task pause in two cases. One case is `--task`. The other case is a current directory that is the `workspace_cwd` of one open task, from `list-open-tasks.sh`. Any other case is a session pause. A session pause needs no vault.
+- Step 2, write the resume note first, so a failed stop still leaves a note. A task pause writes `<task folder>/pause.md`. A session pause writes `~/.wstack/pauses/<current folder name>-<YYYYMMDD-HHMMSS>.md`. The note holds the time, the current folder, the goal, what is done, and the step in progress. It also holds the next steps in order. It holds the git state (branch, HEAD, uncommitted paths) of the current repository and of every worktree the session used. It ends with the files to read first on resume. A task note also holds the status before the pause.
+- Step 3, stop background work. Stop every background agent and shell of the session with the TaskStop tool. Then look for processes that outlive the tools (test runs, `playwright-cli` sessions, dev servers). Match them by the current folder and the worktree paths. Stop only the ones traced to this session, and list the others in the note.
+- Step 4, add what was stopped and what still runs to the note. A task pause also sets `status: paused` and `paused_from: <old status>` in `spec.md`, and adds a `pause` line to `run-log.md`. A task that is already paused is refused.
+- Step 5, tell the user the note path and the resume command.
+- resume-work finds the note. With a task folder, it uses `pause.md`. Otherwise `scripts/list-pause-notes.sh` lists the notes whose recorded folder is the current folder, newest first, and resume-work takes the first. It compares the git state with the note and reports every difference. It shows the goal, what is done, the step in progress, and the next steps, and reads the files to read first. A task note restores the old status and is renamed to `pause-<time>.md`. A session note is renamed to `<name>.resumed-<time>.md`, so the next resume does not pick it again. Then it goes on from the first next step.
+- Work mode in start-task runs resume-work for a task whose status is `paused`.
 - `paused` becomes a task status value. `list-open-tasks.sh` lists paused tasks as open.
 
 Call: no automatic pause hook. A hook cannot stop agents, and an automatic note at session end is guesswork. The user runs the skill on purpose.

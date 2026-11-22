@@ -79,6 +79,7 @@ The argument is `--task <task_id>`. The task folder is `$vault/$tasks_dir/<task_
 |---|---|
 | `drafting`, `awaiting-approval` | Confirmation. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/confirmation.md` and follow it. |
 | `executing` | Execute. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/execute.md` and follow it. |
+| `paused` | Read `${CLAUDE_PLUGIN_ROOT}/skills/resume-work/SKILL.md` and follow Steps 1-3 with the note `$task_dir/pause.md`. Then continue with the restored status. |
 | `waiting-user` | Read the last item of `stopped_for_user` in `run-log.md`. Go on as "Stop items" says for its `stage`. |
 | `verifying` | Verify. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` and follow it. |
 | `awaiting-deliver-approval` | Deliver. Run the `deliver-task` skill and follow its "After the user answers" section. |

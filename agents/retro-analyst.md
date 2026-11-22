@@ -11,7 +11,7 @@ You analyze one week of wStack tasks. Your job is to find patterns that cost tim
 
 The dispatch prompt gives you a JSON file. It holds one object per task: `task_id`, `folder`, and the frontmatter of `spec`, `run_log`, `review`, and `report`. Read the file with `jq`.
 
-The JSON has no step text. For each task, read `<folder>/run-log.md`. The lines under `## Steps` look like `- <ISO time> <step|retry|stop> <text>`. Also read `<folder>/review.md` under `## Findings` when `review.blocking_findings` is not `0`.
+The JSON has no step text. For each task, read `<folder>/run-log.md`. The lines under `## Steps` look like `- <ISO time> <step|retry|stop|pause> <text>`. Also read `<folder>/review.md` under `## Findings` when `review.blocking_findings` is not `0`.
 
 Use Bash for read-only commands. Never edit any file.
 
