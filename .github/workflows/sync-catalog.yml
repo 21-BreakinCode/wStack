@@ -1,0 +1,51 @@
+name: Sync catalog
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".claude-plugin/plugin.json"
+      - "CHANGELOG.md"
+      - "skills/**"
+  workflow_dispatch:
+
+concurrency:
+  group: catalog-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the cc-plugins token
+        env:
+          CC_PLUGINS_TOKEN: ${{ secrets.CC_PLUGINS_TOKEN }}
+        run: '[ -n "$CC_PLUGINS_TOKEN" ] || { echo "CC_PLUGINS_TOKEN is not set"; exit 1; }'
+      - uses: actions/checkout@v4
+        with:
+          path: wstack
+      - uses: actions/checkout@v4
+        with:
+          repository: 21-BreakinCode/cc-plugins
+          token: ${{ secrets.CC_PLUGINS_TOKEN }}
+          path: cc-plugins
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Sync, generate, and verify the catalog
+        working-directory: cc-plugins
+        run: |
+          ./scripts/cicd.sh SYNC "$GITHUB_WORKSPACE/wstack"
+          ./scripts/cicd.sh GEN
+          ./scripts/cicd.sh VERIFY
+      - name: Commit and push the catalog
+        working-directory: cc-plugins
+        run: |
+          version="$(jq -r .version "$GITHUB_WORKSPACE/wstack/.claude-plugin/plugin.json")"
+          git config user.name "wStack catalog sync"
+          git config user.email "wstack-catalog-sync@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: sync wstack $version"
+            git push origin HEAD:main
+          fi
