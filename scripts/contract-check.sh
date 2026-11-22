@@ -12,6 +12,7 @@ max_listed_files=10
 
 fail() { echo "contract-check.sh: $1" >&2; exit 2; }
 json_list() { jq -Rn '[inputs | select(length > 0)]' -c; }  # newline-separated stdin to one-line JSON
+command -v jq >/dev/null 2>&1 || fail "jq is required but not installed"
 [ -f "$contract_file" ] || { echo "contract-check.sh: no contract file: $contract_file" >&2; exit 3; }
 git -C "$repo_dir" rev-parse --git-dir >/dev/null 2>&1 || fail "not a git repository: $repo_dir"
 
@@ -19,15 +20,18 @@ base_branch="$(fm_get "$contract_file" base_branch)"
 verified_commit="$(fm_get "$contract_file" verified_commit)"
 [ -n "$base_branch" ] || fail "contract has no base_branch: $contract_file"
 [ -n "$verified_commit" ] || fail "contract has no verified_commit: $contract_file"
+[[ "$verified_commit" =~ ^[0-9a-fA-F]{4,64}$ ]] || fail "verified_commit is not a hex SHA: $verified_commit"
 pending_json="$(fm_get "$contract_file" pending)"
 pending_json="$(jq -c . <<<"${pending_json:-[]}" 2>/dev/null)" || fail "pending is not JSON: $contract_file"
-ignore_globs="$(jq -r '.[]' <<<"$(fm_get "$contract_file" ignore)" 2>/dev/null || true)"
+ignore_json="$(fm_get "$contract_file" ignore)"
+ignore_globs="$(jq -r '.[]' <<<"${ignore_json:-[]}" 2>/dev/null)" || fail "ignore is not a JSON array of strings: $contract_file"
 
 base_ref="origin/$base_branch"
 git -C "$repo_dir" rev-parse --verify -q "$base_ref^{commit}" >/dev/null || fail "ref $base_ref does not exist; fetch it first"
 
 # Contract body: "S<TAB>name<TAB>globs" per section, "A<TAB>path" per team-doc @ path, "D<TAB>line" per Depends on line.
 sections="$(awk '
+  { sub(/\r$/, "") }
   /^## / { name = substr($0, 4); sub(/[ \t]+$/, "", name); print "S\t" name "\t"; next }
   /^<!-- *sources:/ && name != "" {
     g = $0; sub(/^<!-- *sources: */, "", g); sub(/ *-->.*$/, "", g); gsub(/, */, ",", g)
@@ -46,7 +50,8 @@ while IFS=$'\t' read -r kind first second; do
   case "$kind" in
     S) section_names[section_count]="$first"; section_has_globs[section_count]=0; section_is_stale[section_count]=0
        section_count=$((section_count + 1)) ;;
-    G) section_has_globs[section_count - 1]=1
+    G) [ -n "${first//[ ,]/}" ] || continue   # an empty sources comment claims nothing
+       section_has_globs[section_count - 1]=1
        oldifs="$IFS"; IFS=","; set -f
        for glob in $first; do pair_section[${#pair_section[@]}]=$((section_count - 1)); pair_glob[${#pair_glob[@]}]="${glob//\*\*/*}"; done
        IFS="$oldifs"; set +f ;;
@@ -129,7 +134,8 @@ while IFS= read -r depends_line; do
   app_name="${BASH_REMATCH[1]}"; recorded_commit="${BASH_REMATCH[2]}"
   current_commit=""
   if [ -n "$initiation_file" ]; then
-    subpath="$(bash "$plugin_root/scripts/handover/parse-mapping.sh" "$initiation_file" | awk -F'|' -v app="$app_name" '$1 == app { print $3; exit }')"
+    mapping_rows="$(bash "$plugin_root/scripts/handover/parse-mapping.sh" "$initiation_file")" || fail "cannot read the service mapping in $initiation_file"
+    subpath="$(awk -F'|' -v app="$app_name" '$1 == app { print $3; exit }' <<<"$mapping_rows")"
     dependency_contract="$org_dir/$subpath/$app_name.md"
     if [ -n "$subpath" ] && [ -f "$dependency_contract" ]; then current_commit="$(fm_get "$dependency_contract" verified_commit)"; fi
   fi
