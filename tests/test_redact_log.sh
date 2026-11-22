@@ -21,6 +21,11 @@ GET /cb#access_token=fr5&state=s
 {"token":"zz2","monkey": "m1","key_id": "kid1"}
 {"Authorization":"Basic jj8","cookie":"sid=jj9","password":"pw \"q\" 3"}
 {"key":"kk8","refresh_token":"rt1","id_token":"it1","client_secret":"cs1"}
+GET /oauth?refresh_token=rtq1&client_secret=csq2&page=4
+> apikey: hk1
+> X-Goog-Api-Key: hk2
+> X-Amz-Security-Token: hk3
+{"accessToken":"jk1","refreshToken":"jk2","secret":"jk3","session_token":"jk4","private_key":"jk5"}
 LOG
 bash "$script" "$work_dir/in.log" "$work_dir/out.log"
 out="$(cat "$work_dir/out.log")"
@@ -44,4 +49,8 @@ assert "json number kept" '[[ "$out" == *"\"page\": 2"* ]]'
 assert "json other key kept" '[[ "$out" == *"\"name\": \"x\""* ]]'
 assert "monkey unchanged" '[[ "$out" == *"\"monkey\": \"m1\""* ]]'
 assert "key_id unchanged" '[[ "$out" == *"\"key_id\": \"kid1\""* ]]'
+for secret in rtq1 csq2 hk1 hk2 hk3 jk1 jk2 jk3 jk4 jk5; do
+  assert "secret $secret removed" '[[ "$out" != *"$secret"* ]]'
+done
+assert "page=4 kept" '[[ "$out" == *"page=4"* ]]'
 finish

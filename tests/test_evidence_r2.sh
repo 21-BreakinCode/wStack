@@ -54,6 +54,15 @@ out="$(bash "$upload" --task-id "$task_id" --dir "$evidence_dir" --bucket bkt --
 assert "no repo: uploads every file" '[ "$(grep -c "^cf r2 objects put" "$FAKE_LOG")" = 3 ]'
 assert "no repo: prints urls, not local only" '[[ "$out" == *"https://ev.example.com/evidence/$task_id/a.webp"* && "$out" != *"local only"* ]]'
 
+# plain text evidence is redacted before upload
+fresh_log
+secret_dir="$work_dir/secret evidence"; mkdir "$secret_dir"
+printf 'run ok\nAuthorization: Bearer sk-live-777\n{"accessToken":"sk-live-888"}\n' > "$secret_dir/out.txt"
+bash "$upload" --task-id "$task_id" --dir "$secret_dir" --bucket bkt --domain ev.example.com --repo o/r --local-only-repos "" >/dev/null
+assert "text evidence: token redacted" '! grep -q "sk-live" "$secret_dir/out.txt"'
+assert "text evidence: other lines kept" 'grep -q "^run ok$" "$secret_dir/out.txt"'
+assert "text evidence: still uploaded" 'grep -q "^cf r2 objects put evidence/$task_id/out.txt " "$FAKE_LOG"'
+
 # R25(a): bad task ids stop before any cf call
 for bad_id in "" ".." "2000-01-02-a/b" "2000-01-02-a b" "../x" "2000-01-02-Demo" "demo"; do
   fresh_log

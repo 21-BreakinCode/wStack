@@ -24,6 +24,12 @@ if ! [[ "$task_id" =~ $task_id_pattern ]]; then
 fi
 [ -d "$dir" ] || { echo "evidence-upload: --dir is not a folder: $dir" >&2; exit 1; }
 
+# Redact in place before anything leaves the Mac or lands in the vault or the PR.
+for path in "$dir"/*; do
+  [ -f "$path" ] && [[ "$(file -b --mime-type "$path")" == text/* ]] || continue
+  bash "$(dirname "${BASH_SOURCE[0]}")/redact-log.sh" "$path" "$path"
+done
+
 if [ -z "$bucket" ]; then
   echo "local only: $dir"
   echo "r2_bucket is empty, so nothing was uploaded."
