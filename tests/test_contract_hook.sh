@@ -27,7 +27,24 @@ assert "session start, stale: behind" '[[ "$context" == *"1 commits behind origi
 assert "session start, stale: section" '[[ "$context" == *"Stale: Interfaces"* ]]'
 
 out="$(hook PostToolUse "$REPO" "git pull --ff-only")"
-assert "after git pull" '[ "$(printf "%s" "$out" | jq -r .hookSpecificOutput.hookEventName)" = PostToolUse ]'
+assert "after git pull" '[ "$(printf "%s" "$out" | jq -r .hookSpecificOutput.hookEventName)" = PostToolUse ] && [ "$(printf "%s\n" "$out" | wc -l | tr -d " ")" = 1 ]'
+
+for compound in "git pull;ls" "ls && git pull" "git -C $REPO pull" "git -c x=y rebase main|cat" "gh pr checkout 5"; do
+  out="$(hook PostToolUse "$REPO" "$compound")"
+  assert "A1-12 matches: $compound" '[[ "$out" == *"Stale: Interfaces"* ]]'
+done
+out="$(hook PostToolUse "$REPO" "git pullx")"
+assert "A1-12 git pullx does not match" '[ -z "$out" ]'
+
+space_repo="$work_dir/with space"; cp -R "$REPO" "$space_repo"
+out="$(hook SessionStart "$space_repo" "")"
+assert "A1-13 cwd with spaces: no crash, no output (unmapped)" '[ -z "$out" ]'
+out="$(printf '{not json' | bash "$script")"
+assert "A1-13 malformed JSON: no output" '[ -z "$out" ]'
+out="$(printf '%s' '{"hook_event_name":"SessionStart"}' | bash "$script")"
+assert "A1-13 missing cwd: no output" '[ -z "$out" ]'
+out="$(printf '%s' "{\"cwd\":\"$REPO\"}" | bash "$script")"
+assert "A1-13 missing event name: no output" '[ -z "$out" ]'
 
 out="$(hook PostToolUse "$REPO" "ls -la")"
 assert "other command: no output" '[ -z "$out" ]'
@@ -42,4 +59,11 @@ assert "no vault: no output" '[ -z "$out" ]'
 
 out="$(CLAUDE_PLUGIN_OPTION_VAULT_PATH="$VAULT" hook SessionStart "$REPO" "")"
 assert "plugin option: one line" '[[ "$out" == *"Stale: Interfaces"* ]]'
+
+source "$(bash "$repo_root/tests/fixtures/contract/setup.sh" "$work_dir/world2")"
+echo x > "$REPO/README.md"
+git -C "$REPO" add -A; git -C "$REPO" commit -q -m "readme"; git -C "$REPO" push -q origin main 2>/dev/null
+out="$(WSTACK_VAULT_PATH="$VAULT" hook SessionStart "$REPO" "")"
+context="$(printf '%s' "$out" | jq -r .hookSpecificOutput.additionalContext)"
+assert "A1-14 unclaimed only: says so" '[[ "$context" == *"1 unclaimed files changed."* ]] && [[ "$context" != *"Stale:"* ]]'
 finish
