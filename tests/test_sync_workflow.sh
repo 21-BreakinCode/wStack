@@ -14,6 +14,9 @@ done
 verify_line="$(grep -nF 'cicd.sh VERIFY' "$workflow" | head -1 | cut -d: -f1)"
 push_line="$(grep -nF 'git push' "$workflow" | head -1 | cut -d: -f1)"
 assert "VERIFY comes before git push" '[ -n "$verify_line" ] && [ -n "$push_line" ] && [ "$verify_line" -lt "$push_line" ]'
+guard_line="$(grep -nF -- '[ -n "$CC_PLUGINS_TOKEN" ]' "$workflow" | head -1 | cut -d: -f1)"
+checkout_line="$(grep -nF 'repository: 21-BreakinCode/cc-plugins' "$workflow" | head -1 | cut -d: -f1)"
+assert "token guard comes before the cc-plugins checkout" '[ -n "$guard_line" ] && [ -n "$checkout_line" ] && [ "$guard_line" -lt "$checkout_line" ]'
 assert "workflow has a concurrency block" 'grep -q "^concurrency:" "$workflow"'
 assert "workflow has workflow_dispatch" 'grep -q "workflow_dispatch:" "$workflow"'
 

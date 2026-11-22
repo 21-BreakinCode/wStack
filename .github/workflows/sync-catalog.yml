@@ -17,6 +17,10 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      - name: Require the cc-plugins token
+        env:
+          CC_PLUGINS_TOKEN: ${{ secrets.CC_PLUGINS_TOKEN }}
+        run: '[ -n "$CC_PLUGINS_TOKEN" ] || { echo "CC_PLUGINS_TOKEN is not set"; exit 1; }'
       - uses: actions/checkout@v4
         with:
           path: wstack
@@ -40,7 +44,7 @@ jobs:
           version="$(jq -r .version "$GITHUB_WORKSPACE/wstack/.claude-plugin/plugin.json")"
           git config user.name "wStack catalog sync"
           git config user.email "wstack-catalog-sync@users.noreply.github.com"
-          git add -A external content CATALOG.md site
+          git add -A
           if ! git diff --cached --quiet; then
             git commit -m "chore: sync wstack $version"
             git push origin HEAD:main
