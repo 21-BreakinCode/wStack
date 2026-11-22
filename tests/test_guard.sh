@@ -105,7 +105,25 @@ check ask  "more scripts/evidence-delete.sh"
 check ask  "rg --pre 'gh pr merge 5' x"
 check ask  "rg --pre=scripts/evidence-delete.sh x f"
 check ask  "/tmp/cat 'gh pr merge 5'"
-check pass 'rg "npm publish" docs'
+check ask  "for c in 'gh pr merge 5'; do \$c; done"
+check ask  'for f in scripts/evidence-delete.sh; do "$f" x; done'
+check ask  "stat -f 'gh pr merge 5' f | ksh"
+check ask  "stat -f 'gh pr merge 5' f | awk '{system(\$0)}'"
+check ask  "stat -f 'gh pr merge 5' f | while read -r c; do \$c; done"
+check ask  "git log -1 --format='tformat:gh pr merge 5' | ksh"
+check ask  "git --namespace log -c alias.x='!gh pr merge 5' x"
+check ask  "git --git-dir log -c alias.x='!gh pr merge 5' x"
+check ask  "git --work-tree log -c alias.x='!gh pr merge 5' x"
+check ask  "git --attr-source log -c alias.x='!gh pr merge 5' x"
+check ask  "rg '--pre' scripts/evidence-delete.sh init f"
+check ask  "rg --hostname-bin=scripts/evidence-delete.sh x f"
+check ask  'git -c diff.external=scripts/evidence-delete.sh diff'
+check ask  "git -p log 'gh pr merge 5'"
+check pass 'grep -rn "gh pr merge" .'
+check pass 'git -C /tmp log --oneline -- scripts/evidence-delete.sh'
+check pass 'for f in scripts/evidence-delete.sh; do cat "$f"; done'
+check pass 'cat scripts/evidence-delete.sh | head -5'
+check ask  'rg "npm publish" docs'
 check ask  "sed -n 'e gh pr merge 5' f"
 check ask  "sed -n 's/.*/gh pr merge 5/e' f"
 check ask  "git grep -O'gh pr merge 5' -e x"

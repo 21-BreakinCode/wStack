@@ -94,14 +94,14 @@ is_read_only_segment() {  # <segment>
     for) [[ "${words[*]}" =~ ^for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in([[:space:]]|$) ]]; return ;;
   esac
   case "$word" in
-    rg) for word in "${words[@]}"; do [[ "$word" == --pre* ]] && return 1; done; return 0 ;;
     cat|head|tail|grep|wc|ls|file|stat|diff|nl) return 0 ;;
     git)
       words=("${words[@]:1}")
       while [ "${#words[@]}" -gt 0 ]; do
         case "${words[0]}" in
           -C) words=("${words[@]:2}") ;;
-          -*) words=("${words[@]:1}") ;;
+          --no-pager|-P|--no-optional-locks) words=("${words[@]:1}") ;;
+          -*) return 1 ;;  # other global options take a separate value or set config
           diff|show|log|blame|status) return 0 ;;
           *) return 1 ;;
         esac
@@ -116,9 +116,7 @@ judge_segment() {
   for bare in "${default_branches[@]}"; do
     [[ "$segment" =~ ^[[:space:]]*${command_prefix}${optional_quote}([^[:space:]]*/)?git${optional_quote}${cf_flags}${space}(checkout|switch)([[:space:]]+-[^[:space:]]+)*${space}${optional_quote}${bare}${optional_quote}([^[:alnum:]_./-]|$) ]] && switches_to_default=1
   done
-  if [ "$exemption_allowed" = 1 ] && is_read_only_segment "$segment"; then
-    return 0
-  elif [[ "$segment" =~ ${start}gh${cf_flags}${space}pr${cf_flags}${space}merge ]]; then
+  if [[ "$segment" =~ ${start}gh${cf_flags}${space}pr${cf_flags}${space}merge ]]; then
     reason="a pull request merge"
   elif [[ "$segment" =~ ${start}gh${space}api.*pulls/[^[:space:]]+/merge ]]; then
     reason="a pull request merge through the API"
@@ -159,6 +157,14 @@ judge_segment() {
 
 switches_to_default=0
 separated="${command_text//[&|;()<>]/$'\n'}"
+# The exemption holds only when every segment reads: text in one segment can reach another through a pipe or a loop variable.
+if [ "$exemption_allowed" = 1 ]; then
+  while IFS= read -r segment; do
+    [[ "$segment" =~ ^[[:space:]]*(done|fi|\})?[[:space:]]*$ ]] && continue
+    is_read_only_segment "$segment" || { exemption_allowed=0; break; }
+  done <<< "$separated"
+  [ "$exemption_allowed" = 0 ] || exit 0
+fi
 reason=""
 while IFS= read -r segment; do
   judge_segment "$segment"
