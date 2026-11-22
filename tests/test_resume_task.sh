@@ -39,6 +39,12 @@ grep -v '^session_ids:' "$task_dir/spec.md" >"$work_dir/nofield.md" && mv "$work
 : >"$FAKE_LOG"
 bash "$script" --task-dir "$task_dir" >/dev/null
 assert "no session_ids field restarts with --continue" 'grep -q -- "--continue" "$FAKE_LOG" && ! grep -q -- "--resume" "$FAKE_LOG"'
+for bad_value in '["not-a-uuid"]' '{"a":1}' '[oops'; do
+  fm_set "$task_dir/spec.md" session_ids "$bad_value"
+  : >"$FAKE_LOG"
+  bash "$script" --task-dir "$task_dir" >/dev/null 2>"$work_dir/err"
+  assert "bad session_ids $bad_value warns and uses --continue" 'grep -q "session_ids is not a list of session ids" "$work_dir/err" && grep -q -- "--continue" "$FAKE_LOG" && ! grep -q -- "--resume" "$FAKE_LOG"'
+done
 
 fm_set "$task_dir/spec.md" workspace_cwd "$work_dir/gone"
 rc=0; bash "$script" --task-dir "$task_dir" >/dev/null 2>"$work_dir/err" || rc=$?

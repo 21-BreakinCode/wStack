@@ -26,7 +26,7 @@ assert "literal placeholder exits 3 and leaves the list" '[ "$rc" = 3 ] && [ "$(
 rc=0; bash "$script" "$spec" ABC 2>/dev/null || rc=$?
 assert "short id exits 3" '[ "$rc" = 3 ]'
 rc=0; bash "$script" "$spec" "${first_id:1}" 2>/dev/null || rc=$?
-assert "35-character id exits 3" '[ "$rc" = 3 ] && [ "${#first_id}" = 36 ]'
+assert "35-character id exits 3" '[ "$rc" = 3 ]'
 rc=0; bash "$script" "$spec" "$(echo "$first_id" | tr a-f A-F)" 2>/dev/null || rc=$?
 assert "upper case id exits 3" '[ "$rc" = 3 ]'
 
@@ -37,6 +37,10 @@ bash "$script" "$old_spec" "$first_id"
 assert "old spec gets the field" '[ "$(fm_get "$old_spec" session_ids)" = "[\"$first_id\"]" ]'
 assert "old spec keeps its other fields" '[ "$(grep -v "^session_ids:" "$old_spec")" = "$others_before" ]'
 
+bad_spec="$work_dir/bad.md"
+sed 's/^session_ids:.*/session_ids: [oops/' "$spec" >"$bad_spec"
+rc=0; bash "$script" "$bad_spec" "$first_id" 2>"$work_dir/err" || rc=$?
+assert "invalid stored JSON exits 4 and names the field" '[ "$rc" = 4 ] && grep -q "session_ids" "$work_dir/err"'
 rc=0; bash "$script" "$work_dir/none.md" "$first_id" 2>/dev/null || rc=$?
 assert "missing file exits 1" '[ "$rc" = 1 ]'
 finish
