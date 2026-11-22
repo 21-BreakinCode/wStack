@@ -24,7 +24,7 @@ In this file `$vault` is the vault path, `$tasks_dir` is the tasks folder, `$tod
 
 1. Set `$week` to `date -j -f %Y-%m-%d "$today" +%G-W%V`. Set `$retro_dir` to `$vault/$(dirname "$tasks_dir")/Retros`. Run `mkdir -p "$retro_dir"`. Set `$retro_name` to `$week`. If `$retro_dir/$retro_name.md` exists, write `$week-2` instead, then `$week-3`, and so on, until the file does not exist. A second retro in the same week must never replace the first.
 2. Set `$data` to `mktemp "${TMPDIR:-/tmp}/retro-data.XXXXXX"`. Run `bash "$scripts/collect-week.sh" --vault "$vault" --tasks-dir "$tasks_dir" --today "$today" > "$data"`. If it fails, print its stderr and stop.
-3. If `jq length "$data"` is `0`, tell the user that no task folder is in the last 7 days. Stop. The contract drift part needs task folders in the week, so it does not run then.
+3. If `jq length "$data"` is `0`, tell the user that no task folder is in the last 7 days. Skip step 4. In step 5, write `Tasks read: 0` and use `No proposals.` as the analyst reply. The retro goes on, because the contract drift part needs no task folder.
 4. Dispatch the agent `wstack:retro-analyst`. In the prompt, give the path `$data` and the count of tasks. Its reply is a list of proposal blocks `P1`, `P2`, and so on, or `No proposals.`
 5. Write `$retro_dir/$retro_name.md` with this shape. Paste the analyst reply under `## Proposals` as it is.
 
