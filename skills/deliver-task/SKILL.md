@@ -199,7 +199,7 @@ After each target, look for a remaining target. Ship a remaining target that nee
 ## Finish
 
 1. Fill `## What shipped`, `## Where`, and `## How to undo` in `report.md`. List each target with its URL, and each undo step.
-2. If `HERDR_ENV` is `1` and the task has a worktree or a workspace, add the cleanup command under `## How to undo`. Run `herdr workspace list` to find the workspace whose label is the task slug. Write `herdr worktree remove --workspace <id>` for a code task with a worktree. Write `herdr workspace close <id>` for any other task. Write the command only. Never run it.
+2. If `HERDR_ENV` is `1` and the task has a worktree or a workspace, add the cleanup command under `## How to undo`. Run `herdr workspace list` to find the workspace whose label is the task slug. Write `herdr worktree remove --workspace <id>` for a code task with a worktree. Write `herdr workspace close <id>` for any other task. Write the command only. Never run it. If `HERDR_ENV` is not `1` and the task is a code task, write `git -C "<repository folder>" worktree remove "<workspace_cwd>"` instead.
 3. Set `delivered_at` and `approval_needed` in `report.md`. Set `delivered_at` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Keep `approval_needed` as `true` only if a target waited for the user.
 4. Set `ended_at` in `run-log.md` to the same kind of time.
 5. Count the tokens: `bash "$scripts/session-tokens.sh" "<workspace_cwd>"`. Set `tokens_used` in `run-log.md` to the number. If the script exits 2, leave `tokens_used` empty and write a `step` line: `tokens_used not available`.

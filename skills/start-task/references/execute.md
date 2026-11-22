@@ -9,7 +9,7 @@ Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontma
 0. If `approved_at` in `spec.md` is empty, nobody approved the spec. Set `status` to `drafting`. Then read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/confirmation.md` and follow it.
 1. If `status` is `waiting-user`, read the last item of `stopped_for_user` in `run-log.md`. Go on as "Stop items" in `SKILL.md` says for its `stage`.
 2. If `started_at` in `run-log.md` is empty, set it once to `date -u +%Y-%m-%dT%H:%M:%SZ`: `bash "$scripts/frontmatter-set.sh" "$task_dir/run-log.md" started_at <time>`. Never set it again.
-3. For a code task, work in `workspace_cwd`. Run `git switch -c wstack/<slug>`, or `git switch wstack/<slug>` if the branch exists. `<slug>` is the task id without its date prefix. Commit only on that branch. Never commit to the default branch.
+3. For a code task, work in `workspace_cwd`. Run `git switch -c wstack/<slug>`, or `git switch wstack/<slug>` if the branch exists. `<slug>` is the task id without its date prefix. Outside herdr, `launch-task.sh` made `workspace_cwd` a worktree already on that branch, so the switch changes nothing. Commit only on that branch. Never commit to the default branch.
 
 ## Log
 
