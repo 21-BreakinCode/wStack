@@ -172,13 +172,13 @@ If no remaining target needs approval, go to "Finish".
 This rule runs the same way in the same session and in a resumed task. If `status` is `waiting-user`, a target failed. Go to "Retry a failed target". Otherwise find the first remaining target that needs approval and handle only that one. Ask the user about the next one in the same reply when the user has not answered it yet.
 
 - No: keep `status` as `awaiting-deliver-approval`. Ask what to change. If the user wants to drop the target, remove it from the spec's `## Deliver targets` first. A dropped target does not remain. Then go on as in "When no target remains".
-- Yes: set `approved_at` in `report.md` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Run the target with the prefix `WSTACK_APPROVED=1`. Add the prefix only after the yes. Never add it before.
+- Yes: set `approved_at` in `report.md` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Run the target.
 
 ### Merge
 
 1. Find the pull request number with `gh pr list --head wstack/<slug> --state open --json number,url`.
-2. Run `WSTACK_APPROVED=1 gh pr merge <number> --merge`. Always use `--merge`. Never squash.
-3. If the merge works, delete the evidence in R2. Skip this if `r2_bucket` is empty or the repository is in the local-only list: `WSTACK_APPROVED=1 bash "$scripts/evidence-delete.sh" --task-id <task_id> --bucket "<r2_bucket>"`. The merge question named this delete, so the yes to the merge covers it. In the default `ask` mode, the guard still asks before the merge and before the delete.
+2. Run `gh pr merge <number> --merge`. Always use `--merge`. Never squash.
+3. If the merge works, delete the evidence in R2. Skip this if `r2_bucket` is empty or the repository is in the local-only list: `bash "$scripts/evidence-delete.sh" --task-id <task_id> --bucket "<r2_bucket>"`. The merge question named this delete, so the yes to the merge covers it. The guard still asks before the merge and before the delete.
 4. Record the target: `{"target":"merge","url":"<pull request url>","undo":"gh pr revert <number>, other people can see the merge first"}`.
 
 ### Other targets
@@ -189,7 +189,7 @@ Run the target. Record its URL and its undo, or `"undo":"none"` if it has none.
 
 The failed target is the `target` of the last stop item, and `status` is `waiting-user`.
 
-- Yes: set `status` to `verifying`, so a resumed task comes back to Deliver through Verify. For a target that needs approval, set `approved_at` in `report.md` and add the prefix `WSTACK_APPROVED=1`. Never do either for a target that needs no approval. For `open a pull request`, run the steps of "Pull request" again from step 1. For another target, run its steps again. Record the target as usual. If it fails again, stop again as in "Stop".
+- Yes: set `status` to `verifying`, so a resumed task comes back to Deliver through Verify. For a target that needs approval, set `approved_at` in `report.md`. Never do this for a target that needs no approval. For `open a pull request`, run the steps of "Pull request" again from step 1. For another target, run its steps again. Record the target as usual. If it fails again, stop again as in "Stop".
 - No: keep `status` as `waiting-user`. Ask what to change. If the user wants to drop the target, remove it from the spec's `## Deliver targets` first. Then go on as in "When no target remains".
 
 ### When no target remains

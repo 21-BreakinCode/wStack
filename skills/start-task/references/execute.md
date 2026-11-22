@@ -53,10 +53,8 @@ If the reason starts with `spec unclear`:
 
 For a stop before a non-undoable step:
 
-- Yes: set `status` to `executing`, write a `step` line, and run the stopped step with the prefix `WSTACK_APPROVED=1`.
+- Yes: set `status` to `executing`, write a `step` line, and run the stopped step.
 - No: keep `status` as `waiting-user` and ask what to change.
-
-Add the prefix `WSTACK_APPROVED=1` to a command only after the user says yes in this session. Never add it before.
 
 ## Retry
 

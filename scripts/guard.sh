@@ -2,9 +2,6 @@
 # Seat belt, not a wall: asks before non-undoable commands a cooperative agent might run by mistake.
 set -euo pipefail
 
-DEFAULT_MODE=ask  # S1 result: ask-prompts
-mode="${WSTACK_GUARD_MODE:-$DEFAULT_MODE}"
-
 emit() {  # <decision> <reason>
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"%s","permissionDecisionReason":"%s"}}\n' "$1" "$2"
 }
@@ -23,7 +20,7 @@ cwd="$(printf '%s' "$input" | jq -r '.cwd // "."' 2>/dev/null || echo .)"
 [ -n "$command_text" ] || exit 0
 set -f  # word splitting below must not glob
 
-start='(^|[^[:alnum:]_./-])'
+start='(^|[^[:alnum:]_.-])'
 space='[[:space:]]+'
 optional_quote='["'"'"'"'"'"']?'
 # cf accepts global flags (with an optional value) between any two command words
@@ -69,8 +66,7 @@ push_is_risky() {  # <words...>, starting at the word "git"
     current="$(git -C "$repo_dir" symbolic-ref --short HEAD 2>/dev/null || true)"
     for bare in "${default_branches[@]}"; do
       [ "$current" = "$bare" ] && return 0
-      # the same command may switch to the default branch before the push
-      [[ "$command_text" =~ (checkout|switch)([[:space:]]+-[^[:space:]]+)*${space}${optional_quote}${bare}${optional_quote}([^[:alnum:]_./-]|$) ]] && return 0
+      [ "$switches_to_default" = 1 ] && return 0  # an earlier segment switched to the default branch
     done
   fi
   return 1
@@ -78,9 +74,10 @@ push_is_risky() {  # <words...>, starting at the word "git"
 
 # Sets $reason for one command segment.
 judge_segment() {
-  local segment="$1" deploy_command
-  # R32: the prefix replaces the prompt only in deny mode (design 5.2). In ask mode the guard always asks.
-  [ "$mode" = deny ] && [[ "$segment" =~ ^[[:space:]]*WSTACK_APPROVED=1([[:space:]]|$) ]] && return 0
+  local segment="$1" deploy_command bare first_word
+  for bare in "${default_branches[@]}"; do
+    [[ "$segment" =~ ^[[:space:]]*([^[:space:]]*/)?git${cf_flags}${space}(checkout|switch)([[:space:]]+-[^[:space:]]+)*${space}${optional_quote}${bare}${optional_quote}([^[:alnum:]_./-]|$) ]] && switches_to_default=1
+  done
   if [[ "$segment" =~ ${start}gh${cf_flags}${space}pr${cf_flags}${space}merge ]]; then
     reason="a pull request merge"
   elif [[ "$segment" =~ ${start}gh${space}api.*pulls/[^[:space:]]+/merge ]]; then
@@ -109,7 +106,8 @@ judge_segment() {
     # shellcheck disable=SC2086
     set -- $segment
     while [ "$#" -gt 0 ]; do
-      if [ "${1//[\'\"]/}" = "git" ] && push_is_risky "$@"; then
+      first_word="${1//[\'\"]/}"
+      if [ "${first_word##*/}" = "git" ] && push_is_risky "$@"; then
         reason="a git push to the default branch, a force push, or a remote delete"
         break
       fi
@@ -119,6 +117,7 @@ judge_segment() {
   return 0
 }
 
+switches_to_default=0
 separated="${command_text//[&|;()<>]/$'\n'}"
 reason=""
 while IFS= read -r segment; do
@@ -128,8 +127,4 @@ done <<< "$separated"
 
 [ -n "$reason" ] || exit 0
 
-message="wStack guard: $reason. This step cannot be undone. Ask the user first."
-if [ "$mode" = "deny" ]; then
-  message="$message After the user approves, run the same command again with the prefix WSTACK_APPROVED=1."
-fi
-emit "$mode" "$message"
+emit ask "wStack guard: $reason. This step cannot be undone. Ask the user first."
