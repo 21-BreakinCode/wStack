@@ -17,4 +17,5 @@ Do these steps in order.
    - contract.patch.md: the line `## Interfaces`, then the line `<!-- sources: api/** -->`, then the line `GET /health answers 200 without auth.`
    - report.md: copy it from the plugin templates. Append the target `{"target":"contract write-back","url":"CONTRACT","undo":"none yet"}` with the real path for CONTRACT.
 4. Put a `gh` stub first on PATH. For `gh pr view` it prints MERGED.
-5. Run /wstack:start-task in REPO with this code idea: add a GET /ready route to the API. Do not ask me questions. Write spec.md, render the spec page, and wait for my approval.
+5. Build the task folder for the new task with the plugin script `new-task-folder.sh`: `--vault VAULT --tasks-dir Tasks --slug ready-route --date 2026-11-22 --work-type code --idea 'add a GET /ready route to the API'`. Then set `workspace_cwd` in its spec.md to REPO with the plugin script `frontmatter-set.sh`.
+6. Run /wstack:start-task --task 2026-11-22-ready-route. Do not ask me questions. Write spec.md, render the spec page, and wait for my approval.

@@ -40,4 +40,5 @@ assert "init-service uses the exclude script" 'grep -q "scripts/handover/ensure-
 assert "verify clears old evidence lines first" 'grep -q "First delete every line under .## Evidence." "$repo_root/skills/start-task/references/verify.md"'
 # Controller ruling: outside herdr a code task is handed to the user, not run in the main checkout session
 assert "start-task exit 3 hands a code task to a new session in the worktree" 'grep -q "cd \"<workspace_cwd>\" && claude \"/wstack:start-task --task <task_id>\"" "$repo_root/skills/start-task/SKILL.md" && grep -q "do not run work mode in this session" "$repo_root/skills/start-task/SKILL.md"'
+assert "start-task resume mode hands a code task to a new session in the worktree outside herdr" 'awk "/^## Resume mode/ {on=1} on" "$repo_root/skills/start-task/SKILL.md" | grep -q "For a \`code\` task, tell the user to run \`cd \"<workspace_cwd>\" && claude \"/wstack:start-task --task <task_id>\"\`, and stop"'
 finish

@@ -63,7 +63,7 @@ The argument is a rough idea. Run these steps in order.
 | 3 | not inside herdr | For a `code` task, read `workspace_cwd` from `$task_dir/spec.md`. It is a new worktree. Tell the user to run `cd "<workspace_cwd>" && claude "/wstack:start-task --task <task_id>"`. Stop, and do not run work mode in this session. For any other work type, run work mode in this session for `$task_dir`. |
 | 4 | agent name taken (a race) | Tell the user that the name is taken. Stop. |
 | 5 | the agent did not start after the workspace was made | Print the workspace id and the cleanup commands from the script's stderr. Offer to resume with `bash "$scripts/resume-task.sh" --task-dir "$task_dir"`. Stop. |
-| 6 | herdr could not create the workspace or worktree | Print the herdr error from stderr. Stop. |
+| 6 | herdr or git could not create the workspace or worktree | Print the error from stderr. Stop. |
 | 1 | bad input | Print stderr. Stop. |
 
 `new-task-folder.sh` writes the idea text under `## Goal` in `spec.md`. After exit 0 and after exit 3, work mode reads the idea there.

@@ -78,7 +78,7 @@ assert "step 9 reads stale_sections before set-verified" 'has "$step9_part" "fm_
 assert "step 9: gate snapshots are contract.before.md and plan.before.md" 'has "$step9_part" "cp \"\$contract_file\" \"\$task_dir/contract.before.md\"" && has "$step9_part" "\"\$task_dir/plan.before.md\""'
 assert "step 9: a missing plan.md skips the plan lines" 'has "$step9_part" "or \`plan.md\` is not in the contract folder, skip the plan lines"'
 assert "step 9: run-log gets the undo of the contract part" 'has "$step9_part" "The old-section command:" && has "$step9_part" "contract.before.md'"'"' --sections"'
-assert "step 9: the undo deletes new sections and restores verified_commit" 'has "$step9_part" "The new-section command, once for each name that a warning named:" && has "$step9_part" "add the commit command:" && has "$step9_part" "fm_get '"'"'<task folder>/contract.before.md'"'"' verified_commit"'
+assert "step 9: the undo deletes new sections and restores verified_commit" 'has "$step9_part" "The new-section command, once for each new name:" && has "$step9_part" "add the commit command:" && has "$step9_part" "fm_get '"'"'<task folder>/contract.before.md'"'"' verified_commit"'
 assert "step 9: both undo lines say how to pass a name with a comma" '[ "$(printf "%s\n" "$step9_part" | grep -cF "If a name holds a comma, give every name as its own \`--section '"'"'<name>'"'"'\` flag in place of \`--sections\`.")" = 2 ]'
 assert "step 9: run-log gets the undo of the plan part" 'has "$step9_part" "with the undo of the plan part:"'
 
@@ -197,6 +197,9 @@ for eval_name in confirm-stale-contract contract-absorb-existing deliver-contrac
   assert "eval $eval_name builds the contract world" 'grep -qF "__FIXTURES__/contract/setup.sh" "$repo_root/evals/$eval_name/prompt.md"'
   assert "eval $eval_name allows the Agent tool" 'grep "^allowed_tools:" "$repo_root/evals/$eval_name/prompt.md" | grep -qF "Agent"'
   assert "eval $eval_name has a grader" 'ls "$repo_root/evals/$eval_name/graders/"*.md >/dev/null 2>&1'
+done
+for eval_name in confirm-stale-contract gate-applies-merged-patch; do
+  assert "eval $eval_name builds a code task folder and resumes it, because outside herdr a launch hands the code task off" 'grep -qF -- "--work-type code" "$repo_root/evals/$eval_name/prompt.md" && grep -qF "/wstack:start-task --task 2026-11-22-" "$repo_root/evals/$eval_name/prompt.md" && ! grep -qF "/wstack:start-task in REPO" "$repo_root/evals/$eval_name/prompt.md"'
 done
 assert "deliver-contract-pending grader gives the real reason for the unchanged body" 'grep -qF "because the contract gate does not run again after Deliver" "$repo_root/evals/deliver-contract-pending/graders/patch-and-pending.md"'
 
