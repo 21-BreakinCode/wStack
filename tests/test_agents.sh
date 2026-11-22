@@ -25,5 +25,7 @@ assert "reviewer has contract-mismatch" 'grep -q "| \`contract-mismatch\` | yes 
 analyst="$repo_root/agents/retro-analyst.md"
 assert "analyst reads retro-note.md and transcript_stats" 'grep -qF "retro-note.md" "$analyst" && grep -qF "transcript_stats" "$analyst"'
 assert "analyst has a Questions block and no question without a session id" 'grep -qF "## Questions" "$analyst" && grep -qF "A task with an empty \`session_ids\` gets no question." "$analyst"'
-assert "analyst looks for repeated top_bash commands across tasks" 'grep -qF "top_bash" "$analyst"'
+assert "analyst looks for the same top_bash command in two or more tasks" 'grep -qF "The same \`top_bash\` command in two or more tasks." "$analyst"'
+assert "analyst trusts the stats over a note, a log, or an answer" 'grep -qF "trust the stats and name the mismatch" "$analyst"'
+assert "analyst: no proposals can still come with questions" 'grep -qF "can still have a \`## Questions\` block" "$analyst"'
 finish

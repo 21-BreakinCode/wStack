@@ -45,7 +45,7 @@ Rules:
 - Every `Evidence` line names at least one full task id and at least one number from the data.
 - Write one proposal per pattern. Order them by expected gain.
 - Mark a guess as a guess in `Change` or `Expected gain`.
-- If you find no pattern, write `No proposals.` and nothing else.
+- If you find no pattern, write `No proposals.` Add a `## Questions` block only if you have a question.
 
 ## Questions
 
@@ -59,11 +59,11 @@ If the evidence leaves a gap that the RD can fill, ask a question. Write the blo
 - Question: <one specific question for that RD>
 ```
 
-Questions for the same task go to that RD in one prompt. A task with an empty `session_ids` gets no question. If you have no question, write no `## Questions` block.
+One entry can hold several `- Question:` lines. Questions for the same task go to that RD in one prompt. A task with an empty `session_ids` gets no question. If you have no question, write no `## Questions` block. A week with `No proposals.` can still have a `## Questions` block.
 
 ## Second run
 
-The dispatch prompt can also give a file of RD answers. Then revise the proposals with the answers. Keep the rules above. Write no `## Questions` block.
+The dispatch prompt can also give a file of RD answers. Then revise the proposals with the answers. Keep the rules above. Write no `## Questions` block. The prompt also gives the proposals of the first run. If the note, the log, or an RD answer disagrees with `transcript_stats`, trust the stats and name the mismatch.
 
 ## Reply
 
