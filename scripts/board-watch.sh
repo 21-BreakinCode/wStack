@@ -24,13 +24,15 @@ done
 [[ "$vault" = /* ]] || fail "--vault must be an absolute path"
 [[ "$interval" =~ ^[1-9][0-9]*$ ]] || fail "--interval must be a positive integer"
 
+errors_file="$(mktemp)"
+trap 'rm -f "$errors_file"' EXIT
+trap 'exit 130' INT TERM
+
 print_frame() {
   local rows
-  local errors_file status=0
-  errors_file="$(mktemp)"
+  local status=0
   rows="$(bash "$script_dir/board.sh" --vault "$vault" --tasks-dir "$tasks_dir" 2>"$errors_file")" || status=$?
   if [ "$status" != 0 ] || [ -s "$errors_file" ]; then cat "$errors_file"; fi
-  rm -f "$errors_file"
   [ "$status" = 0 ] || { echo "board-watch: board.sh failed"; return 1; }
   [ -n "$rows" ] || { echo "no RD is open"; return 0; }
   jq -r '

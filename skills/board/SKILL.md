@@ -24,7 +24,7 @@ In this file `$vault` is the vault path, `$tasks_dir` is the tasks folder, and `
 If the user passes `--watch`, do only these steps and stop. Skip the Steps section.
 
 1. Build the command `bash "$scripts/board-watch.sh" --vault "$vault" --tasks-dir "$tasks_dir"`.
-2. If the shell variable `HERDR_ENV` is `1`, run `herdr pane split --current --direction down --no-focus` and read the new pane id from `.result.pane.pane_id` in its JSON reply. Run `herdr pane run <pane id> '<the command>'`. Wrap the whole command in single quotes once, and write each inner path in double quotes. Print the pane id and `herdr pane close <pane id>`. If the variable `WSTACK_HERDR_SESSION` is set, write `--session $WSTACK_HERDR_SESSION` right after `herdr` in each herdr command.
+2. If the shell variable `HERDR_ENV` is `1`, run `herdr pane split --current --direction down --no-focus` and read the new pane id from `.result.pane.pane_id` in its JSON reply. Run `herdr pane run <pane id> '<the command>'`. Wrap the whole command in single quotes once, and write each inner path in double quotes. If the vault path holds a `'`, write each `'` as `'\''` inside the single-quoted command. Print the pane id and `herdr pane close <pane id>`. If the variable `WSTACK_HERDR_SESSION` is set, write `--session $WSTACK_HERDR_SESSION` right after `herdr` in each herdr command.
 3. If `HERDR_ENV` is not `1`, print the command and tell the user to run it in another terminal.
 
 The monitor shows each open RD with its stage, the tool it calls now, and each running subagent with its tool. It refreshes every 3 seconds. Ctrl-C ends it.

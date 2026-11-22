@@ -59,7 +59,7 @@ if ! [[ "$active_minutes" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 # jq definitions: clean cuts a text to one line of 60 characters, last_tool_of reads transcript lines.
-# A Bash command shows only its first word after any NAME=value words, because those can hold a token.
+# A Bash call shows only its description, never its command text, because a command can hold a secret.
 transcript_jq_defs='
   def filled: strings | select(length > 0);
   def clean: gsub("[[:cntrl:][:space:]]+"; " ") | gsub("^ +| +$"; "") | .[:60];
@@ -70,8 +70,7 @@ transcript_jq_defs='
     | if . == null then null else
         {tool, at, hint: (((.input.description | filled)
           // (.input.file_path | filled | split("/") | last)
-          // (.input.pattern | filled | .[:40])
-          // ([.input.command | filled | scan("\\S+") | select(test("^[A-Za-z_][A-Za-z0-9_]*=") | not)] | first) // "")
+          // (.input.pattern | filled | .[:40]) // "")
           | clean)}
       end;'
 
@@ -97,7 +96,7 @@ activity_json() {  # <spec file>
     # A finished agent stops at the first select, before the transcript is read.
     tail -n 200 "$sub_file" | jq -Rsc --slurpfile meta "${sub_file%.jsonl}.meta.json" --argjson idle "$(( now - modified_at ))" \
       "$transcript_jq_defs"' . as $raw | $meta[0] | select(.finished != true)
-      | {type: ((.agentType | clean) // ""), description: ((.description | clean) // ""), idle_seconds: $idle}
+      | {type: (.agentType // "" | clean), description: (.description // "" | clean), idle_seconds: $idle}
         + {last_tool: ($raw | split("\n") | last_tool_of)}' 2>/dev/null || true
   done | jq -sc --argjson last_tool "$last_tool" '{last_tool: $last_tool, subagents: .}'
 }

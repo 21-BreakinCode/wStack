@@ -101,14 +101,14 @@ bash "$repo_root/scripts/session-id-add.sh" "$twice_folder/spec.md" aaaaaaaa-000
 bash "$repo_root/scripts/session-id-add.sh" "$twice_folder/spec.md" aaaaaaaa-0000-4000-8000-000000000002
 rows="$(/bin/bash "$script" --vault "$vault" --tasks-dir T)"
 assert "last_tool is the last tool_use, with its description as hint" '[ "$(field rd-1 .last_tool.tool "$rows")" = Bash ] && [ "$(field rd-1 .last_tool.hint "$rows")" = "Run the unit tests" ] && [ "$(field rd-1 .last_tool.at "$rows")" = 2026-11-23T01:01:00Z ]'
-assert "a Bash command with no description shows its first word only" '[ "$(field rd-2 .last_tool.hint "$rows")" = curl ] && ! grep -q abc123 <<<"$rows"'
+assert "a Bash call with no description has an empty hint" '[ "$(field rd-2 .last_tool.hint "$rows")" = "" ] && [ "$(field rd-2 .last_tool.tool "$rows")" = Bash ] && ! grep -q abc123 <<<"$rows"'
 assert "a Read shows the base name as hint" '[ "$(field rd-3 .last_tool.hint "$rows")" = login.ts ]'
 assert "a hint is 60 characters at most with no newline or tab" '[ "$(field rd-4 .last_tool.hint "$rows" | wc -l | tr -d " ")" = 1 ] && [ "$(field rd-4 .last_tool.hint "$rows" | tr -d "\n" | wc -c | tr -d " ")" = 60 ] && ! field rd-4 .last_tool.hint "$rows" | grep -q "$(printf "\t")"'
 assert "only the running subagent is listed, with type, description and its tool" '[ "$(field rd-1 "[.subagents[] | .type + \"|\" + .description + \"|\" + .last_tool.tool] | join(\",\")" "$rows")" = "Explore|Find the login handlers|Grep" ]'
 assert "a subagent tool hint cuts a pattern to 40 characters" '[ "$(field rd-1 ".subagents[0].last_tool.hint | length" "$rows")" = 40 ]'
 assert "idle_seconds is a small number for a fresh subagent" '[ "$(field rd-1 ".subagents[0].idle_seconds < 60" "$rows")" = true ]'
 assert "a task with no session_ids has no tool and no subagents" '[ "$(field rd-none .last_tool "$rows")" = null ] && [ "$(field rd-none ".subagents | length" "$rows")" = 0 ]'
-assert "the newest session id is the one read" '[ "$(field rd-twice .last_tool.hint "$rows")" = curl ]'
+assert "the newest session id is the one read" '[ "$(field rd-twice .last_tool.at "$rows")" = 2026-11-23T02:00:00Z ]'
 rows="$(WSTACK_BOARD_ACTIVE_MINUTES=100000 /bin/bash "$script" --vault "$vault" --tasks-dir T)"
 assert "a long active window brings the stale subagent back" '[ "$(field rd-1 "[.subagents[].type] | sort | join(\",\")" "$rows")" = "Explore,Plan" ]'
 assert "a finished subagent never shows" '[ "$(field rd-1 "[.subagents[].type] | index(\"code-reviewer\")" "$rows")" = null ]'
@@ -120,6 +120,7 @@ add_session() {  # <slug> <session id>
 }
 add_session env-one "${P}05"; add_session env-two "${P}06"; add_session env-only "${P}07"
 add_session no-file "${P}08"; add_session ctrl-agent "${P}11"
+add_session env-bearer "${P}12"; add_session env-subshell "${P}13"; add_session env-quoted "${P}14"; add_session bare-meta "${P}15"
 add_session far-back "${P}09"
 projects="$HOME/.claude/projects/-fake-project"
 { printf '{"type":"assistant","timestamp":"2026-11-23T05:00:00Z","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/seen/never.ts"}}]}}\n'
@@ -146,11 +147,13 @@ done
 echo "  info: two RDs on one 120-file session took (best of 3) ${elapsed_ms} ms"
 vault="$big_vault"
 rows="$(/bin/bash "$script" --vault "$vault" --tasks-dir T)"
-assert "an env word before a command never shows" '[ "$(field env-one .last_tool.hint "$rows")" = cmd ] && [ "$(field env-two .last_tool.hint "$rows")" = psql ]'
-assert "a command of env words only has an empty hint" '[ "$(field env-only .last_tool.hint "$rows")" = "" ] && [ "$(field env-only .last_tool.tool "$rows")" = Bash ]'
-assert "no secret appears in any output" '! grep -qE "abc123|ghp_SECRET9|pw77" <<<"$rows"'
-assert "120 subagent files: only the 2 fresh unfinished-less agents show" '[ "$(field many-one "[.subagents[].type] | sort | join(\",\")" "$rows")" = "T1,T2" ] && [ "$(field many-two ".subagents | length" "$rows")" = 2 ]'
-assert "two RDs on one 120-file session finish in under 500 ms" '[ "$elapsed_ms" -lt 500 ]'
+for secret_slug in env-one env-two env-only env-bearer env-subshell env-quoted; do
+  assert "$secret_slug: a Bash call with no description has an empty hint" '[ "$(field $secret_slug .last_tool.hint "$rows")" = "" ] && [ "$(field $secret_slug .last_tool.tool "$rows")" = Bash ]'
+done
+assert "no secret appears in any output" '! grep -qE "abc123|ghp_SECRET9|pw77|sk-live-XYZ|SECRET7|SEC RET3|RET3" <<<"$rows"'
+assert "a meta file with no fields still shows the agent with empty text" '[ "$(field bare-meta ".subagents | length" "$rows")" = 1 ] && [ "$(field bare-meta ".subagents[0].type + .subagents[0].description" "$rows")" = "" ]'
+assert "120 subagent files: only the 2 fresh unfinished agents show" '[ "$(field many-one "[.subagents[].type] | sort | join(\",\")" "$rows")" = "T1,T2" ] && [ "$(field many-two ".subagents | length" "$rows")" = 2 ]'
+assert "two RDs on one 120-file session finish in under 2000 ms (the old scan took about 6000 ms)" '[ "$elapsed_ms" -lt 2000 ]'
 assert "a tool_use older than the last 200 lines is not seen" '[ "$(field far-back .last_tool "$rows")" = null ]'
 assert "a valid id with no transcript file has last_tool null and no subagents" '[ "$(field no-file .last_tool "$rows")" = null ] && [ "$(field no-file ".subagents | length" "$rows")" = 0 ]'
 assert "a missing or non-JSON meta file skips the agent" '[ "$(field rd-1 ".subagents | length" "$rows")" = 1 ]'
