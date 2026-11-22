@@ -67,6 +67,26 @@ empty_folder="$(bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --slu
 assert "no idea: Goal empty" '! grep -q "Rough idea" "$plain_folder/spec.md" && [ "$(sed -n "/^## Goal$/,/^## Scope$/p" "$plain_folder/spec.md" | wc -l | tr -d " ")" = "3" ]'
 assert "empty idea equals no idea" 'diff <(sed "/^created_at:/d;/^task_id:/d" "$plain_folder/spec.md") <(sed "/^created_at:/d;/^task_id:/d" "$empty_folder/spec.md") >/dev/null'
 
+# A3-5: a live herdr agent name also counts as a taken slug
+mkdir -p "$work_dir/bin"
+cat > "$work_dir/bin/herdr" <<'FAKE'
+#!/usr/bin/env bash
+args=("$@"); [ "${args[0]}" = "--session" ] && args=("${args[@]:2}")
+[ "${args[0]} ${args[1]}" = "agent get" ] || exit 9
+case " $TAKEN " in *" ${args[2]} "*) exit 0 ;; *) exit 1 ;; esac
+FAKE
+chmod +x "$work_dir/bin/herdr"
+agent_run() {  # <herdr env> <taken agents> <slug>
+  PATH="$work_dir/bin:$PATH" WSTACK_HERDR_SESSION=wstack-test HERDR_ENV="$1" TAKEN="$2" \
+    bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --slug "$3" --date 2026-11-18 | tail -n 1
+}
+assert "free agent name keeps the slug" '[ "$(agent_run 1 "" agent-free)" = "$vault/Workflow/Tasks/2026-11-18-agent-free" ]'
+assert "taken agent names get the next number" '[ "$(agent_run 1 "agent-busy agent-busy-2" agent-busy)" = "$vault/Workflow/Tasks/2026-11-18-agent-busy-3" ]'
+long="abcdefghijklmnopqrstuvwxyz-abcdef"
+long_out="$(agent_run 1 "${long:0:32}" "${long:0:32}")"
+assert "suffix keeps the slug at 32 characters" '[ "${long_out##*/}" = "2026-11-18-${long:0:30}-2" ]'
+assert "outside herdr a taken agent name is ignored" '[ "$(agent_run "" "agent-out" agent-out)" = "$vault/Workflow/Tasks/2026-11-18-agent-out" ]'
+
 headings="$(grep '^## ' "$folder/spec.md" | tr '\n' '|')"
 assert "spec has seven sections in order" '[ "$headings" = "## Goal|## Scope|## Verification plan|## Non-undoable steps|## Deliver targets|## Contract changes|## Decisions|" ]'
 assert "contract template frontmatter" 'grep -qx "pending: \[\]" "$repo_root/templates/contract.md" && grep -qx "base_branch: {{base_branch}}" "$repo_root/templates/contract.md"'
