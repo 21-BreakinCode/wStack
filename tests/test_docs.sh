@@ -37,6 +37,8 @@ for name in pipeline launcher layout; do
 done
 
 assert "README.md exists" '[ -f "$readme" ]'
+assert "README names the resume-work hand-off, the retro drift check, and the init-service contract offer" 'grep -qF "it prints \`cd \"<workspace_cwd>\" && claude \"/wstack:start-task --task <task_id>\"\`" "$readme" && grep -qF "drift check of the service contract" "$readme" && grep -qF "<retro>.contract-before.md" "$readme" && grep -qF "asks whether to launch a contract task" "$readme"'
+assert "spec.md names pause.md, pause-<time>.md, paused_from, and the retro drift walk" 'spec="$repo_root/docs/spec.md"; grep -qF "  pause.md " "$spec" && grep -qF "  pause-<time>.md " "$spec" && grep -qF "paused_from: " "$spec" && grep -qF -- "- Drift walk:" "$spec" && grep -qF -- "- Contract write:" "$spec"'
 assert "CHANGELOG has a 0.1.0 entry dated today or earlier" 'grep -qE "^## 0\.1\.0 - [0-9]{4}-[0-9]{2}-[0-9]{2}$" "$repo_root/CHANGELOG.md"'
 for name in pipeline launcher layout; do
   assert "README embeds docs/diagrams/$name.svg" 'grep -qF "](docs/diagrams/$name.svg)" "$readme"'

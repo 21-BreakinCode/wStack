@@ -14,7 +14,7 @@ You type `/wstack:start-task <rough idea>`. Then the task goes through five step
 
 If a check fails and the spec is right, the task goes back to Execute. It tries again up to `retry_limit` times, then waits for you. If the spec is wrong, the task goes back to Confirmation.
 
-Once a week, run `/wstack:run-retro`. It reads the task folders of the last 7 days and proposes improvements to wStack. You choose which proposals to apply.
+Once a week, run `/wstack:run-retro`. It reads the task folders of the last 7 days and proposes improvements to wStack. It also checks the service contract of the current repository for drift, and proposes updates for the stale sections. You choose which proposals and sections to apply.
 
 ![The wStack pipeline with its fail loops](docs/diagrams/pipeline.svg)
 
@@ -37,9 +37,9 @@ Add `--mobile` to the idea to publish the spec page and the review page as Claud
 User commands:
 
 - `/wstack:start-task`: run the pipeline for one task.
-- `/wstack:run-retro`: weekly retro over the last 7 days of task folders.
+- `/wstack:run-retro`: weekly retro over the last 7 days of task folders, with a drift check of the service contract of the current repository.
 - `/wstack:pause-work`: pause the work of any session. It writes a resume note, then stops the background agents, shells, and processes the session started. Run it before you close the computer.
-- `/wstack:resume-work`: resume from the newest resume note of the current folder. For a task, `/wstack:start-task --task <task_id>` also works.
+- `/wstack:resume-work`: resume from the newest resume note of the current folder. For a task, it prints `cd "<workspace_cwd>" && claude "/wstack:start-task --task <task_id>"`, so the task resumes in its own folder with its configuration values.
 - `/wstack:init-org`: scaffold the handover initiation file for an org. Run it once per org.
 - `/wstack:init-service`: set up the current repository for handovers. Run it once per repository.
 - `/wstack:create-handover`: create a handover document from the current conversation.
@@ -79,14 +79,14 @@ The gate:
 - In Deliver, the write-back records a pending item for the pull request. After the merge, the next gate run writes the change into the contract. If the pull request closes without a merge, the gate drops the item and sets the decision files of that task to `status: withdrawn`.
 - A repository with no service mapping gets no contract. The gate writes `Contract: not mapped` and goes on.
 - Every write takes the lock folder `<contract>.lock`. If a crashed session leaves it, remove the folder.
-- Undo uses copies in the task folder. The gate writes `contract.before.md` and `plan.before.md`. The write-back writes `contract.writeback.before.md` and `plan.writeback.before.md`. Each copy is written once.
+- Undo uses copies in the task folder. The gate writes `contract.before.md` and `plan.before.md`. The write-back writes `contract.writeback.before.md` and `plan.writeback.before.md`. The drift check of `/wstack:run-retro` writes `<retro>.contract-before.md` in the Retros folder. Each copy is written once.
 
 The hooks: a SessionStart hook and a PostToolUse hook run `scripts/contract-hook.sh`. The PostToolUse hook runs only after `git pull`, `merge`, `rebase`, `switch`, `checkout`, or `reset`, and after `gh pr checkout`. A hook makes no network call and never blocks. If the contract is stale, it prints one line. Otherwise it prints nothing. It reads the vault path from `WSTACK_VAULT_PATH`, then from the `vault_path` setting.
 
 To set up a contract:
 
-1. Run `/wstack:init-org` and `/wstack:init-service`, so the repository has a service mapping.
-2. Run `/wstack:start-task` with an idea such as "set up the service contract". The task is a `contract` task. Inside herdr, it runs in a workspace in the repository folder, with no worktree.
+1. Run `/wstack:init-org` and `/wstack:init-service`, so the repository has a service mapping. If the repository has no contract, `/wstack:init-service` asks whether to launch a contract task. Pick "Launch a contract task" and skip step 2.
+2. Or run `/wstack:start-task` with an idea such as "set up the service contract". The task is a `contract` task. Inside herdr, it runs in a workspace in the repository folder, with no worktree.
 3. For a new project, answer one question for each section. For an existing project, the spec lists the team docs and code areas to read.
 4. Approve the spec. Execute writes drafts in the task folder. Deliver moves old vault files into `_archive/<task_id>/` and writes the contract. It is safe to run again.
 

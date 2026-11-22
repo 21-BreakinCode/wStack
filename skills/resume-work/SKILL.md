@@ -30,10 +30,11 @@ If a value is a relative path, make it absolute with `cd <value> && pwd`. If no 
 ## Find the note
 
 1. With a note path, use it. A note named `pause.md` that has a `spec.md` in its folder is a task note. Any other note is a session note. For a task note, set `$task_dir` to the folder of `pause.md`. The task id is the name of that folder.
-2. Without an argument, look for both kinds. Run `bash "$scripts/list-open-tasks.sh" --vault "$vault" --tasks-dir "$tasks_dir"`. For a task note, check that exactly one `workspace_cwd` is the current directory (`pwd`) and that its folder has a `pause.md`. Run `bash "$scripts/list-pause-notes.sh" "$(pwd)"`. It prints the session notes of the current folder, newest first.
-3. If only one kind exists, use it. For session notes, use the first line. If it printed more than one line, tell the user which note you use and list the others.
+2. Without an argument, look for both kinds. Run `bash "$scripts/list-open-tasks.sh" --vault "$vault" --tasks-dir "$tasks_dir"`. The task notes are the `pause.md` files in the folders of the lines whose `workspace_cwd` is the current directory (`pwd`). Run `bash "$scripts/list-pause-notes.sh" "$(pwd)"`. It prints the session notes of the current folder, newest first.
+3. If only one kind exists, use it. For session notes, use the first line. If it printed more than one line, tell the user which note you use and list the others. If there is more than one task note, list them and ask the user which one to resume.
 4. If both kinds exist, list them and ask the user which one to resume.
 5. If you found no note, tell the user there is nothing to resume and stop.
+6. For a task note, hand the task off and stop. A file read by path gets no configuration values, so do not run the steps below in this session. Read `workspace_cwd` with `(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" workspace_cwd)`. Tell the user to run `cd "<workspace_cwd>" && claude "/wstack:start-task --task <task_id>"`. Its `paused` row runs Steps 1-3 in that session. If `pwd` is already `<workspace_cwd>`, say that `/wstack:start-task --task <task_id>` in this session also works. When start-task reads this file, it starts at Step 1, so this step does not run there.
 
 ## Step 1: compare the git state
 
@@ -47,18 +48,22 @@ Show the user the goal, done, in progress, and next steps of the note. Read each
 
 ## Step 3: mark the note as used
 
-- Task note: read `paused_from` first, with `(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" paused_from)`. Does the status read `paused` while `paused_from` is empty? Then ask the user for the status now, before the block below runs. Start the block with `user_status=<answer>`. Read the status with `(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" status)`. If the status is `paused`, restore the old status. If the status is any other value, leave it alone. Then clear `paused_from` and rename the note, so the history stays and the next pause starts clean.
+- Task note: read the status and `paused_from` first, with `(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" status)` and the same command for `paused_from`. Does the status read `paused` while `paused_from` is empty? Then ask the user for the status now, before the block below runs. Start the block with `user_status=<answer>`. If the status is `paused`, the block restores the old status. It leaves any other status alone. Then it clears `paused_from` and renames the note, so the history stays and the next pause starts clean.
 
   ```sh
-  old_status="${user_status:-$(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" paused_from)}"
-  bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" status "$old_status"
+  set -e
+  current_status="$(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" status)"
+  if [ "$current_status" = paused ]; then
+    old_status="${user_status:-$(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" paused_from)}"
+    bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" status "$old_status"
+  fi
   bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" paused_from ""
   mv "$task_dir/pause.md" "$task_dir/pause-<time>.md"
   ```
 
-  `<time>` is the `time` field of the note with `:` replaced by `-`. If the status is not `paused`, tell the user, change nothing, and still rename the note.
+  `<time>` is the `time` field of the note with `:` replaced by `-`. If the status is not `paused`, tell the user that the block left it alone. A failed write stops the block, so `paused_from` and the note stay. Then print the stderr text, ask the user for a valid status, and run the block again with `user_status=<answer>`.
 - Session note: rename it to `<name>.resumed-<time>.md` with `mv`, so the next resume does not pick it again. `<time>` comes from `date +%Y%m%d-%H%M%S`.
 
 ## Step 4: continue
 
-Go on from the first of the next steps. For a task note, read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/SKILL.md` and follow "Work mode" with the restored status.
+This step is for a session note. Go on from the first of the next steps. For a task note, start-task goes on after Step 3 with the restored status.

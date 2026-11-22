@@ -183,6 +183,13 @@ One folder per task in the Obsidian vault. It holds text only. Media never goes 
   report.md     Deliver: what shipped, where, and how to undo it
 ```
 
+A paused task adds these files. Section 6.2 describes the `paused` status.
+
+```
+  pause.md          /wstack:pause-work: where the task stopped, the next steps, and the git state
+  pause-<time>.md   /wstack:resume-work: the old pause.md after the resume, kept as history
+```
+
 A task with a contract adds these files. Section 7.2 describes the gate.
 
 ```
@@ -214,6 +221,7 @@ work_type: code            # code | ops | thinking | blog | video
 repo: owner/repo           # code and ops tasks only
 mobile: false              # true when the user asked for mobile mode
 status: awaiting-approval  # see 6.2
+paused_from:               # the status before /wstack:pause-work; empty when the task is not paused
 approved_at:               # ISO 8601 time, set when the user approves
 created_at: 2026-11-18T22:10:00+08:00
 ---
@@ -565,6 +573,9 @@ If an upload fails, the agent keeps the R2 copy and writes the failure in `revie
 - Output: a list of proposals. Each proposal has the evidence (task ids and numbers), the change, and the expected gain. The page follows the layout rules in 10.1.
 - The user chooses which proposals to apply. The agent applies only the chosen ones.
 - ASSUME: the agent saves the retro to `<vault_path>/<tasks_dir>/../Retros/<YYYY-Www>.md`.
+- Drift walk: the retro also checks the service contract of the current repository. It fetches `origin/<base_branch>`, resolves the pending items of the contract as the gate does, and runs `contract-check.sh`. A repository with no mapping or no contract gets a `Contract:` status line, and the retro goes on.
+- If sections are stale, the `contract-reader` agent writes a patch to `<retro>.contract-patch.md` in the Retros folder. The user picks the sections to update in the same question as the proposals.
+- Contract write: the retro applies the chosen sections under the contract lock. It first copies the contract once to `<retro>.contract-before.md` for undo. If every stale section was applied, `verified_commit` moves to the checked commit. The retro file gets a `## Contract` section with the status, the applied and still stale sections, and the undo.
 
 The name is `retro`, not `review`, because "review" already means the final review inside Verify.
 
