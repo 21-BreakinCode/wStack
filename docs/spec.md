@@ -582,6 +582,9 @@ If an upload fails, the agent keeps the R2 copy and writes the failure in `revie
 - Drift walk: the retro also checks the service contract of the current repository. It fetches `origin/<base_branch>`, resolves the pending items of the contract as the gate does, and runs `contract-check.sh`. A repository with no mapping or no contract gets a `Contract:` status line, and the retro goes on.
 - If sections are stale, the `contract-reader` agent writes a patch to `<retro>.contract-patch.md` in the Retros folder. The user picks the sections to update in the same question as the proposals.
 - Contract write: the retro applies the chosen sections under the contract lock. It first copies the contract once to `<retro>.contract-before.md` for undo. If every stale section was applied, `verified_commit` moves to the checked commit. The retro file gets a `## Contract` section with the status, the applied and still stale sections, and the undo.
+- Exit notes: each RD writes `retro-note.md` in its task folder at exit. The analyst reads it.
+- Transcript stats: `collect-week.sh` adds `transcript_stats` for each task with `session_ids`. The analyst compares the note and the run log with the counts, and finds `top_bash` commands that repeat across tasks.
+- Targeted reopen: where the evidence raises a question, the analyst writes it in a `## Questions` block. The retro asks a read-only fork of the last RD session (`--resume <id> --fork-session --tools Read,Grep,Glob`). The fork leaves the original session as it was. The answers go under `## RD answers` in the retro file, and the analyst revises the proposals with them. A failed fork writes its error as the answer, and the retro goes on.
 
 The name is `retro`, not `review`, because "review" already means the final review inside Verify.
 

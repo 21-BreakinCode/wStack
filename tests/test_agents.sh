@@ -22,4 +22,8 @@ assert "historian: a missing decisions/ goes on" 'grep -F "decisions/" "$histori
 assert "historian: a withdrawn decision is not the reason" 'grep -F "status: withdrawn" "$historian" | grep -qF "Skip it, or name it as withdrawn."'
 assert "historian: a missing docs/adr/ goes on" 'grep -F "docs/adr/" "$historian" | grep -qF "If the folder does not exist"'
 assert "reviewer has contract-mismatch" 'grep -q "| \`contract-mismatch\` | yes |" "$repo_root/agents/reviewer.md"'
+analyst="$repo_root/agents/retro-analyst.md"
+assert "analyst reads retro-note.md and transcript_stats" 'grep -qF "retro-note.md" "$analyst" && grep -qF "transcript_stats" "$analyst"'
+assert "analyst has a Questions block and no question without a session id" 'grep -qF "## Questions" "$analyst" && grep -qF "A task with an empty \`session_ids\` gets no question." "$analyst"'
+assert "analyst looks for repeated top_bash commands across tasks" 'grep -qF "top_bash" "$analyst"'
 finish

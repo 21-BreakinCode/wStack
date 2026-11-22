@@ -117,4 +117,7 @@ retry_block="$(sed -n '/^Retry-limit stop:/,/^Any other stop/p' "$verify_ref")"
 assert "verify retry-limit Cancel writes retro-note.md before status cancelled and names the stop cause, other Cancel unchanged" 'grep "^- Cancel:" <<<"$retry_block" | grep -q "retro-note.md.*Spec gaps.*Surprises.*run-log.md.*cancelled" && [ "$(grep -c "^- Cancel: set .status. to .cancelled.\.$" "$verify_ref")" = 1 ]'
 assert "execute.md holds the herdr pane rule" 'grep -qF "herdr pane split --current" "$repo_root/skills/start-task/references/execute.md" && grep -qF "close it before Deliver" "$repo_root/skills/start-task/references/execute.md"'
 assert "spec lists retro-note.md" 'grep -q "retro-note.md Deliver" "$repo_root/docs/spec.md"'
+assert "run-retro: Ask the RDs sits between the analyst dispatch and the retro file" '[ "$(grep -n "^4\. Dispatch the agent" "$retro_skill" | head -1 | cut -d: -f1)" -lt "$(grep -n "^## Ask the RDs" "$retro_skill" | cut -d: -f1)" ] && [ "$(grep -n "^## Ask the RDs" "$retro_skill" | cut -d: -f1)" -lt "$(grep -n "^5\. Write" "$retro_skill" | head -1 | cut -d: -f1)" ]'
+assert "run-retro: the fork is read-only, resumed from a fork, and runs without the herdr variables" 'grep -qF -- "--fork-session" "$retro_skill" && grep -qF -- "--tools Read,Grep,Glob" "$retro_skill" && grep -qF "env -u HERDR_ENV" "$retro_skill"'
+assert "run-retro: writes RD answers and dispatches the analyst a second time" 'grep -qF "## RD answers" "$retro_skill" && grep -qF "dispatch \`wstack:retro-analyst\` a second time" "$retro_skill"'
 finish

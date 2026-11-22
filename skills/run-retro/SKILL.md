@@ -25,8 +25,31 @@ In this file `$vault` is the vault path, `$tasks_dir` is the tasks folder, `$tod
 1. Set `$week` to `date -j -f %Y-%m-%d "$today" +%G-W%V`. Set `$retro_dir` to `$vault/$(dirname "$tasks_dir")/Retros`. Run `mkdir -p "$retro_dir"`. Set `$retro_name` to `$week`. If `$retro_dir/$retro_name.md` exists, write `$week-2` instead, then `$week-3`, and so on, until the file does not exist. A second retro in the same week must never replace the first.
 2. Set `$data` to `mktemp "${TMPDIR:-/tmp}/retro-data.XXXXXX"`. Run `bash "$scripts/collect-week.sh" --vault "$vault" --tasks-dir "$tasks_dir" --today "$today" > "$data"`. If it fails, print its stderr and stop.
 3. If `jq length "$data"` is `0`, tell the user that no task folder is in the last 7 days. Skip step 4. In step 5, write `Tasks read: 0` and use `No proposals.` as the analyst reply. The retro goes on, because the contract drift part needs no task folder.
-4. Dispatch the agent `wstack:retro-analyst`. In the prompt, give the path `$data` and the count of tasks. Its reply is a list of proposal blocks `P1`, `P2`, and so on, or `No proposals.`
-5. Write `$retro_dir/$retro_name.md` with this shape. Paste the analyst reply under `## Proposals` as it is.
+4. Dispatch the agent `wstack:retro-analyst`. In the prompt, give the path `$data` and the count of tasks. Its reply is a list of proposal blocks `P1`, `P2`, and so on, or `No proposals.` It can end with a `## Questions` block. Keep the proposal blocks as `$proposals`. Keep the `## Questions` block as `$questions`. Then run "Ask the RDs" below. If the reply has no `## Questions` block, it does nothing.
+
+## Ask the RDs
+
+This part never stops the retro. It runs after step 4 and before step 5. If `$questions` has no `### Q<n> <task id>` entry, go on to step 5 with no answers. Otherwise do the rest.
+
+Set `$answers` to `mktemp "${TMPDIR:-/tmp}/retro-answers.XXXXXX"`. For each task id in `$questions`, put all the questions of that task in one prompt and do these steps.
+
+1. Read `session_ids` and `workspace_cwd` from `spec.md` in the `folder` of that task in `$data`. Take the last id in `session_ids`. Run `source "$scripts/lib/transcripts.sh"; session_id_ok "<id>"; transcript_main_files "<id>"`. If the id is not valid or no transcript is found, the answer is `not reachable: no transcript`. Go on to the next task.
+2. If `workspace_cwd` does not exist, run `mkdir -p "<workspace_cwd>"`, run the fork in it, then run `rmdir` on it. The spike showed that a resume works from a folder that was created again empty.
+3. Run the fork in `workspace_cwd`. Put the prompt first. `--tools` takes many values, so a prompt after it becomes a tool name. Close stdin with `</dev/null`.
+
+   ```bash
+   env -u HERDR_ENV -u HERDR_WORKSPACE_ID -u HERDR_TAB_ID -u HERDR_PANE_ID \
+     claude -p "<prompt>" --resume <id> --fork-session --tools Read,Grep,Glob </dev/null
+   ```
+
+   The prompt holds the questions and these three rules. Answer from what you remember and from the files. Change nothing. If you do not know, say "I do not know".
+4. The fork leaves the original session as it was. If the call fails, the answer is the first line of its stderr. Go on to the next task.
+
+Write one entry per question to `$answers`: the question id, the task id, the question, and the answer. If at least one answer exists, dispatch `wstack:retro-analyst` a second time. Give it the path `$data`, the path `$answers`, and the proposals of the first run. It revises the proposals with the answers, and it asks no new question. Its reply replaces `$proposals`.
+
+## Write the retro file
+
+5. Write `$retro_dir/$retro_name.md` with this shape. Paste `$proposals` under `## Proposals` as it is. If `$answers` has entries, paste them under `## RD answers`, one entry per question, with the question id, the task id, the question, and the answer. With no entry, leave out `## RD answers`.
 
 ```
 # Retro <week>
@@ -35,7 +58,11 @@ Tasks read: <count>, from the 7 days up to <today>.
 
 ## Proposals
 
-<analyst reply>
+<proposals>
+
+## RD answers
+
+<answers, only when there are any>
 
 ## Applied
 
