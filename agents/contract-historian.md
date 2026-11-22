@@ -19,7 +19,8 @@ The dispatch prompt gives you the question, the repository folder, and the contr
 2. List the team ADR names in `docs/adr/` of the repository. If the folder does not exist, the repository has no team ADR. Go on with step 3.
 3. Open only the files whose names bear on the question.
 4. Read the related history with `git -C "<repository folder>" log` on the files that the question names. Read each task folder that a decision file links to.
-5. If no record gives the reason, say so. Do not guess a reason.
+5. A decision file with `status: withdrawn` comes from a pull request that closed without a merge. It is not the reason for the current code. Skip it, or name it as withdrawn.
+6. If no record gives the reason, say so. Do not guess a reason.
 
 ## Reply
 

@@ -19,6 +19,7 @@ assert "reader: patch covers Consumers and Gotchas" 'grep -q "also covers \`Cons
 assert "historian reads team ADRs" 'grep -q "docs/adr/" "$repo_root/agents/contract-historian.md"'
 historian="$repo_root/agents/contract-historian.md"
 assert "historian: a missing decisions/ goes on" 'grep -F "decisions/" "$historian" | grep -qF "If the folder does not exist"'
+assert "historian: a withdrawn decision is not the reason" 'grep -F "status: withdrawn" "$historian" | grep -qF "Skip it, or name it as withdrawn."'
 assert "historian: a missing docs/adr/ goes on" 'grep -F "docs/adr/" "$historian" | grep -qF "If the folder does not exist"'
 assert "reviewer has contract-mismatch" 'grep -q "| \`contract-mismatch\` | yes |" "$repo_root/agents/reviewer.md"'
 finish

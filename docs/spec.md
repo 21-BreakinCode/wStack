@@ -143,8 +143,8 @@ wstack/
 │   ├── contract-edit.sh           the only writer of contract files
 │   ├── contract-hook.sh           SessionStart and PostToolUse drift hook
 │   ├── lib/repo.sh                main_checkout: finds the main checkout from a worktree
-│   ├── lib/frontmatter.sh         fm_get, fm_set, fm_append: read and write frontmatter
-│   ├── lib/herdr.sh               herdr helpers for launch-task.sh and resume-task.sh
+│   ├── lib/frontmatter.sh         fm_get, fm_set, fm_append, fm_to_json: read and write frontmatter
+│   ├── lib/herdr.sh               herdr helpers that the task scripts share
 │   └── handover/                  resolvers, exclude and symlink scripts, Python helpers
 ├── docs/
 │   └── decisions.md               changes to ASSUME rules, with reasons

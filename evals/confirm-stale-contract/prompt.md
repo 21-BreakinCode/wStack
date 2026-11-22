@@ -1,7 +1,7 @@
 ---
 max_turns: 60
 timeout_seconds: 900
-allowed_tools: [Skill, Bash, Read, Write, Edit, Glob, Grep]
+allowed_tools: [Skill, Bash, Read, Write, Edit, Glob, Grep, Agent]
 env:
   EVAL_WSTACK_VAULT_PATH: ./world/vault
   EVAL_WSTACK_TASKS_DIR: Tasks
