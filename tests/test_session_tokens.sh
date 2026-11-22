@@ -64,4 +64,15 @@ assert "unknown session id prints nothing" '[ -z "$out" ]'
 status=0; out="$(bash "$script" --session not-a-uuid 2>/dev/null)" || status=$?
 assert "bad session id exits 2" '[ "$status" -eq 2 ]'
 assert "bad session id prints nothing" '[ -z "$out" ]'
+
+# A second subagent file in another project folder: line 2 sums across files and folders.
+mkdir -p "$other_dir/$id_c/subagents"
+usage_line sy 20 > "$other_dir/$id_c/subagents/agent-y.jsonl"
+out="$(bash "$script" --session "$id_a" --session "$id_c")"
+assert "subagent total sums both files in both folders (7+20)" '[ "$out" = "$(printf "105\n27")" ]'
+
+# A missing id warns on stderr while the found total stays on stdout.
+out="$(bash "$script" --session "$id_a" --session dddddddd-dddd-dddd-dddd-dddddddddddd 2>"$work_dir/warn.txt")"
+assert "missing id keeps the found total on stdout" '[ "$out" = "$(printf "100\n7")" ]'
+assert "missing id warns on stderr" 'grep -qx "session-tokens: no transcript for dddddddd-dddd-dddd-dddd-dddddddddddd" "$work_dir/warn.txt"'
 finish

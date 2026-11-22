@@ -5,6 +5,7 @@
 # Reads ~/.claude/projects/<cwd with every non-alphanumeric character as "-">/*.jsonl, newest file by mtime.
 # The transcript repeats each assistant message, so usage is grouped by message.id (last line wins).
 # The --session form prints two lines: the main-transcript total, then the subagent total (0 if none).
+# The --session form warns on stderr for each id without a main transcript.
 # Exit 2 with no output when the folder or transcript is missing or holds no usage.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]:-$0}")/lib/transcripts.sh"
@@ -22,6 +23,9 @@ if [ "${1:-}" = "--session" ]; then
   done
   main_files=(); while IFS= read -r f; do main_files+=("$f"); done < <(transcript_main_files "${session_ids[@]}")
   [ ${#main_files[@]} -gt 0 ] || exit 2
+  for id in "${session_ids[@]}"; do
+    [ -n "$(transcript_main_files "$id")" ] || echo "session-tokens: no transcript for $id" >&2
+  done
   subagent_files=(); while IFS= read -r f; do subagent_files+=("$f"); done < <(transcript_subagent_files "${session_ids[@]}")
   main_total="$(sum_usage "${main_files[@]}")"
   [ -n "$main_total" ] || exit 2
@@ -30,7 +34,6 @@ if [ "${1:-}" = "--session" ]; then
   echo "$main_total"; echo "${subagent_total:-0}"
   exit 0
 fi
-
 
 [ $# -eq 1 ] || { echo "usage: session-tokens.sh <cwd>" >&2; exit 2; }
 real_cwd="$(cd "$1" 2>/dev/null && pwd -P)" || exit 2
