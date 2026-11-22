@@ -74,6 +74,45 @@ push_is_risky() {  # <words...>, starting at the word "git"
   return 1
 }
 
+# Read-only exemption. Off when the whole command can run text as code or fan out to another command.
+exemption_allowed=1
+runs_other_commands='(^|[^[:alnum:]_.-])(bash|sh|zsh|eval|source|xargs|parallel)([^[:alnum:]_-]|$)|-exec|`|\$[^A-Za-z0-9_]|>|(^|[[:space:]])\.[[:space:]]'
+[[ "$command_text" =~ $runs_other_commands ]] && exemption_allowed=0
+
+# Succeeds when the segment only reads: a "for ... in ..." header, or a known read-only tool.
+is_read_only_segment() {  # <segment>
+  local -a words
+  local word
+  # shellcheck disable=SC2206
+  words=($1)
+  while [ "${#words[@]}" -gt 0 ]; do
+    case "${words[0]}" in do|then|else) words=("${words[@]:1}") ;; *) break ;; esac
+  done
+  [ "${#words[@]}" -gt 0 ] || return 1
+  word="${words[0]//[\'\"]/}"
+  case "$word" in
+    for) [[ "${words[*]}" =~ ^for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in([[:space:]]|$) ]]; return ;;
+  esac
+  case "$word" in
+    file) for word in "${words[@]}"; do word="${word//[\'\"\\]/}"; [[ ( "$word" == -*C* && "$word" != --* ) || "$word" == --co* ]] && return 1; done; return 0 ;;
+    cat|head|tail|grep|wc|ls|stat|diff|nl) return 0 ;;
+    git)
+      words=("${words[@]:1}")
+      while [ "${#words[@]}" -gt 0 ]; do
+        case "${words[0]}" in
+          -C) words=("${words[@]:2}") ;;
+          --no-pager|-P|--no-optional-locks) words=("${words[@]:1}") ;;
+          -*) return 1 ;;  # other global options take a separate value or set config
+          diff|show|log|blame|status)  # --output=FILE writes a file
+            for word in "${words[@]}"; do word="${word//[\'\"\\]/}"; [[ "$word" == --output* ]] && return 1; done
+            return 0 ;;
+          *) return 1 ;;
+        esac
+      done ;;
+  esac
+  return 1
+}
+
 # Sets $reason for one command segment.
 judge_segment() {
   local segment="$1" deploy_command bare first_word
@@ -99,7 +138,7 @@ judge_segment() {
   else
     for deploy_command in "npm publish" "gh release create" "docker push" "terraform apply" \
       "kubectl apply" "helm install" "helm upgrade" "vercel --prod" "vercel deploy --prod" \
-      "pnpm publish" "yarn publish" "cargo publish" "fly deploy" "firebase deploy" "wrangler deploy" "cf workers deploy"; do
+      "pnpm publish" "yarn publish" "yarn npm publish" "cargo publish" "fly deploy" "firebase deploy" "wrangler deploy" "cf workers deploy"; do
       if [[ "$segment" =~ ${start}${deploy_command// /$space} ]]; then
         reason="a deploy or publish ($deploy_command)"
         return 0
@@ -121,6 +160,14 @@ judge_segment() {
 
 switches_to_default=0
 separated="${command_text//[&|;()<>]/$'\n'}"
+# The exemption holds only when every segment reads: text in one segment can reach another through a pipe or a loop variable.
+if [ "$exemption_allowed" = 1 ]; then
+  while IFS= read -r segment; do
+    [[ "$segment" =~ ^[[:space:]]*(done|fi|\})?[[:space:]]*$ ]] && continue
+    is_read_only_segment "$segment" || { exemption_allowed=0; break; }
+  done <<< "$separated"
+  [ "$exemption_allowed" = 0 ] || exit 0
+fi
 reason=""
 while IFS= read -r segment; do
   judge_segment "$segment"

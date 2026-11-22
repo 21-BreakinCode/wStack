@@ -212,6 +212,8 @@ Each agent reads the files from the steps before it. `/wstack:run-retro` reads e
 
 ASSUME: every file starts with YAML frontmatter, so that `/wstack:run-retro` can read fields without parsing prose.
 
+A list value in frontmatter is one-line JSON, like `ignore: ["tests/**"]`. Block-style YAML lists (`- item` lines) are an error: `contract-check.sh` and `contract-edit.sh` exit 2.
+
 `spec.md`:
 
 ```yaml

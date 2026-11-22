@@ -86,6 +86,82 @@ check ask  'bash "/Users/me/.claude/plugins/wstack/scripts/evidence-delete.sh" -
 check ask  'cd x && bash scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b'
 check pass 'bash /p/scripts/evidence-delete.sh --task-id 2000-01-02-x --bucket b --dry-run'
 check pass 'bash /p/scripts/evidence-upload.sh --task-id 2000-01-02-x --dir d'
+# named, not run: a command that only names a guarded command passes
+check pass 'cat -n scripts/evidence-delete.sh'
+check pass 'for f in scripts/evidence-delete.sh scripts/evidence-upload.sh; do cat -n "$f"; done'
+check ask  'bash scripts/evidence-delete.sh x'
+check ask  './scripts/evidence-delete.sh x'
+check ask  'scripts/evidence-delete.sh x'
+check pass 'grep -n "gh pr merge" notes.md'
+check pass 'cat docs/terraform apply.md'
+check ask  'npx wrangler deploy'
+check ask  'echo done && sudo npm publish'
+check ask  'echo npm publish'
+check pass 'grep -rn "gh pr merge" .'
+check pass 'git diff -- scripts/evidence-delete.sh'
+check ask  'less scripts/evidence-delete.sh'
+check ask  "less '+!gh pr merge 5' f"
+check ask  "more scripts/evidence-delete.sh"
+check ask  "rg --pre 'gh pr merge 5' x"
+check ask  "rg --pre=scripts/evidence-delete.sh x f"
+check ask  "/tmp/cat 'gh pr merge 5'"
+check ask  "for c in 'gh pr merge 5'; do \$c; done"
+check ask  'for f in scripts/evidence-delete.sh; do "$f" x; done'
+check ask  "stat -f 'gh pr merge 5' f | ksh"
+check ask  "stat -f 'gh pr merge 5' f | awk '{system(\$0)}'"
+check ask  "stat -f 'gh pr merge 5' f | while read -r c; do \$c; done"
+check ask  "git log -1 --format='tformat:gh pr merge 5' | ksh"
+check ask  "git --namespace log -c alias.x='!gh pr merge 5' x"
+check ask  "git --git-dir log -c alias.x='!gh pr merge 5' x"
+check ask  "git --work-tree log -c alias.x='!gh pr merge 5' x"
+check ask  "git --attr-source log -c alias.x='!gh pr merge 5' x"
+check ask  "rg '--pre' scripts/evidence-delete.sh init f"
+check ask  "rg --hostname-bin=scripts/evidence-delete.sh x f"
+check ask  'git -c diff.external=scripts/evidence-delete.sh diff'
+check ask  "git -p log 'gh pr merge 5'"
+check pass 'grep -rn "gh pr merge" .'
+check pass 'git -C /tmp log --oneline -- scripts/evidence-delete.sh'
+check pass 'for f in scripts/evidence-delete.sh; do cat "$f"; done'
+check pass 'cat scripts/evidence-delete.sh | head -5'
+check ask  "git diff --output=scripts/evidence-delete.sh"
+check ask  "git log -1 '--output=x' scripts/evidence-delete.sh"
+check ask  "file -C -m scripts/evidence-delete.sh"
+check ask  "file -bC scripts/evidence-delete.sh"
+check pass "file scripts/evidence-delete.sh"
+check ask  "for x in \$'f\\x28e:gh pr merge 5:\\x29'; do cat \${~x}; done"
+check ask  "for x in \$'a[\\x24\\x28 gh pr merge 5\\x29]'; do cat \${!x}; done"
+check ask  'cat $[x] gh pr merge 5'
+check ask  "file --co -m scripts/evidence-delete.sh"
+check ask  "grep 'gh pr merge' f > out"
+check pass "git diff --stat -- scripts/evidence-delete.sh"
+check ask  'rg "npm publish" docs'
+check ask  "sed -n 'e gh pr merge 5' f"
+check ask  "sed -n 's/.*/gh pr merge 5/e' f"
+check ask  "git grep -O'gh pr merge 5' -e x"
+check ask  "git grep --open-files-in-pager='npm publish' x"
+check ask  "bat --paging=always --pager 'gh pr merge 5' f"
+check ask  "git -c core.pager='gh pr merge 5' log"
+check pass 'git log -p scripts/evidence-delete.sh'
+check pass 'cat scripts/evidence-delete.sh'
+# fail closed: wrappers, flags, keywords, and fan-out stay guarded
+check ask  'echo 5 | xargs gh pr merge'
+check ask  'nohup gh pr merge 5'
+check ask  'timeout 60 npm publish'
+check ask  'sudo -u me gh pr merge 5'
+check ask  'env -i gh pr merge 5'
+check ask  'if gh pr merge 5; then echo ok; fi'
+check ask  'while gh pr merge 5; do break; done'
+check ask  'find . -exec gh pr merge 5 \;'
+check ask  'parallel cf r2 objects delete {} --bucket-name b ::: k1 k2'
+check ask  'echo `gh pr merge 5`'
+check ask  "bash -c 'sudo gh pr merge 5'"
+check ask  "bash -c 'bash scripts/evidence-delete.sh x'"
+check ask  '/bin/bash scripts/evidence-delete.sh x'
+check ask  'bash -x scripts/evidence-delete.sh x'
+check ask  'source scripts/evidence-delete.sh x'
+check ask  'npx -y wrangler deploy'
+check ask  'pnpm dlx wrangler deploy'
+check ask  'yarn npm publish'
 # I5: forms the first word walk missed
 check ask  'PATH=~/.local/git/bin:$PATH git push -f origin x'
 check ask  'GIT_SSH_COMMAND="ssh -i ~/.ssh/github" git push --force origin main'

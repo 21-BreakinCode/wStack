@@ -21,7 +21,7 @@ G5. Run `bash "$scripts/contract-check.sh" "<repository folder>" "$contract_file
    - Exit 0 or 1: run `git -C "<repository folder>" rev-parse "origin/<base_branch>"` right away. This is `checked_commit`. Dispatch the `wstack:contract-reader` agent. Give it the repository folder, the contract path, the Goal text, and the output of the check. Write `$task_dir/contract-brief.md` as frontmatter, then the reply before the line `=== PATCH ===`. The frontmatter holds four keys: `contract_file`, `base_branch`, `checked_commit`, and `stale_sections`. `stale_sections` is the one-line JSON list from the `stale_sections:` line of the check. If the fetch in G3 failed, append the line `Fetch failed: the check used the local ref origin/<base_branch>.` to `contract-brief.md`. If the part after the marker is not `None`, write it to `$task_dir/contract.gate-patch.md`.
 G6. "Write the spec" reads `contract-brief.md` together with the vault notes.
 
-The gate never changes the contract file. Step 9 does that, after approval.
+The contract file changes in two places only: G4 applies the merged write-backs of pending items, and step 9 applies the approved patch.
 
 ## Write the spec
 

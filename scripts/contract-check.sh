@@ -4,8 +4,9 @@
 # Exit: 0 fresh, 1 stale, 2 error (stderr names the cause), 3 contract file missing.
 set -euo pipefail
 
-repo_dir="${1:?usage: contract-check.sh <repo_dir> <contract_file>}"
-contract_file="${2:?usage: contract-check.sh <repo_dir> <contract_file>}"
+[ "${1:-}" ] && [ "${2:-}" ] || { echo "usage: contract-check.sh <repo_dir> <contract_file>" >&2; exit 2; }
+repo_dir="$1"
+contract_file="$2"
 plugin_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$plugin_root/scripts/lib/frontmatter.sh"
 max_listed_files=10
@@ -21,6 +22,10 @@ verified_commit="$(fm_get "$contract_file" verified_commit)"
 [ -n "$base_branch" ] || fail "contract has no base_branch: $contract_file"
 [ -n "$verified_commit" ] || fail "contract has no verified_commit: $contract_file"
 [[ "$verified_commit" =~ ^[0-9a-fA-F]{4,64}$ ]] || fail "verified_commit is not a hex SHA: $verified_commit"
+for list_example in 'pending: []' 'ignore: ["tests/**"]'; do
+  list_key="${list_example%%:*}"
+  ! fm_has_block_list "$contract_file" "$list_key" || fail "$list_key must be a one-line JSON list, like $list_example"
+done
 pending_json="$(fm_get "$contract_file" pending)"
 pending_json="$(jq -c . <<<"${pending_json:-[]}" 2>/dev/null)" || fail "pending is not JSON: $contract_file"
 ignore_json="$(fm_get "$contract_file" ignore)"
