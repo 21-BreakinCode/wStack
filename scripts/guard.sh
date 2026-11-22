@@ -93,8 +93,9 @@ is_read_only_segment() {  # <segment>
   case "$word" in
     for) [[ "${words[*]}" =~ ^for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in([[:space:]]|$) ]]; return ;;
   esac
-  case "${word##*/}" in
-    cat|less|more|head|tail|grep|rg|wc|ls|file|stat|diff|nl) return 0 ;;
+  case "$word" in
+    rg) for word in "${words[@]}"; do [[ "$word" == --pre* ]] && return 1; done; return 0 ;;
+    cat|head|tail|grep|wc|ls|file|stat|diff|nl) return 0 ;;
     git)
       words=("${words[@]:1}")
       while [ "${#words[@]}" -gt 0 ]; do

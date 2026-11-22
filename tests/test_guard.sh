@@ -99,7 +99,13 @@ check ask  'echo done && sudo npm publish'
 check ask  'echo npm publish'
 check pass 'grep -rn "gh pr merge" .'
 check pass 'git diff -- scripts/evidence-delete.sh'
-check pass 'less scripts/evidence-delete.sh'
+check ask  'less scripts/evidence-delete.sh'
+check ask  "less '+!gh pr merge 5' f"
+check ask  "more scripts/evidence-delete.sh"
+check ask  "rg --pre 'gh pr merge 5' x"
+check ask  "rg --pre=scripts/evidence-delete.sh x f"
+check ask  "/tmp/cat 'gh pr merge 5'"
+check pass 'rg "npm publish" docs'
 check ask  "sed -n 'e gh pr merge 5' f"
 check ask  "sed -n 's/.*/gh pr merge 5/e' f"
 check ask  "git grep -O'gh pr merge 5' -e x"
