@@ -128,6 +128,11 @@ check ask  "git log -1 '--output=x' scripts/evidence-delete.sh"
 check ask  "file -C -m scripts/evidence-delete.sh"
 check ask  "file -bC scripts/evidence-delete.sh"
 check pass "file scripts/evidence-delete.sh"
+check ask  "for x in \$'f\\x28e:gh pr merge 5:\\x29'; do cat \${~x}; done"
+check ask  "for x in \$'a[\\x24\\x28 gh pr merge 5\\x29]'; do cat \${!x}; done"
+check ask  'cat $[x] gh pr merge 5'
+check ask  "file --co -m scripts/evidence-delete.sh"
+check ask  "grep 'gh pr merge' f > out"
 check pass "git diff --stat -- scripts/evidence-delete.sh"
 check ask  'rg "npm publish" docs'
 check ask  "sed -n 'e gh pr merge 5' f"

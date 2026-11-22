@@ -76,7 +76,7 @@ push_is_risky() {  # <words...>, starting at the word "git"
 
 # Read-only exemption. Off when the whole command can run text as code or fan out to another command.
 exemption_allowed=1
-runs_other_commands='(^|[^[:alnum:]_.-])(bash|sh|zsh|eval|source|xargs|parallel)([^[:alnum:]_-]|$)|-exec|`|\$\(|(^|[[:space:]])\.[[:space:]]'
+runs_other_commands='(^|[^[:alnum:]_.-])(bash|sh|zsh|eval|source|xargs|parallel)([^[:alnum:]_-]|$)|-exec|`|\$[^A-Za-z0-9_]|>|(^|[[:space:]])\.[[:space:]]'
 [[ "$command_text" =~ $runs_other_commands ]] && exemption_allowed=0
 
 # Succeeds when the segment only reads: a "for ... in ..." header, or a known read-only tool.
@@ -94,7 +94,7 @@ is_read_only_segment() {  # <segment>
     for) [[ "${words[*]}" =~ ^for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in([[:space:]]|$) ]]; return ;;
   esac
   case "$word" in
-    file) for word in "${words[@]}"; do word="${word//[\'\"\\]/}"; [[ ( "$word" == -*C* && "$word" != --* ) || "$word" == --compile* ]] && return 1; done; return 0 ;;
+    file) for word in "${words[@]}"; do word="${word//[\'\"\\]/}"; [[ ( "$word" == -*C* && "$word" != --* ) || "$word" == --co* ]] && return 1; done; return 0 ;;
     cat|head|tail|grep|wc|ls|stat|diff|nl) return 0 ;;
     git)
       words=("${words[@]:1}")
