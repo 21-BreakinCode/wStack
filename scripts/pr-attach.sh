@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Open a pull request with GitHub copies of the evidence attached (gh 2.99.0+, `gh pr create --attach`).
-# usage: pr-attach.sh --task-id <id> --title <t> --body-file <f> --max-mb <n> [--base <branch>] [--allow-ghes] <evidence files...>
+# usage: pr-attach.sh --task-id <id> --title <t> --body-file <f> --max-mb <n> [--base <branch>] [--allow-ghes] [--repo <owner/repo> --local-only-repos <list>] <evidence files...>
 # Copies go to $WSTACK_EVIDENCE_ROOT/<id>/gh/ (WSTACK_EVIDENCE_ROOT defaults to /tmp/wstack-evidence; tests override it).
 # Not github.com and no --allow-ghes: creates the PR without attachments, prints "attachments skipped: not github.com".
+# Repo in --local-only-repos: creates the PR without attachments, prints "attachments skipped: repo <repo> is in local_evidence_only_repos".
 # A file that cannot be compressed (or fit under --max-mb) is skipped; the PR is still created,
 # and "attachment upload failed: <file>" is printed for it.
 # `gh pr create` fails but prints a URL (partial upload): prints the URL and "attachment upload failed", exits 0.
@@ -14,7 +15,7 @@ set -euo pipefail
 
 usage() { echo "usage: pr-attach.sh --task-id <id> --title <t> --body-file <f> --max-mb <n> [--base <b>] [--allow-ghes] <files...>" >&2; exit 2; }
 
-task_id=""; task_id_given=0; title=""; body_file=""; max_mb=""; base=""; allow_ghes=0
+task_id=""; task_id_given=0; title=""; body_file=""; max_mb=""; base=""; allow_ghes=0; repo=""; local_only_repos=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --task-id) [ $# -ge 2 ] || usage; task_id="$2"; task_id_given=1; shift 2 ;;
@@ -23,6 +24,8 @@ while [ $# -gt 0 ]; do
     --max-mb) [ $# -ge 2 ] || usage; max_mb="$2"; shift 2 ;;
     --base) [ $# -ge 2 ] || usage; base="$2"; shift 2 ;;
     --allow-ghes) allow_ghes=1; shift ;;
+    --repo) [ $# -ge 2 ] || usage; repo="$2"; shift 2 ;;
+    --local-only-repos) [ $# -ge 2 ] || usage; local_only_repos="$2"; shift 2 ;;
     --*) usage ;;
     *) break ;;
   esac
@@ -54,6 +57,11 @@ case "$repo_url" in
   https://github.com/*) attach_ok=1 ;;
   *) attach_ok="$allow_ghes" ;;
 esac
+skip_reason="not github.com"
+if bash "$script_dir/repo-is-local-only.sh" "$repo" "$local_only_repos"; then
+  attach_ok=0
+  skip_reason="repo $repo is in local_evidence_only_repos"
+fi
 
 failed_files=()
 copy_index=0
@@ -73,7 +81,7 @@ if [ "$attach_ok" -eq 1 ]; then
     fi
   done
 else
-  echo "attachments skipped: not github.com"
+  echo "attachments skipped: $skip_reason"
 fi
 
 error_file="$(mktemp)"

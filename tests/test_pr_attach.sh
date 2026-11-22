@@ -86,6 +86,24 @@ assert "gh/ input exits 1" '[ "$status" -eq 1 ]'
 assert "gh/ input message names the top-level files" '[[ "$err" == *"inside the gh/ folder"* && "$err" == *"top-level"* ]]'
 assert "gh/ input is kept and no pr is created" '[ -f "$own_gh_dir/old copy.png" ] && ! grep -q "pr create" "$FAKE_LOG"'
 
+# local_evidence_only_repos: a listed repo gets a pull request with no attachment
+: > "$FAKE_LOG"
+out="$(run --repo o/r --local-only-repos "a/b,o/r")"
+assert "listed repo: nothing attached" '! grep -q -- "--attach" "$FAKE_LOG"'
+assert "listed repo: says why" '[[ "$out" == *"attachments skipped: repo o/r is in local_evidence_only_repos"* ]]'
+assert "listed repo: pr still created" 'grep -q "pr create" "$FAKE_LOG"'
+: > "$FAKE_LOG"
+run --repo o/r --local-only-repos "x/y" >/dev/null
+assert "unlisted repo: attaches" 'grep -q -- "--attach" "$FAKE_LOG"'
+: > "$FAKE_LOG"
+run --repo "" --local-only-repos "" >/dev/null
+assert "no repo and empty list: attaches" 'grep -q -- "--attach" "$FAKE_LOG"'
+
+deliver="$repo_root/skills/deliver-task/SKILL.md"
+assert "deliver leaves logs out of the body for a local-only repo" 'grep -qF "If the repository is in \`local_evidence_only_repos\`, leave the text logs out of the body" "$deliver"'
+assert "deliver relays the attachments skipped line" 'grep -qF "If the output says \`attachments skipped\`, say why in the report." "$deliver"'
+assert "deliver passes the repo to pr-attach" 'grep -F "pr-attach.sh" "$deliver" | grep -qF -- "--local-only-repos"'
+
 for bad_id in "" ".." "a/b" "2026-01-01-a b" "../2026-01-01-x"; do
   mkdir -p "$WSTACK_EVIDENCE_ROOT/keep"; : > "$FAKE_LOG"
   status=0

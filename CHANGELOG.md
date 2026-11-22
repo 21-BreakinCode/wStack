@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1 - 2026-11-22
+
+- **fix:** The guard asks before a push that follows a switch to the default branch. It also asks for `git push --all`, for a push inside parentheses, and for `pnpm publish`, `yarn publish`, and `cargo publish`.
+- **fix:** The redactor uses one name list for headers, URL parameters, and JSON keys. It also redacts every plain-text evidence file before upload, and it handles text with invalid UTF-8.
+- **fix:** A repository in `local_evidence_only_repos` gets a pull request with no attachments, and Deliver leaves text logs out of the body.
+- **fix:** A task folder of any earlier day with the same slug now counts as taken, so the new task gets a new slug.
+- **fix:** A second retro in the same week writes `<week>-2.md` and keeps the first retro.
+
 ## 0.3.0 - 2026-11-22
 
 wStack keeps a service contract for each mapped service, and checks tasks against it.

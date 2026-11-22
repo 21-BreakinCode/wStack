@@ -49,10 +49,10 @@ Run all remaining targets that need no approval first. Then handle the ones that
 1. Work in `workspace_cwd`. Take `<slug>` from the task id without its date prefix.
 2. Check for an open pull request: `gh pr list --head wstack/<slug> --state open --json number,url`. If the list holds one, use its `url` and go to step 7.
 3. Run `git push -u origin wstack/<slug>`. If it fails, stop as in "Stop".
-4. Write the pull request body to `$task_dir/pr-body.md`: the goal, what changed, the review result, and the evidence links from `review.md`. Use the `capture-evidence` skill's rule for text logs: put them in the body as text.
-5. Run `bash "$scripts/pr-attach.sh" --task-id <task_id> --title "<title>" --body-file "$task_dir/pr-body.md" --max-mb <pr media limit> <evidence files>`. The evidence files are the top-level media files in `/tmp/wstack-evidence/<task_id>/`, never the files in its subfolders. `pr-attach.sh` makes the GitHub copies. Add `--base <default branch>` when the repository default is not what `gh` picks.
+4. Write the pull request body to `$task_dir/pr-body.md`: the goal, what changed, the review result, and the evidence links from `review.md`. Use the `capture-evidence` skill's rule for text logs: put them in the body as text. If the repository is in `local_evidence_only_repos`, leave the text logs out of the body.
+5. Run `bash "$scripts/pr-attach.sh" --task-id <task_id> --title "<title>" --body-file "$task_dir/pr-body.md" --max-mb <pr media limit> --repo "<repo>" --local-only-repos "<local_evidence_only_repos>" <evidence files>`. Take both values as Verify does for `evidence-upload.sh`. For a listed repository, `pr-attach.sh` attaches nothing and says why. The evidence files are the top-level media files in `/tmp/wstack-evidence/<task_id>/`, never the files in its subfolders. `pr-attach.sh` makes the GitHub copies. Add `--base <default branch>` when the repository default is not what `gh` picks.
 6. Act on the exit code.
-   - Exit 0: take the pull request URL from the last URL in the output. If the output says `attachment upload failed`, say so in the report.
+   - Exit 0: take the pull request URL from the last URL in the output. If the output says `attachment upload failed`, say so in the report. If the output says `attachments skipped`, say why in the report.
    - Exit 3: the pull request does not exist. Stop as in "Stop". A retry starts again at step 1, so step 2 checks for an open pull request first. Never create a second pull request.
    - Exit 1 or 2: read stderr. Stop as in "Stop".
 7. Record the target: `bash "$scripts/frontmatter-set.sh" --append "$task_dir/report.md" targets '{"target":"open a pull request","url":"<url>","undo":"gh pr close <number>"}'`.
