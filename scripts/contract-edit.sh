@@ -52,10 +52,11 @@ case "$subcommand" in
       shift 2
     done
     [ -s "$patch_file" ] || { echo "contract-edit.sh: patch is empty or missing: $patch_file" >&2; exit 2; }
-    tmp_file="$(fm_tmp_like "$target_file")"
+    tmp_file="$(mktemp "$target_file.XXXXXX")"
     # Patch pass fills body[name]; target pass swaps matching sections; unmatched names append at the end.
     # Names print to stdout in patch order, after the target is written to tmp_file.
     applied="$(ONLY_SECTIONS="$only_sections" awk -v out="$tmp_file" '
+      { sub(/\r$/, "") }   # LF out, like fm_set
       function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
       function emit(name,   text) {
         text = body[name]; sub(/\n+$/, "\n", text)
@@ -97,20 +98,21 @@ case "$subcommand" in
       }
     ' "$patch_file" "$target_file")" || { rm -f "$tmp_file"; exit 2; }
     if [ -z "$applied" ]; then rm -f "$tmp_file"; echo "contract-edit.sh: patch holds no section to apply: $patch_file" >&2; exit 2; fi
-    mv "$tmp_file" "$target_file"
+    fm_replace "$tmp_file" "$target_file"
     printf '%s\n' "$applied" ;;
 
   delete-section)
     target_file="${1:?usage: contract-edit.sh delete-section <target_file> <heading>}"
     heading="${2:?usage: contract-edit.sh delete-section <target_file> <heading>}"
-    tmp_file="$(fm_tmp_like "$target_file")"
+    tmp_file="$(mktemp "$target_file.XXXXXX")"
     found="$(DELETE_HEADING="$heading" awk -v out="$tmp_file" '
+      { sub(/\r$/, "") }
       /^## / { name = substr($0, 4); sub(/[ \t]+$/, "", name); skipping = (name == ENVIRON["DELETE_HEADING"]); if (skipping) found = 1 }
       !skipping { print > out }
       END { print found + 0 }
     ' "$target_file")"
     if [ "$found" != 1 ]; then rm -f "$tmp_file"; echo "contract-edit.sh: no section: $heading" >&2; exit 1; fi
-    mv "$tmp_file" "$target_file" ;;
+    fm_replace "$tmp_file" "$target_file" ;;
 
   pending-add)
     contract_file="${1:?usage: contract-edit.sh pending-add <contract_file> <pr> <task_id>}"
@@ -131,10 +133,11 @@ case "$subcommand" in
   set-verified)
     contract_file="${1:?usage: contract-edit.sh set-verified <contract_file> <commit>}"
     verified_commit="${2:?commit}"
-    staged_file="$(fm_tmp_like "$contract_file")"
-    { fm_set "$staged_file" verified_commit "$verified_commit" \
+    staged_file="$(mktemp "$contract_file.XXXXXX")"
+    { cp "$contract_file" "$staged_file" && chmod 600 "$staged_file" \
+      && fm_set "$staged_file" verified_commit "$verified_commit" \
       && fm_set "$staged_file" verified_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-      && mv "$staged_file" "$contract_file"; } || { rm -f "$staged_file"; exit 2; } ;;
+      && fm_replace "$staged_file" "$contract_file"; } || { rm -f "$staged_file"; exit 2; } ;;
 
   next-decision-id)
     decisions_dir="${1:?usage: contract-edit.sh next-decision-id <decisions_dir>}"

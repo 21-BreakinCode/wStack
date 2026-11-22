@@ -149,6 +149,33 @@ assert "apply keeps 644" "[ \"\$(mode_of '$contract')\" = 644 ]"
 bash "$edit" delete-section "$contract" Interfaces
 assert "delete-section keeps 644" "[ \"\$(mode_of '$contract')\" = 644 ]"
 
+echo "read-only target"
+write_contract; chmod 444 "$contract"
+rc=0; bash "$edit" set-verified "$contract" def456 2>/dev/null || rc=$?
+assert "set-verified on a 444 file works and keeps 444" "[ $rc -eq 0 ] && [ \"\$(mode_of '$contract')\" = 444 ] && [ \"\$(fm_get '$contract' verified_commit)\" = def456 ]"
+assert "no stray temp file after a 444 write" "[ -z \"\$(ls -A '$work' | grep '^app.md\\.')\" ]"
+chmod 644 "$contract"
+
+echo "CRLF contract with an LF patch"
+write_contract; sed 's/$/\r/' "$contract" >"$work/crlf.md"
+printf '## Interfaces\n\nCRLF new.\n' >"$work/patch.md"
+bash "$edit" apply "$work/crlf.md" "$work/patch.md" >/dev/null 2>"$work/err"
+assert "apply replaces the section, no duplicate, no warning" "[ \"\$(grep -c '^## Interfaces' '$work/crlf.md')\" = 1 ] && grep -q 'CRLF new' '$work/crlf.md' && ! grep -q 'Old interfaces' '$work/crlf.md' && [ ! -s '$work/err' ]"
+assert "apply writes LF" "! grep -q \$'\\r' '$work/crlf.md'"
+write_contract; sed 's/$/\r/' "$contract" >"$work/crlf.md"
+bash "$edit" delete-section "$work/crlf.md" Interfaces
+assert "delete-section finds a CRLF heading" "! grep -q 'Old interfaces' '$work/crlf.md' && grep -q 'Team docs' '$work/crlf.md'"
+
+echo "A1-9 a failure on the second key changes nothing"
+write_contract; cp "$contract" "$work/before-sv.md"
+fake_bin="$work/fakebin"; mkdir -p "$fake_bin"; real_awk="$(command -v awk)"
+printf '#!/usr/bin/env bash\nn=$(cat "%s/count" 2>/dev/null || echo 0); n=$((n+1)); echo $n >"%s/count"\n[ "$n" -ne 2 ] || exit 1\nexec "%s" "$@"\n' "$work" "$work" "$real_awk" >"$fake_bin/awk"
+chmod +x "$fake_bin/awk"; rm -f "$work/count"
+rc=0; PATH="$fake_bin:$PATH" bash "$edit" set-verified "$contract" def456 2>/dev/null || rc=$?
+assert "second write fails: set-verified fails" "[ $rc -ne 0 ]"
+assert "second write fails: verified_commit unchanged" "cmp -s '$contract' '$work/before-sv.md'"
+assert "second write fails: no stray temp file" "[ -z \"\$(ls -A '$work' | grep '^app.md\\.')\" ]"
+
 echo "A1-8 lock in a missing folder"
 start=$SECONDS; rc=0
 bash "$edit" lock "$work/no-such-folder/app.md" 2>"$work/err" || rc=$?

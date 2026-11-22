@@ -109,6 +109,11 @@ new_world; no_jq="$work_dir/nojq"; mkdir -p "$no_jq"; ln -sf "$(command -v git)"
 set +e; out="$(PATH="$no_jq" "$(command -v bash)" "$script" "$REPO" "$CONTRACT" 2>"$work_dir/err")"; rc=$?; set -e; err="$(cat "$work_dir/err")"
 assert "missing jq is named" '[ $rc = 2 ] && printf "%s" "$err" | grep -q "jq is required"'
 
+new_world; set_key "$CONTRACT" ignore '{"a":1}'; run
+assert "ignore object is an error" '[ $rc = 2 ] && printf "%s" "$err" | grep -q "ignore is not a JSON array"'
+new_world; set_key "$CONTRACT" ignore '[1,2]'; run
+assert "ignore numbers are an error" '[ $rc = 2 ]'
+
 # A1-4: verified_commit must be a hex SHA
 new_world; set_key "$CONTRACT" verified_commit '--all'; run
 assert "option-like verified_commit rejected" '[ $rc = 2 ] && printf "%s" "$err" | grep -q "not a hex SHA"'

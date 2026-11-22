@@ -30,7 +30,7 @@ sections="$(field stale_sections | jq -r 'join(", ")')" || exit 0
 unclaimed_count="$(field unclaimed_count)"
 detail=""
 [ -z "$sections" ] || detail=" Stale: $sections."
-[ "$unclaimed_count" = 0 ] || detail="$detail $unclaimed_count unclaimed files changed."
+if [ "$unclaimed_count" = 1 ]; then detail="$detail 1 unclaimed file changed."; elif [ "$unclaimed_count" != 0 ]; then detail="$detail $unclaimed_count unclaimed files changed."; fi
 message="wStack: $app_name contract is $(field behind) commits behind $(field base).$detail A new spec runs the contract gate first."
 jq -nc --arg event "$event" --arg message "$message" \
   '{hookSpecificOutput:{hookEventName:$event,additionalContext:$message}}'

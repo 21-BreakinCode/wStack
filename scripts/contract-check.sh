@@ -24,7 +24,7 @@ verified_commit="$(fm_get "$contract_file" verified_commit)"
 pending_json="$(fm_get "$contract_file" pending)"
 pending_json="$(jq -c . <<<"${pending_json:-[]}" 2>/dev/null)" || fail "pending is not JSON: $contract_file"
 ignore_json="$(fm_get "$contract_file" ignore)"
-ignore_globs="$(jq -r '.[]' <<<"${ignore_json:-[]}" 2>/dev/null)" || fail "ignore is not a JSON array of strings: $contract_file"
+ignore_globs="$(jq -r 'if type == "array" and all(type == "string") then .[] else error("not a string array") end' <<<"${ignore_json:-[]}" 2>/dev/null)" || fail "ignore is not a JSON array of strings: $contract_file"
 
 base_ref="origin/$base_branch"
 git -C "$repo_dir" rev-parse --verify -q "$base_ref^{commit}" >/dev/null || fail "ref $base_ref does not exist; fetch it first"

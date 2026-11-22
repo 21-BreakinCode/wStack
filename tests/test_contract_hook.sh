@@ -65,5 +65,5 @@ echo x > "$REPO/README.md"
 git -C "$REPO" add -A; git -C "$REPO" commit -q -m "readme"; git -C "$REPO" push -q origin main 2>/dev/null
 out="$(WSTACK_VAULT_PATH="$VAULT" hook SessionStart "$REPO" "")"
 context="$(printf '%s' "$out" | jq -r .hookSpecificOutput.additionalContext)"
-assert "A1-14 unclaimed only: says so" '[[ "$context" == *"1 unclaimed files changed."* ]] && [[ "$context" != *"Stale:"* ]]'
+assert "A1-14 unclaimed only: says so" '[[ "$context" == *"1 unclaimed file changed."* ]] && [[ "$context" != *"Stale:"* ]]'
 finish
