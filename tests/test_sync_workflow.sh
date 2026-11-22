@@ -27,4 +27,18 @@ for path_entry in '.claude-plugin/plugin.json' 'CHANGELOG.md' 'skills/**'; do
 done
 path_count="$(printf '%s\n' "$push_block" | grep -cE '^ +- ' || true)"
 assert "push trigger lists exactly three paths" '[ "$path_count" -eq 3 ]'
+
+# A3-18: pin the order and the guards of the sync steps
+sync_line="$(grep -nF 'cicd.sh SYNC' "$workflow" | head -1 | cut -d: -f1)"
+gen_line="$(grep -nF 'cicd.sh GEN' "$workflow" | head -1 | cut -d: -f1)"
+assert "SYNC, GEN, VERIFY run in this order" '[ "$sync_line" -lt "$gen_line" ] && [ "$gen_line" -lt "$verify_line" ]'
+checkout_block="$(awk -v start="$checkout_line" 'NR >= start && NR < start + 3' "$workflow")"
+assert "the cc-plugins checkout uses the token" 'printf "%s\n" "$checkout_block" | grep -qF -- "token: \${{ secrets.CC_PLUGINS_TOKEN }}"'
+assert "the version is read from plugin.json" 'grep -qF -- "jq -r .version \"\$GITHUB_WORKSPACE/wstack/.claude-plugin/plugin.json\"" "$workflow"'
+diff_line="$(grep -nF 'git diff --cached --quiet' "$workflow" | head -1 | cut -d: -f1)"
+commit_line="$(grep -nF 'git commit' "$workflow" | head -1 | cut -d: -f1)"
+rebase_line="$(grep -nF 'git pull --rebase origin main' "$workflow" | head -1 | cut -d: -f1)"
+assert "git diff --cached --quiet guards the commit" '[ -n "$diff_line" ] && [ "$diff_line" -lt "$commit_line" ]'
+assert "a rebase onto cc-plugins main sits between the commit and the push" '[ -n "$rebase_line" ] && [ "$commit_line" -lt "$rebase_line" ] && [ "$rebase_line" -lt "$push_line" ]'
+assert "a failed rebase fails the run" 'grep -F "git pull --rebase origin main" "$workflow" | grep -qF "exit 1"'
 finish

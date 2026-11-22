@@ -47,5 +47,6 @@ jobs:
           git add -A
           if ! git diff --cached --quiet; then
             git commit -m "chore: sync wstack $version"
+            git pull --rebase origin main || { echo "cc-plugins main moved and the rebase failed"; exit 1; }
             git push origin HEAD:main
           fi
