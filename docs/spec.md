@@ -181,7 +181,7 @@ One folder per task in the Obsidian vault. It holds text only. Media never goes 
   review.md     Verify: check results, evidence list with pass/fail, reviewer findings
   review.html   Verify: the review page
   report.md     Deliver: what shipped, where, and how to undo it
-  retro-note.md  Deliver: the RD's exit note for the retro
+  retro-note.md Deliver: the RD's exit note for the retro
 ```
 
 A paused task adds these files. Section 6.2 describes the `paused` status.

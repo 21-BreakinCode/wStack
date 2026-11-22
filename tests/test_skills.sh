@@ -110,10 +110,11 @@ deliver_skill="$repo_root/skills/deliver-task/SKILL.md"
 finish_note_line="$(sed -n '/^## Finish/,/^## Stop/p' "$deliver_skill" | grep -n 'templates/retro-note.md' | head -1 | cut -d: -f1)"
 finish_status_line="$(sed -n '/^## Finish/,/^## Stop/p' "$deliver_skill" | grep -n 'Set `status` to `delivered`' | head -1 | cut -d: -f1)"
 assert "deliver Finish writes retro-note.md before it sets status to delivered" '[ -n "$finish_note_line" ] && [ -n "$finish_status_line" ] && [ "$finish_note_line" -lt "$finish_status_line" ]'
-assert "deliver Finish note step carries the rules and the written_at command" 'grep -qF "date -u +%Y-%m-%dT%H:%M:%SZ" <(sed -n "/^## Finish/,/^## Stop/p" "$deliver_skill" | grep "retro-note.md") && grep -qF "None." <(sed -n "/^## Finish/,/^## Stop/p" "$deliver_skill")'
+finish_note_step="$(sed -n '/^## Finish/,/^## Stop/p' "$deliver_skill" | grep 'templates/retro-note.md')"
+assert "deliver Finish note step carries the rules, the written_at command, and the resume skip" 'grep -qF "date -u +%Y-%m-%dT%H:%M:%SZ" <<<"$finish_note_step" && grep -qF "Each bullet names its evidence" <<<"$finish_note_step" && grep -qF "None." <<<"$finish_note_step" && grep -qF "If \`\$task_dir/retro-note.md\` exists, keep it and skip this step" <<<"$finish_note_step"'
 verify_ref="$repo_root/skills/start-task/references/verify.md"
-cancel_retry_line="$(grep -n 'retro-note.md' "$verify_ref" | head -1 | cut -d: -f1)"
-assert "verify retry-limit Cancel writes retro-note.md before status cancelled, other Cancel unchanged" '[ -n "$cancel_retry_line" ] && grep -n "^- Cancel:" "$verify_ref" | head -1 | grep -q "retro-note.md.*cancelled" && [ "$(grep -c "^- Cancel: set .status. to .cancelled.\.$" "$verify_ref")" = 1 ]'
+retry_block="$(sed -n '/^Retry-limit stop:/,/^Any other stop/p' "$verify_ref")"
+assert "verify retry-limit Cancel writes retro-note.md before status cancelled and names the stop cause, other Cancel unchanged" 'grep "^- Cancel:" <<<"$retry_block" | grep -q "retro-note.md.*Spec gaps.*Surprises.*run-log.md.*cancelled" && [ "$(grep -c "^- Cancel: set .status. to .cancelled.\.$" "$verify_ref")" = 1 ]'
 assert "execute.md holds the herdr pane rule" 'grep -qF "herdr pane split --current" "$repo_root/skills/start-task/references/execute.md" && grep -qF "close it before Deliver" "$repo_root/skills/start-task/references/execute.md"'
-assert "spec lists retro-note.md" 'grep -q "retro-note.md  Deliver" "$repo_root/docs/spec.md"'
+assert "spec lists retro-note.md" 'grep -q "retro-note.md Deliver" "$repo_root/docs/spec.md"'
 finish

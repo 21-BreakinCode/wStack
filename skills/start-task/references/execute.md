@@ -89,7 +89,7 @@ Use this for a `contract` task. Execute writes drafts only, in the task folder. 
 
 ## Panes
 
-If you open a herdr pane for this task, open it in your own workspace with `herdr pane split --current --direction right --no-focus`. Close it before Deliver.
+If you open a herdr pane for this task, open it in your own workspace with `herdr pane split --current --direction right --no-focus`, and close it before Deliver.
 
 ## Finish
 
