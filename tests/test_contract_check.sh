@@ -91,5 +91,45 @@ started=$SECONDS; run; elapsed=$((SECONDS - started))
 echo "  (500 files took ${elapsed}s)"
 assert "500 changed files" '[ $rc = 1 ] && [ "$(field stale_sections)" = "[\"Interfaces\",\"Abilities\"]" ] && [ "$(field unclaimed_count)" = 125 ] && [ "$elapsed" -lt 10 ]'
 
+# A1-1: two sources comments in one section both claim files
+new_world
+sed -i.bak 's|^<!-- sources: api/\*\* -->|&\n<!-- sources: lib/** -->|' "$CONTRACT"
+push_file lib/a.go; run
+assert "two sources comments: second list claims" '[ $rc = 1 ] && [ "$(field stale_sections)" = "[\"Interfaces\"]" ] && [ "$(field unclaimed_count)" = 0 ]'
+
+# A1-2: CRLF contract
+new_world
+sed -i.bak 's/$/\r/' "$CONTRACT"; push_file api/new.go; run
+assert "CRLF contract reads" '[ $rc = 1 ] && [ "$(field stale_sections)" = "[\"Interfaces\"]" ]'
+
+# A1-3: bad ignore JSON and missing jq each have their own error
+new_world; set_key "$CONTRACT" ignore '[broken'; run
+assert "bad ignore JSON is an error" '[ $rc = 2 ] && printf "%s" "$err" | grep -q "ignore is not a JSON array"'
+new_world; no_jq="$work_dir/nojq"; mkdir -p "$no_jq"; ln -sf "$(command -v git)" "$no_jq/git"; ln -sf "$(command -v bash)" "$no_jq/bash"; ln -sf "$(command -v dirname)" "$no_jq/dirname"
+set +e; out="$(PATH="$no_jq" "$(command -v bash)" "$script" "$REPO" "$CONTRACT" 2>"$work_dir/err")"; rc=$?; set -e; err="$(cat "$work_dir/err")"
+assert "missing jq is named" '[ $rc = 2 ] && printf "%s" "$err" | grep -q "jq is required"'
+
+new_world; set_key "$CONTRACT" ignore '{"a":1}'; run
+assert "ignore object is an error" '[ $rc = 2 ] && printf "%s" "$err" | grep -q "ignore is not a JSON array"'
+new_world; set_key "$CONTRACT" ignore '[1,2]'; run
+assert "ignore numbers are an error" '[ $rc = 2 ]'
+
+# A1-4: verified_commit must be a hex SHA
+new_world; set_key "$CONTRACT" verified_commit '--all'; run
+assert "option-like verified_commit rejected" '[ $rc = 2 ] && printf "%s" "$err" | grep -q "not a hex SHA"'
+
+# A1-5: a parse-mapping failure names its cause
+new_world; echo '- dep (mapped): its contract at commit aaa1111' >> "$CONTRACT"
+printf '#!/usr/bin/env bash\necho "boom" >&2; exit 7\n' > "$work_dir/fake-parse.sh"
+broken_plugin="$work_dir/broken-plugin"; mkdir -p "$broken_plugin/scripts/handover"
+cp -R "$repo_root/scripts/lib" "$broken_plugin/scripts/lib"; cp "$script" "$broken_plugin/scripts/contract-check.sh"
+cp "$work_dir/fake-parse.sh" "$broken_plugin/scripts/handover/parse-mapping.sh"
+set +e; out="$(bash "$broken_plugin/scripts/contract-check.sh" "$REPO" "$CONTRACT" 2>"$work_dir/err")"; rc=$?; set -e; err="$(cat "$work_dir/err")"
+assert "parse-mapping failure is reported" '[ $rc = 2 ] && printf "%s" "$err" | grep -q "cannot read the service mapping"'
+
+# A1-6: an empty sources comment claims nothing
+new_world; sed -i.bak 's|^<!-- sources: cmd/\*\* -->|<!-- sources: -->|' "$CONTRACT"
+set_key "$CONTRACT" verified_commit 0123456789abcdef0123456789abcdef01234567; run
+assert "empty sources comment: section not stale" '[ $rc = 1 ] && [ "$(field stale_sections)" = "[\"Team docs\",\"Interfaces\"]" ]'
 
 finish

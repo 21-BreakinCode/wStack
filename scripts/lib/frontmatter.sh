@@ -3,8 +3,16 @@
 # List values are one-line JSON. Source this file.
 set -euo pipefail
 
+fm_replace() {  # <tmp> <file>: move <tmp> over <file>, giving it the mode <file> had
+  local mode
+  mode="$(stat -f %Lp "$2" 2>/dev/null || stat -c %a "$2" 2>/dev/null)" || mode=""
+  if [ -n "$mode" ]; then chmod "$mode" "$1"; fi
+  mv "$1" "$2"
+}
+
 fm_get() {  # <file> <key>
   awk -v key="$2" '
+    { sub(/\r$/, "") }
     NR == 1 { if ($0 != "---") exit; next }
     $0 == "---" { exit }
     index($0, key ":") == 1 { v = substr($0, length(key) + 2); sub(/^ /, "", v); print v; exit }
@@ -13,13 +21,15 @@ fm_get() {  # <file> <key>
 
 fm_set() {  # <file> <key> <value>
   local file="$1" tmp
-  tmp="$(mktemp "${1}.XXXXXX")"
+  tmp="$(mktemp "${file}.XXXXXX")"
+  # Every write leaves LF line ends, so a CRLF file becomes LF on its first write (same rule as contract-edit.sh).
   FM_VALUE="$3" awk -v key="$2" '
+    { sub(/\r$/, "") }
     NR == 1 { print; inside = 1; next }
     inside && $0 == "---" { if (!done) print key ": " ENVIRON["FM_VALUE"]; inside = 0; done = 1; print; next }
     inside && index($0, key ":") == 1 && !done { print key ": " ENVIRON["FM_VALUE"]; done = 1; next }
     { print }
-  ' "$file" >"$tmp" && mv "$tmp" "$file"
+  ' "$file" >"$tmp" && fm_replace "$tmp" "$file" || { rm -f "$tmp"; return 1; }
 }
 
 fm_append() {  # <file> <key> <json-object>
@@ -30,7 +40,7 @@ fm_append() {  # <file> <key> <json-object>
 }
 
 fm_to_json() {  # <file>
-  awk 'NR == 1 { next } $0 == "---" { exit } { print }' "$1" | jq -Rn '
+  tr -d '\r' <"$1" | awk 'NR == 1 { next } $0 == "---" { exit } { print }' | jq -Rn '
     [inputs | capture("^(?<k>[^:]+):[ ]*(?<v>.*)$")]
     | map({key: .k, value: (if .v == "" then null
                             elif (.v | test("^[\\[{]")) then (.v | fromjson)

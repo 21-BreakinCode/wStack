@@ -42,4 +42,16 @@ rc=0; bash "$repo_root/scripts/frontmatter-set.sh" "$sample" status verifying ||
 assert "set script accepts good status" '[ "$rc" = "0" ] && [ "$(fm_get "$sample" status)" = "verifying" ]'
 bash "$repo_root/scripts/frontmatter-set.sh" --append "$sample" stopped_for_user '{"at":"x","reason":"y"}'
 assert "set script --append" '[ "$(fm_get "$sample" stopped_for_user | jq length)" = "3" ]'
+
+# A1-2 CRLF line ends
+crlf="$work_dir/crlf.md"; sed 's/$/\r/' "$fixture" >"$crlf"
+assert "fm_get strips CR" '[ "$(fm_get "$crlf" status)" = "drafting" ]'
+assert "fm_to_json strips CR" '[ "$(fm_to_json "$crlf" | jq -r .status)" = "drafting" ]'
+fm_set "$crlf" status executing
+assert "fm_set edits a CRLF file" '[ "$(fm_get "$crlf" status)" = "executing" ]'
+
+# A1-7 mode is kept
+mode_file="$work_dir/mode.md"; cp "$fixture" "$mode_file"; chmod 644 "$mode_file"
+fm_set "$mode_file" status executing
+assert "fm_set keeps mode 644" '[ "$(stat -f %Lp "$mode_file" 2>/dev/null || stat -c %a "$mode_file")" = 644 ]'
 finish

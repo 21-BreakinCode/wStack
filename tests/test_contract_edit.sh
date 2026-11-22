@@ -135,4 +135,114 @@ rc=0; bash "$edit" apply "$contract" "$work/empty.md" >/dev/null 2>&1 || rc=$?
 assert "0-byte patch exits 2" "[ $rc -eq 2 ]"
 assert "0-byte patch leaves target" "cmp -s '$contract' '$work/before.md'"
 
+mode_of() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
+
+echo "A1-7 file mode is kept"
+write_contract; chmod 644 "$contract"
+bash "$edit" set-verified "$contract" def456
+assert "set-verified keeps 644" "[ \"\$(mode_of '$contract')\" = 644 ]"
+bash "$edit" pending-add "$contract" 31 t1
+assert "pending-add keeps 644" "[ \"\$(mode_of '$contract')\" = 644 ]"
+printf '## Interfaces\n\nNew.\n' >"$work/patch.md"
+bash "$edit" apply "$contract" "$work/patch.md" >/dev/null
+assert "apply keeps 644" "[ \"\$(mode_of '$contract')\" = 644 ]"
+bash "$edit" delete-section "$contract" Interfaces
+assert "delete-section keeps 644" "[ \"\$(mode_of '$contract')\" = 644 ]"
+
+echo "read-only target"
+write_contract; chmod 444 "$contract"
+rc=0; bash "$edit" set-verified "$contract" def456 2>/dev/null || rc=$?
+assert "set-verified on a 444 file works and keeps 444" "[ $rc -eq 0 ] && [ \"\$(mode_of '$contract')\" = 444 ] && [ \"\$(fm_get '$contract' verified_commit)\" = def456 ]"
+assert "no stray temp file after a 444 write" "[ -z \"\$(ls -A '$work' | grep '^app.md\\.')\" ]"
+chmod 644 "$contract"
+
+echo "CRLF contract with an LF patch"
+write_contract; sed 's/$/\r/' "$contract" >"$work/crlf.md"
+printf '## Interfaces\n\nCRLF new.\n' >"$work/patch.md"
+bash "$edit" apply "$work/crlf.md" "$work/patch.md" >/dev/null 2>"$work/err"
+assert "apply replaces the section, no duplicate, no warning" "[ \"\$(grep -c '^## Interfaces' '$work/crlf.md')\" = 1 ] && grep -q 'CRLF new' '$work/crlf.md' && ! grep -q 'Old interfaces' '$work/crlf.md' && [ ! -s '$work/err' ]"
+assert "apply writes LF" "! grep -q \$'\\r' '$work/crlf.md'"
+write_contract; sed 's/$/\r/' "$contract" >"$work/crlf.md"
+bash "$edit" delete-section "$work/crlf.md" Interfaces
+assert "delete-section finds a CRLF heading" "! grep -q 'Old interfaces' '$work/crlf.md' && grep -q 'Team docs' '$work/crlf.md'"
+
+echo "A1-9 a failure on the second key changes nothing"
+write_contract; cp "$contract" "$work/before-sv.md"
+fake_bin="$work/fakebin"; mkdir -p "$fake_bin"; real_awk="$(command -v awk)"
+printf '#!/usr/bin/env bash\nn=$(cat "%s/count" 2>/dev/null || echo 0); n=$((n+1)); echo $n >"%s/count"\n[ "$n" -ne 2 ] || exit 1\nexec "%s" "$@"\n' "$work" "$work" "$real_awk" >"$fake_bin/awk"
+chmod +x "$fake_bin/awk"; rm -f "$work/count"
+rc=0; PATH="$fake_bin:$PATH" bash "$edit" set-verified "$contract" def456 2>/dev/null || rc=$?
+assert "second write fails: set-verified fails" "[ $rc -ne 0 ]"
+assert "second write fails: verified_commit unchanged" "cmp -s '$contract' '$work/before-sv.md'"
+assert "second write fails: no stray temp file" "[ -z \"\$(ls -A '$work' | grep '^app.md\\.')\" ]"
+
+echo "A1-8 lock in a missing folder"
+start=$SECONDS; rc=0
+bash "$edit" lock "$work/no-such-folder/app.md" 2>"$work/err" || rc=$?
+assert "lock without a folder fails at once" "[ $rc -eq 2 ] && [ $((SECONDS - start)) -lt 3 ] && grep -q 'folder missing' '$work/err'"
+
+echo "A1-9 set-verified is one write"
+write_contract
+bash "$edit" set-verified "$contract" def456
+assert "both keys set together" "[ \"\$(fm_get '$contract' verified_commit)\" = def456 ] && fm_get '$contract' verified_at | grep -q T"
+assert "no temp file left" "[ -z \"\$(ls '$work' | grep 'app.md\\.')\" ]"
+
+echo "A1-10 blank lines and odd inputs"
+printf -- '---\nk: v\n---\n## A\n\ntext A\n\n\n## B\n\ntext B' >"$work/nonl.md"
+printf '## Z\n\nnew Z\n' >"$work/patch.md"
+bash "$edit" apply "$work/nonl.md" "$work/patch.md" 2>/dev/null >/dev/null
+assert "no trailing newline: one blank line before the appended section" "[ \"\$(tail -n 5 '$work/nonl.md')\" = \"\$(printf 'text B\n\n## Z\n\nnew Z')\" ]"
+printf -- '---\nk: v\n---\n## A\n\ntext A\n\n\n\n' >"$work/blanks.md"
+bash "$edit" apply "$work/blanks.md" "$work/patch.md" 2>/dev/null >/dev/null
+assert "trailing blank lines collapse to one before an appended section" "[ \"\$(tail -n 5 '$work/blanks.md')\" = \"\$(printf 'text A\n\n## Z\n\nnew Z')\" ]"
+printf -- '---\nk: v\n---\n## A.* (v+1)\n\nold\n\n## B\n\nkeep\n' >"$work/regex.md"
+printf '## A.* (v+1)\n\nreplaced\n' >"$work/patch.md"
+bash "$edit" apply "$work/regex.md" "$work/patch.md" >/dev/null
+assert "regex-special heading is replaced" "grep -q replaced '$work/regex.md' && ! grep -q '^old' '$work/regex.md' && grep -q keep '$work/regex.md'"
+bash "$edit" delete-section "$work/regex.md" 'A.* (v+1)'
+assert "regex-special heading is deleted" "! grep -q replaced '$work/regex.md' && grep -q keep '$work/regex.md'"
+write_contract
+bash "$edit" set-verified "$contract" 'a&b\n|c'
+assert "odd value is stored verbatim" "[ \"\$(fm_get '$contract' verified_commit)\" = 'a&b\\n|c' ]"
+rc=0; bash "$edit" pending-add "$contract" 1x t1 2>/dev/null || rc=$?
+assert "non-numeric pr fails with 2" "[ $rc -eq 2 ]"
+
+echo "A1-11 unlock and a non-array pending"
+write_contract
+mkdir "$contract.lock"; touch "$contract.lock/held"
+rc=0; bash "$edit" unlock "$contract" 2>"$work/err" || rc=$?
+assert "unlock of a non-empty lock folder fails" "[ $rc -eq 1 ] && grep -q 'cannot remove' '$work/err'"
+rm -rf "$contract.lock"
+sed 's/^pending: .*/pending: {"pr":15}/' "$work/before.md" >"$contract"; cp "$contract" "$work/object.md"
+rc=0; bash "$edit" pending-remove "$contract" 15 2>/dev/null || rc=$?
+assert "pending-remove on an object fails" "[ $rc -eq 2 ] && cmp -s '$contract' '$work/object.md'"
+rc=0; bash "$edit" pending-add "$contract" 15 t1 2>/dev/null || rc=$?
+assert "pending-add on an object fails" "[ $rc -eq 2 ] && cmp -s '$contract' '$work/object.md'"
+
+echo "A1-15 pending-add skips an existing pr"
+write_contract
+bash "$edit" pending-add "$contract" 15 t2
+bash "$edit" pending-add "$contract" 15 t2
+assert "retried pending-add adds one item" "[ \"\$(fm_get '$contract' pending)\" = '[{\"pr\":15,\"task\":\"t2\"}]' ]"
+
+echo "A1-16 apply warns about a new section"
+write_contract
+printf '## Intefaces\n\nTypo.\n' >"$work/patch.md"
+bash "$edit" apply "$contract" "$work/patch.md" >/dev/null 2>"$work/err"
+assert "warning names the new section" "grep -q 'warning.*Intefaces' '$work/err'"
+printf '## Interfaces\n\nFine.\n' >"$work/patch.md"
+bash "$edit" apply "$contract" "$work/patch.md" >/dev/null 2>"$work/err"
+assert "no warning for an existing section" "[ ! -s '$work/err' ]"
+
+echo "A1-17 backslash and comma headings"
+printf -- '---\nk: v\n---\n## Back\\slash\n\nold\n\n## Plan, step 2\n\nold2\n\n## Other\n\nkeep\n' >"$work/odd.md"
+cp "$work/odd.md" "$work/odd-before.md"
+bash "$edit" delete-section "$work/odd.md" 'Back\slash'
+assert "backslash heading is deleted" "! grep -q 'Back' '$work/odd.md' && grep -q 'Plan, step 2' '$work/odd.md'"
+printf '## Plan, step 2\n\nnew2\n\n## Other\n\nchanged\n' >"$work/patch.md"
+bash "$edit" apply "$work/odd.md" "$work/patch.md" --section 'Plan, step 2' >/dev/null
+assert "--section applies one comma name only" "grep -q new2 '$work/odd.md' && grep -q keep '$work/odd.md' && ! grep -q changed '$work/odd.md'"
+bash "$edit" apply "$work/odd-before.md" "$work/patch.md" --section 'Plan, step 2' --section Other >/dev/null
+assert "--section repeats" "grep -q new2 '$work/odd-before.md' && grep -q changed '$work/odd-before.md'"
+
 finish
