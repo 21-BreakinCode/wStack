@@ -5,9 +5,9 @@ set -euo pipefail
 
 fm_replace() {  # <tmp> <file>: move <tmp> over <file>, giving it the mode <file> had
   local mode
-  mode="$(stat -f %Lp "$2" 2>/dev/null || stat -c %a "$2" 2>/dev/null)" || mode=""
+  mode="$(stat -c %a "$2" 2>/dev/null || stat -f %Lp "$2")" || mode=""
   if [ -n "$mode" ]; then chmod "$mode" "$1"; fi
-  mv "$1" "$2"
+  mv -f "$1" "$2"
 }
 
 fm_get() {  # <file> <key>
