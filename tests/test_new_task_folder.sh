@@ -25,6 +25,10 @@ second="$(bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --slug test
 assert "collision suffix" '[ "$second" = "$vault/Workflow/Tasks/2026-11-18-test-idea-2" ]'
 assert "suffix task_id" '[ "$(fm_get "$second/spec.md" task_id)" = "2026-11-18-test-idea-2" ]'
 
+mkdir "$vault/Workflow/Tasks/2026-11-17-fix-login"
+other_day="$(bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --slug fix-login --date 2026-11-18 | tail -n 1)"
+assert "slug taken by an earlier day gets -2" '[ "$other_day" = "$vault/Workflow/Tasks/2026-11-18-fix-login-2" ]'
+
 rc=0; bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --slug Test_Idea >/dev/null 2>&1 || rc=$?
 assert "bad slug exits 1" '[ "$rc" = "1" ]'
 rc=0; bash "$script" --vault /nonexistent --tasks-dir Workflow/Tasks --slug ok >/dev/null 2>&1 || rc=$?

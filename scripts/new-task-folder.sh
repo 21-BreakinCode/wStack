@@ -40,7 +40,9 @@ mkdir -p "$tasks_root"
 
 candidate_slug="$slug"
 attempt=1
-until mkdir "$tasks_root/$date_stamp-$candidate_slug" 2>/dev/null; do
+# A slug is taken by a folder of any date: the slug is also the agent name and the branch name.
+until [ -z "$(find "$tasks_root" -maxdepth 1 -name "????-??-??-$candidate_slug" -print -quit)" ] \
+  && mkdir "$tasks_root/$date_stamp-$candidate_slug" 2>/dev/null; do
   attempt=$((attempt + 1))
   [ "$attempt" -le 999 ] || fail "too many folders for slug: $slug"
   suffix="-$attempt"
