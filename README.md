@@ -38,6 +38,7 @@ User commands:
 
 - `/wstack:start-task`: run the pipeline for one task.
 - `/wstack:run-retro`: weekly retro over the last 7 days of task folders, with a drift check of the service contract of the current repository.
+- `/wstack:board`: show every open RD in groups, the ones that wait for you first, with the `herdr workspace focus` command for each. It writes a snapshot page `Board/board.html` in a Notion style next to the `Retros` folder. It also offers to close the workspaces of finished tasks. A worktree with changes stays.
 - `/wstack:pause-work`: pause the work of any session. It writes a resume note, then stops the background agents, shells, and processes the session started. Run it before you close the computer.
 - `/wstack:resume-work`: resume from the newest resume note of the current folder. For a task, it prints `cd "<workspace_cwd>" && claude "/wstack:start-task --task <task_id>"`, so the task resumes in its own folder with its configuration values.
 - `/wstack:init-org`: scaffold the handover initiation file for an org. Run it once per org.

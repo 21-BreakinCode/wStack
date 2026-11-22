@@ -108,6 +108,7 @@ wstack/
 ├── skills/
 │   ├── start-task/SKILL.md        user command: /wstack:start-task
 │   ├── run-retro/SKILL.md         user command: /wstack:run-retro
+│   ├── board/SKILL.md             user command: /wstack:board
 │   ├── pause-work/SKILL.md        user command: /wstack:pause-work
 │   ├── resume-work/SKILL.md       user command: /wstack:resume-work
 │   ├── init-org/SKILL.md          user command: /wstack:init-org
@@ -124,6 +125,8 @@ wstack/
 │   └── contract-historian.md      answers why-questions from decisions and history
 ├── hooks/
 │   └── hooks.json                 guard, and the contract drift hook
+├── themes/
+│   └── notion.json                Notion-style theme of the board page
 ├── templates/
 │   ├── contract.md                service contract
 │   ├── plan.md                    planned items that are not built yet
@@ -144,6 +147,7 @@ wstack/
 │   ├── contract-check.sh          drift check, no network call
 │   ├── contract-edit.sh           the only writer of contract files
 │   ├── contract-hook.sh           SessionStart and PostToolUse drift hook
+│   ├── board.sh                   one JSON row per open RD, for /wstack:board
 │   ├── lib/repo.sh                main_checkout: finds the main checkout from a worktree
 │   ├── lib/frontmatter.sh         fm_get, fm_set, fm_append, fm_to_json: read and write frontmatter (fm_replace keeps the file mode)
 │   ├── lib/herdr.sh               herdr helpers that the task scripts share
@@ -585,6 +589,21 @@ If an upload fails, the agent keeps the R2 copy and writes the failure in `revie
 - Exit notes: each RD writes `retro-note.md` in its task folder at exit. The analyst reads it.
 - Transcript stats: `collect-week.sh` adds `transcript_stats` for each task with `session_ids`. The analyst compares the note and the run log with the counts, and finds `top_bash` commands that repeat across tasks.
 - Targeted reopen: where the evidence raises a question, the analyst writes it in a `## Questions` block. The retro asks a read-only fork of the last RD session (`--resume <id> --fork-session --tools Read,Grep,Glob`). The fork leaves the original session as it was. The answers go under `## RD answers` in the retro file, and the analyst revises the proposals with them. A failed fork writes its error as the answer, and the retro goes on.
+
+### 13.1 /wstack:board
+
+- The user runs it by hand. It shows every open RD and needs no argument.
+- `scripts/board.sh` prints one JSON row per open task: group, task id, status, herdr state, workspace id, goal, last `## Steps` line of `run-log.md`, and age. Outside herdr the herdr fields are `n/a` and no finished row shows.
+- The groups, in order. A row goes in the first group that matches.
+  1. needs you: herdr `blocked`, a status of `awaiting-approval`, `waiting-user`, or `awaiting-deliver-approval`, or `drafting` with herdr `idle` or `done`.
+  2. stopped: herdr `none` and the status is not `paused`. The RD process is gone.
+  3. working: herdr `working` or `unknown`.
+  4. paused: status `paused`.
+  5. finished: a delivered or cancelled task of the last 14 days whose workspace label is still open.
+  6. other: any row that matched no group.
+- The skill prints one table per group and `herdr workspace focus <id>` for each row. It also renders `<vault_path>/<tasks_dir>/../Board/board.html` with `themes/notion.json`. A failed render is reported and the board goes on.
+- It asks once which finished workspaces to close. A workspace with a worktree closes with `herdr worktree remove --workspace <id>`. If `git status --porcelain` in the worktree prints anything, the skill skips the task. Other workspaces close with `herdr workspace close <id>`.
+- `render-page.sh` takes an optional `--theme-file <path>`. The review and retro pages keep their default theme.
 
 The name is `retro`, not `review`, because "review" already means the final review inside Verify.
 
