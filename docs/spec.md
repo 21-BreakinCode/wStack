@@ -590,6 +590,8 @@ If an upload fails, the agent keeps the R2 copy and writes the failure in `revie
 - Transcript stats: `collect-week.sh` adds `transcript_stats` for each task with `session_ids`. The analyst compares the note and the run log with the counts, and finds `top_bash` commands that repeat across tasks.
 - Targeted reopen: where the evidence raises a question, the analyst writes it in a `## Questions` block. The retro asks a read-only fork of the last RD session (`--resume <id> --fork-session --tools Read,Grep,Glob`). The fork leaves the original session as it was. The answers go under `## RD answers` in the retro file, and the analyst revises the proposals with them. A failed fork writes its error as the answer, and the retro goes on.
 
+The name is `retro`, not `review`, because "review" already means the final review inside Verify.
+
 ### 13.1 /wstack:board
 
 - The user runs it by hand. It shows every open RD and needs no argument.
@@ -599,13 +601,11 @@ If an upload fails, the agent keeps the R2 copy and writes the failure in `revie
   2. stopped: herdr `none` and the status is not `paused`. The RD process is gone.
   3. working: herdr `working` or `unknown`.
   4. paused: status `paused`.
-  5. finished: a delivered or cancelled task of the last 14 days whose workspace label is still open.
+  5. finished: a delivered or cancelled task whose slug is the label of a workspace that is still open.
   6. other: any row that matched no group.
 - The skill prints one table per group and `herdr workspace focus <id>` for each row. It also renders `<vault_path>/<tasks_dir>/../Board/board.html` with `themes/notion.json`. A failed render is reported and the board goes on.
 - It asks once which finished workspaces to close. A workspace with a worktree closes with `herdr worktree remove --workspace <id>`. If `git status --porcelain` in the worktree prints anything, the skill skips the task. Other workspaces close with `herdr workspace close <id>`.
 - `render-page.sh` takes an optional `--theme-file <path>`. The review and retro pages keep their default theme.
-
-The name is `retro`, not `review`, because "review" already means the final review inside Verify.
 
 ## 14. Approval rules, in one place
 

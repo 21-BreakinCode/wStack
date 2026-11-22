@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Usage: render-page.sh <draft.md> <out.html> [--theme-file <theme.json>]
 # Renders a draft with answer-me-with-html (template doc), then checks the page at 375 px.
-# Exit 0 rendered and fits, 1 too wide (width on stdout), 2 am.mjs not found or render failed.
+# Exit 0 rendered and fits, 1 too wide (width on stdout), 2 am.mjs not found, render failed, a missing draft or theme file, or an unknown third argument.
 # WSTACK_AMJS (or EVAL_WSTACK_AMJS, the only name an eval case can set) overrides the am.mjs path.
 set -euo pipefail
 

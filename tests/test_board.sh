@@ -35,15 +35,21 @@ fm_set "$step_folder/spec.md" created_at "$(date -v-3H +%Y-%m-%dT%H:%M:%S%z | se
 new_task done-here delivered >/dev/null
 new_task done-closed delivered >/dev/null
 new_task old-done delivered 2020-01-01 >/dev/null
+new_task paused-none paused >/dev/null
+new_task herdr-error executing >/dev/null
+z_folder="$(new_task z-stamp executing)"
+fm_set "$z_folder/spec.md" created_at 2020-01-01T00:00:00Z
+crlf_folder="$(new_task crlf-goal executing)"
+sed -i.bak 's/$/\r/' "$crlf_folder/spec.md"; rm -f "$crlf_folder/spec.md.bak"
 new_task odd-one planning >/dev/null
 empty_goal="$(new_task empty-goal executing)"
 printf -- '---\ntask_id: %s\nstatus: executing\nworkspace_cwd:\ncreated_at: 2026-11-23T01:00:00+00:00\n---\n\n## Goal\n\n## Scope\n' "$(basename "$empty_goal")" > "$empty_goal/spec.md"
 rm -f "$empty_goal/run-log.md"
 
 export HERDR_ENV=1 WSTACK_HERDR_SESSION=wstack-test
-export FAKE_AGENT_STATES="need-idle=idle,need-idle2=done,need-blocked=blocked,need-deliver=working,busy-verify=working,busy-unknown=unknown,rest-paused=idle,odd-one=weird,empty-goal=working"
-export FAKE_WORKSPACES="done-here=w7,other-label=w8"
-rows="$(bash "$script" --vault "$vault" --tasks-dir T)"
+export FAKE_AGENT_STATES="need-idle=idle,need-idle2=done,need-blocked=blocked,need-deliver=working,busy-verify=working,busy-unknown=unknown,rest-paused=idle,odd-one=weird,empty-goal=working,herdr-error=error,z-stamp=working,crlf-goal=working"
+export FAKE_WORKSPACES="done-here=w7,other-label=w8,old-done=w9"
+rows="$(/bin/bash "$script" --vault "$vault" --tasks-dir T)"
 assert "every row is one JSON line" '[ "$(jq -c . <<<"$rows" | wc -l | tr -d " ")" = "$(wc -l <<<"$rows" | tr -d " ")" ]'
 assert "drafting with idle needs you" '[ "$(field need-idle .group "$rows")" = "needs you" ]'
 assert "drafting with done needs you" '[ "$(field need-idle2 .group "$rows")" = "needs you" ]'
@@ -57,8 +63,12 @@ assert "a row that matches no group is other" '[ "$(field odd-one .group "$rows"
 assert "workspace id comes from agent get" '[ "$(field need-blocked .workspace_id "$rows")" = w-need-blocked ]'
 assert "delivered task with an open workspace is finished with its id" '[ "$(field done-here .group "$rows")" = finished ] && [ "$(field done-here .workspace_id "$rows")" = w7 ]'
 assert "delivered task with no open workspace has no row" '[ -z "$(field done-closed .group "$rows")" ]'
-assert "delivered task older than 14 days has no row" '[ -z "$(field old-done .group "$rows")" ]'
-assert "groups follow the design order" '[ "$(jq -sr "map(.group) | unique_by(.) | length" <<<"$rows")" = 6 ] && [ "$(jq -r .group <<<"$rows" | uniq | tr "\n" ,)" = "needs you,stopped,working,paused,finished,other," ]'
+assert "delivered task from long ago with an open workspace is finished" '[ "$(field old-done .group "$rows")" = finished ] && [ "$(field old-done .workspace_id "$rows")" = w9 ]'
+assert "paused with no agent is paused, not stopped" '[ "$(field paused-none .group "$rows")" = paused ] && [ "$(field paused-none .herdr "$rows")" = none ]'
+assert "a herdr error that is not agent_not_found shows unknown and works" '[ "$(field herdr-error .herdr "$rows")" = unknown ] && [ "$(field herdr-error .group "$rows")" = working ]'
+assert "a Z time stamp gives an age in days" '[[ "$(field z-stamp .age "$rows")" =~ ^[0-9]+d$ ]]'
+assert "a CRLF spec gives a goal with no carriage return" '[ "$(field crlf-goal .goal "$rows")" = "Rough idea from launch: crlf-goal" ]'
+assert "groups follow the design order" '[ "$(jq -r .group <<<"$rows" | uniq | tr "\n" ,)" = "needs you,stopped,working,paused,finished,other," ]'
 assert "rows inside a group are sorted by task_id" '[ "$(jq -r "select(.group == \"needs you\") | .slug" <<<"$rows" | tr "\n" ,)" = "need-blocked,need-deliver,need-idle,need-idle2," ]'
 assert "goal is the first line under Goal" '[ "$(field need-idle .goal "$rows")" = "Rough idea from launch: need-idle" ]'
 assert "last_step is the last Steps line" '[ "$(field need-idle2 .last_step "$rows")" = "- 2026-11-23T02:00:00Z step last one" ]'
@@ -68,9 +78,9 @@ assert "empty Goal and no run-log print an empty goal and last_step" '[ "$(field
 assert "an old spec with no session_ids still has an age" '[ "$(field empty-goal .age "$rows")" != "" ]'
 
 unset HERDR_ENV
-rows="$(bash "$script" --vault "$vault" --tasks-dir T)"
+rows="$(/bin/bash "$script" --vault "$vault" --tasks-dir T)"
 assert "outside herdr: n/a fields on every row" '[ "$(jq -r "select(.herdr != \"n/a\" or .workspace_id != \"n/a\") | .slug" <<<"$rows" | wc -l | tr -d " ")" = 0 ]'
 assert "outside herdr: no finished row" '[ -z "$(jq -r "select(.group == \"finished\")" <<<"$rows")" ]'
-assert "outside herdr: every open task is printed" '[ "$(wc -l <<<"$rows" | tr -d " ")" = 10 ]'
+assert "outside herdr: every open task is printed" '[ "$(wc -l <<<"$rows" | tr -d " ")" = 14 ]'
 assert "outside herdr: paused goes to paused, waiting to needs you, rest to other" '[ "$(field rest-paused .group "$rows")" = paused ] && [ "$(field need-deliver .group "$rows")" = "needs you" ] && [ "$(field gone-one .group "$rows")" = other ]'
 finish

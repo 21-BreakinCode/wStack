@@ -56,13 +56,16 @@ if [ -f "$real_amjs" ] && command -v playwright-cli >/dev/null 2>&1; then
 else
   echo "SKIP real render: answer-me-with-html or playwright-cli not found"
 fi
+missing_theme_exit=0
+WSTACK_AMJS="$work_dir/fail.mjs" bash "$render" "$work_dir/draft.md" "$work_dir/x.html" --theme-file "$work_dir/none.json" >/dev/null 2>&1 || missing_theme_exit=$?
+assert "missing theme file exits 2" '[ "$missing_theme_exit" -eq 2 ]'
+unknown_arg_exit=0
+WSTACK_AMJS="$work_dir/fail.mjs" bash "$render" "$work_dir/draft.md" "$work_dir/x.html" --bogus >/dev/null 2>&1 || unknown_arg_exit=$?
+assert "unknown third argument exits 2" '[ "$unknown_arg_exit" -eq 2 ]'
 if [ -f "$real_amjs" ]; then
   theme_exit=0
   WSTACK_AMJS="$real_amjs" bash "$render" "$work_dir/draft.md" "$work_dir/themed.html" --theme-file "$repo_root/themes/notion.json" >/dev/null 2>&1 || theme_exit=$?
   assert "render with --theme-file carries the theme name" '[ "$theme_exit" -le 1 ] && [ -s "$work_dir/themed.html" ] && grep -qi "notion" "$work_dir/themed.html"'
   assert "render with --theme-file leaves the caller AM_HOME without the theme" '[ ! -e "$AM_HOME/themes/notion.json" ]'
-  missing_theme_exit=0
-  bash "$render" "$work_dir/draft.md" "$work_dir/x.html" --theme-file "$work_dir/none.json" >/dev/null 2>&1 || missing_theme_exit=$?
-  assert "missing theme file exits 2" '[ "$missing_theme_exit" -eq 2 ]'
 fi
 finish

@@ -4,7 +4,7 @@
 #           FAKE_CREATE_FAIL=1 (worktree/workspace create exit 7 with a stderr message),
 #           FAKE_FOCUS_FAIL=1 (workspace focus exits 9),
 #           FAKE_NEVER_READY=1 (agent list never shows interactive_ready),
-#           FAKE_AGENT_STATES=fix-x=idle,ship-y=blocked (agent get <name> prints that state; other names fail),
+#           FAKE_AGENT_STATES=fix-x=idle,ship-y=blocked (agent get <name> prints that state, the state "error" fails with another code, other names fail with agent_not_found),
 #           FAKE_WORKSPACES=done-z=w7,old-q=w8 (workspace list prints these labels with their ids).
 { printf "%q " "$@"; echo; } >> "${FAKE_LOG:-/dev/null}"
 args=("$@")
@@ -23,6 +23,7 @@ case "${args[0]:-} ${args[1]:-}" in
     if [ -n "${FAKE_AGENT_STATES:-}" ]; then
       agent_state="$(tr ',' '\n' <<<"$FAKE_AGENT_STATES" | sed -n "s/^${args[2]}=//p" | head -n 1)"
       [ -n "$agent_state" ] || { echo '{"error":{"code":"agent_not_found"}}'; exit 1; }
+      [ "$agent_state" != error ] || { echo '{"error":{"code":"internal"}}'; exit 1; }
       echo '{"result":{"agent":{"name":"'"${args[2]}"'","workspace_id":"w-'"${args[2]}"'","agent_status":"'"$agent_state"'"}}}'
     elif [ "${FAKE_AGENT_EXISTS:-}" = 1 ]; then echo '{"result":{"agent":{"name":"x","workspace_id":"w9"}}}'
     else echo '{"error":{"code":"agent_not_found"}}'; exit 1; fi ;;
