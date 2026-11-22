@@ -54,7 +54,7 @@ push_is_risky() {  # <words...>, starting at the word "git"
       continue
     fi
     case "$word" in
-      --force*|--delete|--mirror|-d|-f|+*|:*) return 0 ;;
+      --force*|--delete|--mirror|--all|-d|-f|+*|:*) return 0 ;;
       -*) [[ "$word" =~ ^-[a-zA-Z]*[fd][a-zA-Z]*$ ]] && return 0; continue ;;
     esac
     positional=$((positional + 1))
@@ -67,7 +67,11 @@ push_is_risky() {  # <words...>, starting at the word "git"
   if [ "$positional" -le 1 ] || [ "$refspec_is_current" = 1 ]; then  # no refspec, HEAD, or @: pushes the current branch
     case "$repo_dir" in /*) ;; *) repo_dir="$cwd/$repo_dir" ;; esac
     current="$(git -C "$repo_dir" symbolic-ref --short HEAD 2>/dev/null || true)"
-    for bare in "${default_branches[@]}"; do [ "$current" = "$bare" ] && return 0; done
+    for bare in "${default_branches[@]}"; do
+      [ "$current" = "$bare" ] && return 0
+      # the same command may switch to the default branch before the push
+      [[ "$command_text" =~ (checkout|switch)([[:space:]]+-[^[:space:]]+)*${space}${optional_quote}${bare}${optional_quote}([^[:alnum:]_./-]|$) ]] && return 0
+    done
   fi
   return 1
 }
@@ -96,7 +100,7 @@ judge_segment() {
   else
     for deploy_command in "npm publish" "gh release create" "docker push" "terraform apply" \
       "kubectl apply" "helm install" "helm upgrade" "vercel --prod" "vercel deploy --prod" \
-      "fly deploy" "firebase deploy" "wrangler deploy" "cf workers deploy"; do
+      "pnpm publish" "yarn publish" "cargo publish" "fly deploy" "firebase deploy" "wrangler deploy" "cf workers deploy"; do
       if [[ "$segment" =~ ${start}${deploy_command// /$space} ]]; then
         reason="a deploy or publish ($deploy_command)"
         return 0
@@ -115,10 +119,7 @@ judge_segment() {
   return 0
 }
 
-separated="${command_text//&&/$'\n'}"
-separated="${separated//||/$'\n'}"
-separated="${separated//;/$'\n'}"
-separated="${separated//|/$'\n'}"
+separated="${command_text//[&|;()<>]/$'\n'}"
 reason=""
 while IFS= read -r segment; do
   judge_segment "$segment"
