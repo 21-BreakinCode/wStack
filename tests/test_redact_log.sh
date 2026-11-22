@@ -53,4 +53,9 @@ for secret in rtq1 csq2 hk1 hk2 hk3 jk1 jk2 jk3 jk4 jk5; do
   assert "secret $secret removed" '[[ "$out" != *"$secret"* ]]'
 done
 assert "page=4 kept" '[[ "$out" == *"page=4"* ]]'
+printf 'caf\xe9 token=bad9&page=5\n' > "$work_dir/bad.log"
+bad_status=0
+bash "$script" "$work_dir/bad.log" "$work_dir/bad.out" || bad_status=$?
+assert "invalid UTF-8 exits 0" '[ "$bad_status" -eq 0 ]'
+assert "invalid UTF-8 log is redacted" '! LC_ALL=C grep -q bad9 "$work_dir/bad.out" && LC_ALL=C grep -q "page=5" "$work_dir/bad.out"'
 finish

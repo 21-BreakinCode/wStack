@@ -12,7 +12,7 @@ secret_names='[A-Za-z0-9_-]*(authorization|cookie|token|secret|password|api[_-]?
 # Write to a temp file first so a failed run never leaves a half-redacted output.
 temp_output="$(mktemp)"
 trap 'rm -f "$temp_output"' EXIT
-sed -E \
+LC_ALL=C sed -E \
   -e "s/(^|[^A-Za-z0-9_-])((${secret_names})[[:space:]]*:)[[:space:]]*.*/\1\2 [REDACTED]/I" \
   -e "s/([?&;#[:space:]\"](${secret_names})=)[^&[:space:]\"']*/\1[REDACTED]/Ig" \
   -e "s/(\"(${secret_names})\"[[:space:]]*:[[:space:]]*)\"([^\"\\\\]|\\\\.)*\"/\1\"[REDACTED]\"/Ig" \

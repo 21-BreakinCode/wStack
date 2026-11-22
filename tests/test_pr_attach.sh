@@ -101,6 +101,7 @@ assert "no repo and empty list: attaches" 'grep -q -- "--attach" "$FAKE_LOG"'
 
 deliver="$repo_root/skills/deliver-task/SKILL.md"
 assert "deliver leaves logs out of the body for a local-only repo" 'grep -qF "If the repository is in \`local_evidence_only_repos\`, leave the text logs out of the body" "$deliver"'
+assert "deliver relays the attachments skipped line" 'grep -qF "If the output says \`attachments skipped\`, say why in the report." "$deliver"'
 assert "deliver passes the repo to pr-attach" 'grep -F "pr-attach.sh" "$deliver" | grep -qF -- "--local-only-repos"'
 
 for bad_id in "" ".." "a/b" "2026-01-01-a b" "../2026-01-01-x"; do

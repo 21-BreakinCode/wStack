@@ -63,6 +63,17 @@ assert "text evidence: token redacted" '! grep -q "sk-live" "$secret_dir/out.txt
 assert "text evidence: other lines kept" 'grep -q "^run ok$" "$secret_dir/out.txt"'
 assert "text evidence: still uploaded" 'grep -q "^cf r2 objects put evidence/$task_id/out.txt " "$FAKE_LOG"'
 
+# invalid UTF-8 in one text file does not stop the upload
+fresh_log
+bad_dir="$work_dir/bad bytes"; mkdir "$bad_dir"
+printf 'caf\xe9 api_key=sk-bad-5\n' > "$bad_dir/cut.txt"
+echo ok > "$bad_dir/z.txt"
+bad_status=0
+bash "$upload" --task-id "$task_id" --dir "$bad_dir" --bucket bkt --domain ev.example.com --repo o/r --local-only-repos "" >/dev/null || bad_status=$?
+assert "invalid UTF-8: upload exits 0" '[ "$bad_status" -eq 0 ]'
+assert "invalid UTF-8: secret redacted" '! LC_ALL=C grep -q "sk-bad" "$bad_dir/cut.txt"'
+assert "invalid UTF-8: both files uploaded" '[ "$(grep -c "^cf r2 objects put" "$FAKE_LOG")" = 2 ]'
+
 # R25(a): bad task ids stop before any cf call
 for bad_id in "" ".." "2000-01-02-a/b" "2000-01-02-a b" "../x" "2000-01-02-Demo" "demo"; do
   fresh_log
