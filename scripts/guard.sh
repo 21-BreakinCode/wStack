@@ -25,9 +25,7 @@ space='[[:space:]]+'
 optional_quote='["'"'"'"'"'"']?'
 # cf accepts global flags (with an optional value) between any two command words
 # words that may stand in front of a command: env assignments, wrappers, shell keywords, "bash -c"
-command_prefix='(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|env|command|sudo|nice|time|exec|eval|npx|bunx|then|do|else|\{|!|bash|sh|zsh|-c)[[:space:]]+)*'
-# a command word at the start of a segment, after wrappers, with an optional quote and path
-at_command='^[[:space:]]*'"$command_prefix"'["'"'"']?([^[:space:]]*/)?'
+command_prefix='(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|env|command|sudo|nice|time|exec|eval|then|do|else|\{|!|bash|sh|zsh|-c)[[:space:]]+)*'
 cf_flags='([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*'
 
 default_branch="$(git -C "$cwd" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)"
@@ -76,33 +74,71 @@ push_is_risky() {  # <words...>, starting at the word "git"
   return 1
 }
 
+# Read-only exemption. Off when the whole command can run text as code or fan out to another command.
+exemption_allowed=1
+runs_other_commands='(^|[^[:alnum:]_.-])(bash|sh|zsh|eval|source|xargs|parallel)([^[:alnum:]_-]|$)|-exec|`|\$\(|(^|[[:space:]])\.[[:space:]]'
+[[ "$command_text" =~ $runs_other_commands ]] && exemption_allowed=0
+
+# Succeeds when the segment only reads: a "for ... in ..." header, or a known read-only tool.
+is_read_only_segment() {  # <segment>
+  local -a words
+  local word
+  # shellcheck disable=SC2206
+  words=($1)
+  while [ "${#words[@]}" -gt 0 ]; do
+    case "${words[0]}" in do|then|else) words=("${words[@]:1}") ;; *) break ;; esac
+  done
+  [ "${#words[@]}" -gt 0 ] || return 1
+  word="${words[0]//[\'\"]/}"
+  case "$word" in
+    for) [[ "${words[*]}" =~ ^for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in([[:space:]]|$) ]]; return ;;
+  esac
+  case "${word##*/}" in
+    cat|less|more|head|tail|grep|rg|wc|ls|file|stat|diff|nl|bat) return 0 ;;
+    sed) [ "${words[1]:-}" = "-n" ]; return ;;
+    git)
+      words=("${words[@]:1}")
+      while [ "${#words[@]}" -gt 0 ]; do
+        case "${words[0]}" in
+          -C|-c) words=("${words[@]:2}") ;;
+          -*) words=("${words[@]:1}") ;;
+          diff|show|log|grep|blame|status) return 0 ;;
+          *) return 1 ;;
+        esac
+      done ;;
+  esac
+  return 1
+}
+
 # Sets $reason for one command segment.
 judge_segment() {
   local segment="$1" deploy_command bare first_word
   for bare in "${default_branches[@]}"; do
     [[ "$segment" =~ ^[[:space:]]*${command_prefix}${optional_quote}([^[:space:]]*/)?git${optional_quote}${cf_flags}${space}(checkout|switch)([[:space:]]+-[^[:space:]]+)*${space}${optional_quote}${bare}${optional_quote}([^[:alnum:]_./-]|$) ]] && switches_to_default=1
   done
-  if [[ "$segment" =~ ${at_command}gh${cf_flags}${space}pr${cf_flags}${space}merge ]]; then
+  if [ "$exemption_allowed" = 1 ] && is_read_only_segment "$segment"; then
+    return 0
+  elif [[ "$segment" =~ ${start}gh${cf_flags}${space}pr${cf_flags}${space}merge ]]; then
     reason="a pull request merge"
-  elif [[ "$segment" =~ ${at_command}gh${space}api.*pulls/[^[:space:]]+/merge ]]; then
+  elif [[ "$segment" =~ ${start}gh${space}api.*pulls/[^[:space:]]+/merge ]]; then
     reason="a pull request merge through the API"
-  elif [[ "$segment" =~ ${at_command}gh${cf_flags}${space}pr${cf_flags}${space}close.*([[:space:]]-d([[:space:]]|$)|--delete-branch) ]]; then
+  elif [[ "$segment" =~ ${start}gh${cf_flags}${space}pr${cf_flags}${space}close.*([[:space:]]-d([[:space:]]|$)|--delete-branch) ]]; then
     reason="a pull request close with a remote branch delete"
-  elif [[ "$segment" =~ ${at_command}gh${space}repo${space}delete ]]; then
+  elif [[ "$segment" =~ ${start}gh${space}repo${space}delete ]]; then
     reason="a repository delete"
-  elif [[ "$segment" =~ ${at_command}cf${cf_flags}${space}r2${cf_flags}${space}objects${cf_flags}${space}[a-z-]*delete ]]; then
+  elif [[ "$segment" =~ ${start}cf${cf_flags}${space}r2${cf_flags}${space}objects${cf_flags}${space}[a-z-]*delete ]]; then
     reason="an R2 object delete"
-  elif [[ "$segment" =~ ${at_command}cf${cf_flags}${space}r2${cf_flags}${space}buckets${cf_flags}${space}delete ]]; then
+  elif [[ "$segment" =~ ${start}cf${cf_flags}${space}r2${cf_flags}${space}buckets${cf_flags}${space}delete ]]; then
     reason="an R2 bucket delete"
-  elif [[ "$segment" =~ ${at_command}cf${cf_flags}${space}r2${cf_flags}${space}buckets${cf_flags}${space}jobs${cf_flags}${space}create ]]; then
+  elif [[ "$segment" =~ ${start}cf${cf_flags}${space}r2${cf_flags}${space}buckets${cf_flags}${space}jobs${cf_flags}${space}create ]]; then
     reason="an R2 bucket job (a prefixDelete job deletes objects or empties the bucket)"
-  elif [[ "$segment" =~ ${at_command}[^[:space:]]*evidence-delete\.sh${optional_quote}([[:space:]]|$) && "$segment" != *"--dry-run"* ]]; then
+  elif [[ "$segment" =~ ${start}[^[:space:]]*evidence-delete\.sh${optional_quote}([[:space:]]|$) && "$segment" != *"--dry-run"* ]]; then
     reason="an R2 evidence delete (evidence-delete.sh runs cf delete commands)"
   else
     for deploy_command in "npm publish" "gh release create" "docker push" "terraform apply" \
       "kubectl apply" "helm install" "helm upgrade" "vercel --prod" "vercel deploy --prod" \
-      "pnpm publish" "yarn publish" "cargo publish" "fly deploy" "firebase deploy" "wrangler deploy" "cf workers deploy"; do
-      if [[ "$segment" =~ ${at_command}${deploy_command// /$space} ]]; then
+      "pnpm publish" "yarn publish" "yarn npm publish" "cargo publish" "fly deploy" "firebase deploy" "wrangler deploy" "cf workers deploy"; do
+      if [[ "$segment" =~ ${start}${deploy_command// /$space} ]]; then
         reason="a deploy or publish ($deploy_command)"
         return 0
       fi

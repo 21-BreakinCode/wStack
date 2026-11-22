@@ -43,7 +43,7 @@ assert "G1 skips the rest of the gate for other work types" 'has "$g1_line" "If 
 assert "G2 exit 1 writes Contract: not mapped" 'printf "%s\n" "$gate_part" | grep -F "Exit 1:" | grep -qF "\`Contract: not mapped\`"'
 assert "G3 fetches with git -C" 'has "$g3_line" "git -C \"<repository folder>\" fetch origin \"<base_branch>\""'
 assert "G3: a failed fetch is noted in the brief at G5" 'has "$g3_line" "G5 then adds a line about it to the brief." && has "$g5_part" "If the fetch in G3 failed, append the line"'
-assert "the gate text says where it changes the contract" 'has "$gate_part" "The gate changes the contract file in two places only."'
+assert "the gate text says where it changes the contract" 'has "$gate_part" "The contract file changes in two places only:"'
 assert "gate deletes old files in G1, before any exit" 'has "$g1_line" "If \`\$task_dir/contract-brief.md\` or \`\$task_dir/contract.gate-patch.md\` exists, delete it." && ! has "$g5_part" "delete it"'
 gate_line="$(grep -nxF '## Contract gate' "$confirmation" | cut -d: -f1)"
 spec_line="$(grep -nxF '## Write the spec' "$confirmation" | cut -d: -f1)"
@@ -167,7 +167,7 @@ assert "Contract files: <workspace_cwd> has a source" 'has "$files_part" "\`<wor
 assert "Contract files: decisions are checked before the first change" '[ "$(line_in "$files_part" "already exists in decisions/")" -lt "$(line_in "$files_part" "cp \"\$contract_file\" \"\$task_dir/contract.before.md")" ]'
 assert "Contract files: the clash check compares ids" 'has "$files_part" "for same_id in \"\$contract_folder/decisions/\${draft_name%%-*}\"-*; do"'
 assert "Contract files: copied decisions are listed and the undo deletes only those" 'has "$files_part" ">>\"\$task_dir/decisions.copied.txt\"" && has "$files_part" "the files in <contract folder>/decisions/ that <task folder>/decisions.copied.txt names"'
-assert "Contract files: the undo deletes the archive folder" 'has "$files_part" "then delete the folder <contract folder>/_archive/<task_id>/"'
+assert "Contract files: the undo deletes the archive folder" 'has "$files_part" "Delete the folder <contract folder>/_archive/<task_id>/."'
 assert "Contract files: the undo removes the empty _archive and decisions folders" 'has "$files_part" "<contract folder>/_archive/ and <contract folder>/decisions/ by running rmdir <folder> 2>/dev/null || true for each"'
 assert "Contract files: the text says the glob skips dot files" 'has "$files_part" "The \`*\` glob skips dot files"'
 assert "Contract files: contract.before.md is write-once" 'has "$files_part" "[ -f \"\$task_dir/contract.before.md\" ] || cp"'

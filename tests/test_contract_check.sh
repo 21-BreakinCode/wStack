@@ -148,4 +148,13 @@ assert "missing ignore still works" '[ $rc = 0 ]'
 set +e; bash "$script" >/dev/null 2>"$work_dir/err"; no_arg_rc=$?; bash "$script" "$REPO" >/dev/null 2>>"$work_dir/err"; one_arg_rc=$?; set -e
 assert "missing arguments exit 2 with a usage line" '[ $no_arg_rc = 2 ] && [ $one_arg_rc = 2 ] && grep -q "usage: contract-check.sh" "$work_dir/err"'
 
+new_world; sed -i.bak 's|^ignore: .*|ignore:\n- tests/**|' "$CONTRACT"; run
+assert "block-style ignore with no indent exits 2" '[ $rc = 2 ] && printf "%s" "$err" | grep -q "ignore must be a one-line JSON list"'
+
+new_world; sed -i.bak 's|^pending: .*|pending:   \n  - pr: 12|' "$CONTRACT"; run
+assert "block-style pending after trailing spaces exits 2 with its own example" '[ $rc = 2 ] && printf "%s" "$err" | grep -qF "like pending: []"'
+
+set +e; bash "$script" "" "$CONTRACT" >/dev/null 2>&1; empty_repo_rc=$?; bash "$script" "$REPO" "" >/dev/null 2>&1; empty_contract_rc=$?; set -e
+assert "an empty argument exits 2" '[ $empty_repo_rc = 2 ] && [ $empty_contract_rc = 2 ]'
+
 finish
