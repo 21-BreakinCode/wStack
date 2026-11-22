@@ -9,13 +9,17 @@ set -euo pipefail
 scene_file="${1:-}" svg_file="${2:-}"
 [ -f "$scene_file" ] && [ -n "$svg_file" ] || { echo "render-excalidraw: usage: render-excalidraw.sh <scene.excalidraw> <out.svg>" >&2; exit 1; }
 
+svg_file="$(cd "$(dirname "$svg_file")" && pwd)/$(basename "$svg_file")"
 scene_json="$(jq -c . "$scene_file" 2>/dev/null)" || { echo "render-excalidraw: not valid JSON: $scene_file" >&2; exit 1; }
 [ "$(jq -r '.elements | type' <<<"$scene_json")" = "array" ] || { echo "render-excalidraw: no elements array: $scene_file" >&2; exit 1; }
 command -v playwright-cli >/dev/null 2>&1 || { echo "render-excalidraw: playwright-cli not found. install: npm i -g @playwright/cli@0.1.24" >&2; exit 2; }
 
 bundle_url="${WSTACK_EXCALIDRAW_BUNDLE_URL:-https://cdn.jsdelivr.net/npm/@excalidraw/utils@0.1.8/dist/prod/index.js}"
 session="wstack-excalidraw-$$"
-trap 'playwright-cli -s "$session" close >/dev/null 2>&1 || true' EXIT
+# playwright-cli writes .playwright-cli/page-*.yml into its working folder. Run it in a throwaway folder.
+scratch_dir="$(mktemp -d)"
+cd "$scratch_dir"
+trap 'playwright-cli -s "$session" close >/dev/null 2>&1 || true; rm -rf "$scratch_dir"' EXIT
 
 code="async (page) => {
   await page.addScriptTag({ type: 'module', content: \"import('$bundle_url').then((U) => { window.__U = U; window.__ready = 'ok'; }).catch((e) => { window.__ready = 'failed: ' + e; });\" });

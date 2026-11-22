@@ -32,7 +32,7 @@ The text log is the main evidence. The user reads the exact data from it.
 
 ### Web check
 
-1. Serve a local page with `python3 -m http.server --bind 127.0.0.1 <port>` in the build folder. Run it in the background and stop it when the check ends. Playwright CLI blocks `file://` URLs, so never open a file path directly.
+1. Pick a free port: `port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"`. Serve a local page with `python3 -m http.server --bind 127.0.0.1 "$port"` in the build folder. Run it in the background and stop it when the check ends. Playwright CLI blocks `file://` URLs, so never open a file path directly.
 2. Open the page: `playwright-cli -s <slug> open <url>`.
 3. When the plan asks for phone width, run `playwright-cli -s <slug> resize 375 800`.
 4. Start the video: `playwright-cli -s <slug> video-start /tmp/wstack-evidence/<task_id>/raw/<name>.webm`.
