@@ -208,6 +208,11 @@ for needle in 'contract-path.sh" --vault "$vault"' 'contract-check.sh' 'Set up t
   assert "init-service contract phase names $needle" 'has "$init_contract_part" "$needle"'
 done
 assert "init-service contract phase comes after Phase 7" '[ -n "$(grep -n "^### Phase 8 " "$init_skill" | cut -d: -f1)" ] && [ "$(grep -n "^### Phase 7 " "$init_skill" | cut -d: -f1)" -lt "$(grep -n "^### Phase 8 " "$init_skill" | cut -d: -f1)" ]'
+assert "init-service never runs work mode and prints the resume command outside herdr" 'has "$init_contract_part" "Never run work mode in this session." && has "$init_contract_part" "created, not launched (not inside herdr)" && has "$init_contract_part" "claude \"/wstack:start-task --task <task_id>\""'
+assert "init-service maps the launch exit codes" 'has "$init_contract_part" "exit 5" && has "$init_contract_part" "exit 1, 4, or 6" && has "$init_contract_part" "cleanup hint"'
+assert "init-service checks the file explicitly and runs gh from the repo" 'has "$init_contract_part" "file=yes" && has "$init_contract_part" "from \`\$REPO_ROOT\`"'
+assert "init-service reads contract-check status for exit 0 or 1" 'has "$init_contract_part" "Exit 0 or 1 prints a \`status:\` line." && has "$init_contract_part" "Exit 2 or 3 is an error"'
+assert "Contract: line appears only in Phase 8 text and the Phase 9 report block" '[ "$(grep -c "^    Contract: " "$init_skill")" = 1 ] && has "$init_report_part" "    Contract: "'
 assert "init-service report has a Contract: line" 'has "$init_report_part" "Contract:"'
 
 # glob_blocks_without_null_glob <file>...: counts bash blocks that loop over a glob and lack the setopt line
