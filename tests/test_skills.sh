@@ -3,7 +3,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$repo_root/tests/_assert.sh"
 
-expected_skills="build-review-page capture-evidence create-handover deliver-task init-org init-service pause-task run-retro start-task wrap-up-handovers"
+expected_skills="build-review-page capture-evidence create-handover deliver-task init-org init-service pause-work resume-work run-retro start-task wrap-up-handovers"
 actual_skills="$(ls "$repo_root/skills" | sort | tr '\n' ' ' | sed 's/ $//')"
 assert "skill folders" '[ "$actual_skills" = "$expected_skills" ]'
 
@@ -24,7 +24,7 @@ old_status=0
 old_hits="$(git -C "$repo_root" grep -lE "$old_names" -- . ':!CHANGELOG.md' ':!docs/decisions.md' ':!docs/superpowers' ':!tests/test_skills.sh')" || old_status=$?
 assert "old-name search ran" '[ "$old_status" -le 1 ]'
 assert "no old skill names in current files" '[ -z "$old_hits" ]'
-for skill in create-handover init-org init-service pause-task run-retro start-task wrap-up-handovers; do
+for skill in create-handover init-org init-service pause-work resume-work run-retro start-task wrap-up-handovers; do
   assert "$skill is user-invoked" 'grep -qx "disable-model-invocation: true" "$repo_root/skills/$skill/SKILL.md"'
 done
 for skill in build-review-page capture-evidence deliver-task; do
@@ -40,13 +40,20 @@ assert "init-service uses the exclude script" 'grep -q "scripts/handover/ensure-
 assert "verify clears old evidence lines first" 'grep -q "First delete every line under .## Evidence." "$repo_root/skills/start-task/references/verify.md"'
 # Controller ruling: outside herdr a code task is handed to the user, not run in the main checkout session
 assert "start-task exit 3 hands a code task to a new session in the worktree" 'grep -q "cd \"<workspace_cwd>\" && claude \"/wstack:start-task --task <task_id>\"" "$repo_root/skills/start-task/SKILL.md" && grep -q "do not run work mode in this session" "$repo_root/skills/start-task/SKILL.md"'
-pause_skill="$repo_root/skills/pause-task/SKILL.md"
+pause_skill="$repo_root/skills/pause-work/SKILL.md"
+resume_skill="$repo_root/skills/resume-work/SKILL.md"
 start_skill="$repo_root/skills/start-task/SKILL.md"
-assert "pause-task stops background work with TaskStop and checks pgrep" 'grep -q "TaskStop" "$pause_skill" && grep -q "pgrep" "$pause_skill"'
-assert "pause-task writes pause.md with the listed fields" 'grep -q "pause.md" "$pause_skill" && grep -q "git HEAD" "$pause_skill" && grep -q "uncommitted paths" "$pause_skill" && grep -q "next step" "$pause_skill"'
-assert "pause-task sets paused and paused_from" 'grep -qF "status paused" "$pause_skill" && grep -q "paused_from" "$pause_skill"'
-assert "pause-task refuses a task that is already paused" 'grep -qF "If status is \`paused\`, tell the user the task is already paused and stop" "$pause_skill"'
-assert "pause-task tells the user the resume command" 'grep -qF "/wstack:start-task --task <task_id>" "$pause_skill"'
-assert "work mode has a paused row that reads pause.md" 'grep -qF "| \`paused\` |" "$start_skill" && grep -q "pause.md" "$start_skill"'
-assert "work mode restores the status and renames the note to pause-<time>.md" 'grep -q "paused_from" "$start_skill" && grep -qF "pause-<time>.md" "$start_skill"'
+assert "pause-work writes the note before it stops anything" '[ "$(grep -n "^## Step 1: write the resume note first" "$pause_skill" | cut -d: -f1)" -lt "$(grep -n "^## Step 2: stop background work" "$pause_skill" | cut -d: -f1)" ]'
+assert "pause-work stops agents and shells with TaskStop" 'grep -q "TaskStop" "$pause_skill" && grep -q "ListAgents" "$pause_skill"'
+assert "pause-work stops only processes traced to the session and lists the rest" 'grep -qF "Stop only a process you can trace to this session" "$pause_skill" && grep -q "pgrep" "$pause_skill" && grep -qF "still running" "$pause_skill"'
+assert "pause-work names both note locations" 'grep -qF "\$task_dir/pause.md" "$pause_skill" && grep -qF "~/.wstack/pauses/<current folder name>-<YYYYMMDD-HHMMSS>.md" "$pause_skill"'
+assert "pause-work note holds the listed fields" 'for f in "- goal:" "- done:" "- in progress:" "- next steps:" "- git state:" "- read first on resume:" "- folder:" "status before the pause"; do grep -qF -- "$f" "$pause_skill" || exit 1; done'
+assert "pause-work sets paused and paused_from for a task" 'grep -qF "status paused" "$pause_skill" && grep -q "paused_from" "$pause_skill"'
+assert "pause-work refuses a task that is already paused" 'grep -qF "If status is \`paused\`, tell the user the task is already paused and stop" "$pause_skill"'
+assert "pause-work tells the user the resume command" 'grep -qF "/wstack:resume-work" "$pause_skill" && grep -qF "/wstack:start-task --task <task_id>" "$pause_skill"'
+assert "resume-work compares the git state and never resets" 'grep -q "Report every difference" "$resume_skill" && grep -qF "Do not discard, reset, or stash anything." "$resume_skill"'
+assert "resume-work looks up a session note by folder, newest first" 'grep -q "list-pause-notes.sh" "$resume_skill" && grep -q "newest first" "$resume_skill"'
+assert "resume-work renames the task note to pause-<time>.md and restores the status" 'grep -qF "pause-<time>.md" "$resume_skill" && grep -q "paused_from" "$resume_skill"'
+assert "resume-work renames a session note to .resumed-<time>.md" 'grep -qF "<name>.resumed-<time>.md" "$resume_skill"'
+assert "work mode paused row runs resume-work" 'grep -qF "| \`paused\` |" "$start_skill" && grep -q "resume-work" "$start_skill"'
 finish

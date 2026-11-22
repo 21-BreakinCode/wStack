@@ -38,7 +38,8 @@ User commands:
 
 - `/wstack:start-task`: run the pipeline for one task.
 - `/wstack:run-retro`: weekly retro over the last 7 days of task folders.
-- `/wstack:pause-task`: stop a task in the middle, stop its background work, and save where it stopped. Resume with `/wstack:start-task --task <task_id>`.
+- `/wstack:pause-work`: pause the work of any session. It writes a resume note, then stops the background agents, shells, and processes the session started. Run it before you close the computer.
+- `/wstack:resume-work`: resume from the newest resume note of the current folder. For a task, `/wstack:start-task --task <task_id>` also works.
 - `/wstack:init-org`: scaffold the handover initiation file for an org. Run it once per org.
 - `/wstack:init-service`: set up the current repository for handovers. Run it once per repository.
 - `/wstack:create-handover`: create a handover document from the current conversation.

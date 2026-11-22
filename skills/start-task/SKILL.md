@@ -79,21 +79,13 @@ The argument is `--task <task_id>`. The task folder is `$vault/$tasks_dir/<task_
 |---|---|
 | `drafting`, `awaiting-approval` | Confirmation. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/confirmation.md` and follow it. |
 | `executing` | Execute. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/execute.md` and follow it. |
-| `paused` | Resume a paused task. Follow "Resume a paused task" below. |
+| `paused` | Run the `resume-work` skill with the note path `$task_dir/pause.md`. It restores the status. Then continue with the restored status. |
 | `waiting-user` | Read the last item of `stopped_for_user` in `run-log.md`. Go on as "Stop items" says for its `stage`. |
 | `verifying` | Verify. Read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` and follow it. |
 | `awaiting-deliver-approval` | Deliver. Run the `deliver-task` skill and follow its "After the user answers" section. |
 | `delivered`, `cancelled` | Tell the user the task is closed. Stop. |
 
 Change `status` only with `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" status <value>`.
-
-## Resume a paused task
-
-1. Read `$task_dir/pause.md`. Show it to the user.
-2. Restore the old status: `old_status="$(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" paused_from)"`, then `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" status "$old_status"`. If `paused_from` is empty, ask the user for the status.
-3. Compare the workspace with the note. Run `git -C "<workspace_cwd>" rev-parse HEAD` and `git -C "<workspace_cwd>" status --porcelain`. If the git HEAD or the uncommitted paths differ from `pause.md`, tell the user what differs. Do not discard any change.
-4. Rename the note so the history stays and the next pause starts clean: `mv "$task_dir/pause.md" "$task_dir/pause-<time>.md"`. `<time>` is the `time` field of the note with `:` replaced by `-`.
-5. Continue from the old status with the stage table above, starting at the `next step` of the note.
 
 ## Stop items
 
