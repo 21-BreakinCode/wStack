@@ -62,7 +62,7 @@ A service contract is one Markdown file for each mapped service. It states what 
 
 The vault files:
 
-- `<app_name>.md`: the contract. Its sections are Team docs, Abilities, Interfaces, Depends on, Consumers, Gotchas, and Open questions. The frontmatter holds `base_branch`, `verified_commit`, `pending`, and `ignore`.
+- `<app_name>.md`: the contract. Its sections are Team docs, Abilities, Interfaces, Depends on, Consumers, Gotchas, and Open questions. Abilities, Interfaces, and Depends on each have a `<!-- sources: -->` comment that lists the files they describe. The other sections have no sources comment. The frontmatter holds `app_name`, `repo`, `base_branch`, `verified_commit`, `verified_at`, `pending`, `ignore`, and `tags`.
 - `plan.md`: planned items that are not built yet.
 - `decisions/`: one file for each decision, named `NNNN-<slug>.md`.
 - `_archive/<task_id>/`: old vault files that a `contract` task moved.
@@ -74,7 +74,7 @@ The gate:
 - The `contract-reader` agent writes a brief into `contract-brief.md` in the task folder. The spec reads it.
 - After you approve the spec, the gate patch updates the contract and removes the built items from `plan.md`. If the patch covers each stale section, `verified_commit` moves to the checked commit.
 - A gate stop starts its reason with `contract gate:`. When you answer, the gate runs again from the start.
-- In Deliver, the write-back records a pending item for the pull request. After the merge, the next gate run writes the change into the contract. If the pull request closes without a merge, the gate drops the item.
+- In Deliver, the write-back records a pending item for the pull request. After the merge, the next gate run writes the change into the contract. If the pull request closes without a merge, the gate drops the item and sets the decision files of that task to `status: withdrawn`.
 - A repository with no service mapping gets no contract. The gate writes `Contract: not mapped` and goes on.
 - Every write takes the lock folder `<contract>.lock`. If a crashed session leaves it, remove the folder.
 - Undo uses copies in the task folder. The gate writes `contract.before.md` and `plan.before.md`. The write-back writes `contract.writeback.before.md` and `plan.writeback.before.md`. Each copy is written once.

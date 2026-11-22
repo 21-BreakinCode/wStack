@@ -170,7 +170,7 @@ Rules for the contract:
 
 - The body states only what is true now, in the present tense. It holds no dates and no "was" or "changed".
 - An `@` path is relative to the repository root, not to the contract file. Agents read the contract with the Read tool and follow each `@` path themselves.
-- Every section except `Team docs` and `Open questions` has a `sources` comment. The check also watches each `@` target.
+- Every section except `Team docs`, `Consumers`, `Gotchas`, and `Open questions` has a `sources` comment. `Consumers` and `Gotchas` describe things outside the code. The check also watches each `@` target.
 - The contract never copies text from a team doc. It adds only what the team docs lack.
 - `base_branch` names the branch that feature PRs target. The contract describes that branch, not the local `HEAD`.
 - `verified_commit` is a commit on `base_branch`. Every section matches the code at that commit.
@@ -196,7 +196,7 @@ task: "[[Workflow/Tasks/2026-11-21-sign-jwt-locally/spec]]"
 ## Why
 ```
 
-After a decision file lands, nobody edits it. A later decision sets the old file's `status` to `superseded by 0005`, and that is the only edit.
+After a decision file lands, nobody edits it. There are two edits. A later decision sets the old file's `status` to `superseded by 0005`. When the PR of the task closes without a merge, the gate sets the file's `status` to `withdrawn`.
 
 ### 6.4 The drift check: `scripts/contract-check.sh`
 
@@ -257,7 +257,7 @@ Changes in each step:
 - `Deliver`. The write-back waits for the merge, because a squash merge or a closed PR leaves no ancestor commit. The reader writes the proposed edits from the branch diff and the `Contract changes` section to `<task_dir>/contract.patch.md`, one block for each section. The patch also removes each `plan.md` item that the task built. The session adds `{pr, task}` to `pending`. It writes one decision file for each item in the spec's `## Decisions`. If the PR adds a team ADR, the decision file links to that ADR and copies nothing. `report.md` lists the patch and the undo step.
 - Pending items. The gate runs `gh pr view <n> --json state` for each item. The hooks never call the network.
   - Merged: apply the patch, one section at a time. If the section changed after the patch was written, the reader rewrites that section from the code instead. Remove the item.
-  - Closed without a merge: drop the patch, and remove the item.
+  - Closed without a merge: drop the patch, set the `status` of the task's decision files to `withdrawn`, and remove the item.
   - Open: keep the item.
 - If every section matches `origin/<base_branch>` at a newer commit, `verified_commit` moves to that commit. Otherwise it stays.
 - Undo works on single sections. The session restores only the sections that the task changed, from `contract.before.md`, and deletes the task's decision files. Edits from other tasks stay. The vault has no git history, so this copy is the only way back. With it, the write-back is an undoable step, in the meaning of spec section 2.

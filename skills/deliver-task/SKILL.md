@@ -69,7 +69,7 @@ Make the draft or the file. Record its URL or path and the undo, which is to del
 
 Use this for the `write the contract files` target of a `contract` task. The drafts are in `$task_dir`: `contract.draft.md`, `plan.draft.md`, and `decisions.draft/`.
 
-1. Find the contract path: `bash "$scripts/contract-path.sh" --vault "$vault" "<workspace_cwd>"`. If it exits 1, stop as in "Stop" with the reason `repository not mapped: run /wstack:init-service`. If it exits 2, stop as in "Stop" with the stderr text. Otherwise `<contract_file>` is the path. `<contract folder>` is its folder.
+1. Find the contract path: `bash "$scripts/contract-path.sh" --vault "$vault" "<workspace_cwd>"`. `<workspace_cwd>` is the `workspace_cwd` value in the spec frontmatter. If it exits 1, stop as in "Stop" with the reason `repository not mapped: run /wstack:init-service`. If it exits 2, stop as in "Stop" with the stderr text. Otherwise `<contract_file>` is the path. `<contract folder>` is its folder.
 2. Write the files in one Bash call. Write the real values for the placeholders:
 
    ```bash
@@ -87,7 +87,12 @@ Use this for the `write the contract files` target of a `contract` task. The dra
    [ -n "$verified_commit" ] || { echo "contract.draft.md has no verified_commit" >&2; exit 1; }
    for draft_decision in "$task_dir/decisions.draft"/*; do
      [ -e "$draft_decision" ] || continue
-     [ ! -e "$contract_folder/decisions/$(basename "$draft_decision")" ] || cmp -s "$draft_decision" "$contract_folder/decisions/$(basename "$draft_decision")" || { echo "decision $(basename "$draft_decision") already exists in decisions/" >&2; exit 1; }
+     draft_name="$(basename "$draft_decision")"
+     for same_id in "$contract_folder/decisions/${draft_name%%-*}"-*; do
+       [ -e "$same_id" ] || continue
+       if [ "$(basename "$same_id")" = "$draft_name" ] && grep -qsxF "$draft_name" "$task_dir/decisions.copied.txt"; then continue; fi
+       echo "decision id ${draft_name%%-*} already exists in decisions/: $(basename "$same_id")" >&2; exit 1
+     done
    done
    [ ! -f "$contract_file" ] || [ -f "$task_dir/contract.before.md" ] || cp "$contract_file" "$task_dir/contract.before.md"
    mkdir -p "$archive_dir" "$contract_folder/decisions"
@@ -102,14 +107,16 @@ Use this for the `write the contract files` target of a `contract` task. The dra
    cp "$task_dir/contract.draft.md" "$contract_file"
    cp "$task_dir/plan.draft.md" "$contract_folder/plan.md"
    for draft_decision in "$task_dir/decisions.draft"/*; do
-     [ ! -e "$draft_decision" ] || cp "$draft_decision" "$contract_folder/decisions/"
+     [ -e "$draft_decision" ] || continue
+     grep -qsxF "$(basename "$draft_decision")" "$task_dir/decisions.copied.txt" || basename "$draft_decision" >>"$task_dir/decisions.copied.txt"
+     cp "$draft_decision" "$contract_folder/decisions/"
    done
    bash "$scripts/contract-edit.sh" set-verified "$contract_file" "$verified_commit"
    ```
 
    Exit 4 means the lock is busy. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"deliver"`, `"target":"write the contract files"`, and the stderr text as the reason. Set `status` to `waiting-user` and stop. Any other non-zero exit means a command failed after the lock. The trap already ran `unlock`. Write the same `stop` line and stop item with the stderr text, and stop.
-3. The block is safe to run again after a failure. It checks the decision names before it changes anything. A decision file that is already there with the same text is a copy from an earlier run, not a clash. `contract.before.md` is written once. A file that is already in `_archive/<task_id>/` is never moved over. The `.archived` marker there says that the move is done. The block leaves `handover/`, `decisions/`, and `_archive/` in place. It adds files to `decisions/`, and it adds `_archive/<task_id>/`. `verified_commit` is the code that Execute read, never a fresh `rev-parse`.
-4. Record the target: `{"target":"write the contract files","url":"<contract_file>","undo":"delete <contract_file>, <contract folder>/plan.md, and the decision files copied from decisions.draft/, then move the files (not `.archived`) in <contract folder>/_archive/<task_id>/ back to <contract folder>, then restore <contract_file> from <task folder>/contract.before.md"}`. If `contract.before.md` does not exist, leave out its part.
+3. The block is safe to run again after a failure. It checks the decision ids before it changes anything. It writes the name of each decision file that it copies to `decisions.copied.txt` in the task folder. A file in that list is a copy from an earlier run. Any other file in `decisions/` with the same id is a clash. `contract.before.md` is written once. A file that is already in `_archive/<task_id>/` is never moved over. The `.archived` marker there says that the move is done. The block leaves `handover/`, `decisions/`, and `_archive/` in place. The `*` glob skips dot files, for example `.DS_Store`, so they stay in the contract folder. It adds files to `decisions/`, and it adds `_archive/<task_id>/`. `verified_commit` is the code that Execute read, never a fresh `rev-parse`.
+4. Record the target: `{"target":"write the contract files","url":"<contract_file>","undo":"delete <contract_file>, <contract folder>/plan.md, and the files in <contract folder>/decisions/ that <task folder>/decisions.copied.txt names, then move the files (not `.archived`) in <contract folder>/_archive/<task_id>/ back to <contract folder>, then delete the folder <contract folder>/_archive/<task_id>/, then restore <contract_file> from <task folder>/contract.before.md"}`. If `contract.before.md` does not exist, leave out its part.
 
 ## Contract write-back
 
@@ -146,13 +153,21 @@ Read the values in the same Bash call as the commands that use them: `source "$s
    trap 'bash "$scripts/contract-edit.sh" unlock "$contract_file"' EXIT
    mkdir -p "$decisions_dir"
    for draft in "$task_dir/decisions.writeback"/*.md; do
-     id="$(bash "$scripts/contract-edit.sh" next-decision-id "$decisions_dir")"
-     sed "s/{{id}}/$id/g" "$draft" > "$decisions_dir/$id-$(basename "$draft")"
-     echo "decision file: $decisions_dir/$id-$(basename "$draft")"
+     decision_file=""
+     for existing in "$decisions_dir"/[0-9][0-9][0-9][0-9]-"$(basename "$draft")"; do
+       [ -e "$existing" ] || continue
+       if grep -s '^task: ' "$existing" | grep -qF "/$(basename "$task_dir")/spec]]"; then decision_file="$existing"; fi
+     done
+     if [ -z "$decision_file" ]; then
+       id="$(bash "$scripts/contract-edit.sh" next-decision-id "$decisions_dir")"
+       decision_file="$decisions_dir/$id-$(basename "$draft")"
+       sed "s/{{id}}/$id/g" "$draft" > "$decision_file"
+     fi
+     echo "decision file: $decision_file"
    done
    ```
 
-   Act on a non-zero exit as in step 2.
+   A decision file `<id>-<slug>.md` with the same slug and the same `task` link is a copy from an earlier run of this step. The block keeps it and its id, so a retry makes no second copy. Act on a non-zero exit as in step 2.
 4. Record the target: `bash "$scripts/frontmatter-set.sh" --append "$task_dir/report.md" targets '{"target":"contract write-back","url":"<contract_file>","undo":"bash <scripts>/contract-edit.sh pending-remove <contract_file> <pr>, and delete <decision files>"}'`. Write the real values for `<scripts>`, `<pr>`, and `<decision files>`. The decision files are the `decision file:` lines of step 3.
 
 The contract text does not change here. It changes after the merge, as "Pending items" says.
@@ -217,13 +232,13 @@ Use this stop when a target fails. Never retry the target before the user says y
 
 ## Pending items
 
-The contract gate runs this (step G4 of Confirmation). At G4 the brief does not exist yet. `$contract_file` comes from `contract-path.sh`, and `<base_branch>` from the contract frontmatter. Read `pending` with `fm_get "$contract_file" pending`. It is a list of `{"pr":<n>,"task":"<id>"}` items. If it is empty, do nothing.
+The contract gate runs this (step G4 of Confirmation). At G4 the brief does not exist yet. `$contract_file` comes from `contract-path.sh`, and `<base_branch>` from the contract frontmatter. `<contract folder>` is the folder that holds `$contract_file`. Read `pending` with `fm_get "$contract_file" pending`. It is a list of `{"pr":<n>,"task":"<id>"}` items. If it is empty, do nothing.
 
 For each item, run `gh pr view <pr> --json state -q .state` in the repository folder. The task folder of the item is `$vault/$tasks_dir/<task>`.
 
 - `OPEN`: keep the item.
 - `gh` fails or prints another value: keep the item.
-- `MERGED`: write the change into the contract. Run this in one Bash call. `<task folder>` is the task folder of the item. The rules below the block say which lines to skip:
+- `MERGED`: if the task folder of the item does not exist, keep the item, and tell the user the missing path. Otherwise write the change into the contract. Run this in one Bash call. `<task folder>` is the task folder of the item. The rules below the block say which lines to skip:
 
   ```bash
   set -e
@@ -245,23 +260,35 @@ For each item, run `gh pr view <pr> --json state -q .state` in the repository fo
   ```
 
   - If `<task folder>/contract.patch.md` does not exist, or holds no `## ` section other than `## Remove from plan`, skip the `contract.writeback.before.md` line and the `apply` line.
-  - If the patch has no `- <heading>` line under `## Remove from plan`, skip the plan lines: the `plan.writeback.before.md` line and the `for` loop. Otherwise write each such heading in the `for` line, one after another, each in single quotes. A `delete-section` exit of 1 means that plan item is already gone: go on.
+  - If the patch has no `- <heading>` line under `## Remove from plan`, or `plan.md` is not in the contract folder, skip the plan lines: the `plan.writeback.before.md` line and the `for` loop. Otherwise write each such heading in place of `'<heading>'` in the `for` line, one after another, each in single quotes. A `delete-section` exit of 1 means that plan item is already gone: go on.
   - The write-back has its own snapshot files, and each one is written once. The gate's step 9 writes `contract.before.md` and `plan.before.md`. An undo of the write-back keeps the gate's change and the changes of other tasks before the write-back.
   - `apply` prints one applied section name per line. The loop prints `plan item removed: <heading>` for each plan item that it removed. Read both from the output of the call. A shell variable does not outlive the call.
   - In `report.md` of that task, set the undo of the `contract write-back` target. Join the parts that have names with ", and ". The contract part is `bash '<scripts>/contract-edit.sh' apply '<contract_file>' '<task folder>/contract.writeback.before.md' --sections '<applied names, joined by commas>'`. The plan part is `bash '<scripts>/contract-edit.sh' apply '<contract folder>/plan.md' '<task folder>/plan.writeback.before.md' --sections '<removed headings, joined by commas>'`. Put each value in single quotes, as in the block. When a name holds a comma, give every name as its own `--section '<name>'` flag instead of one `--sections` value. When `apply` ran no section, leave out the contract part. When no plan item was removed, leave out the plan part.
-- `CLOSED`: the pull request did not merge. The contract text must not change. Run this in one Bash call, with the same `set -e`, `scripts`, and `contract_file` lines as the `MERGED` call:
+  - `apply` adds a section that the contract did not have at the end, and it prints a warning on stderr that names the section. Leave each such name out of `<applied names>`. For each such name, add the new-section part `bash '<scripts>/contract-edit.sh' delete-section '<contract_file>' '<name>'`. When every applied name is new, leave out the contract part.
+- `CLOSED`: the pull request did not merge. The contract text must not change. The decision files of the item's task get `status: withdrawn`. Run this in one Bash call. `<task>` is the `task` value of the item:
 
   ```bash
   set -e
+  setopt NULL_GLOB 2>/dev/null || true
   scripts="${CLAUDE_PLUGIN_ROOT}/scripts"
   contract_file='<contract_file>'
+  source "$scripts/lib/frontmatter.sh"
   bash "$scripts/contract-edit.sh" lock "$contract_file"
   trap 'bash "$scripts/contract-edit.sh" unlock "$contract_file"' EXIT
+  for decision_file in "$(dirname "$contract_file")/decisions"/*.md; do
+    grep -s '^task: ' "$decision_file" | grep -qF '/<task>/spec]]' || continue
+    fm_set "$decision_file" status withdrawn
+    printf 'decision withdrawn: %s\n' "$decision_file"
+  done
   bash "$scripts/contract-edit.sh" pending-remove "$contract_file" <pr>
   ```
 
+  For each `decision withdrawn:` line, write a `step` line in `run-log.md` with the path and its undo: `source '<scripts>/lib/frontmatter.sh'; fm_set '<decision file>' status accepted`.
+
 Exit 4 from `lock` means the lock is busy. Write a `stop` line in `run-log.md`. Append a stop item with the stage of the caller (`confirmation` at G4) and the reason `contract gate: <stderr text>`. Set `status` to `waiting-user` and stop. Any other non-zero exit means a command failed after the lock. The trap already ran `unlock`. Write the same `stop` line and stop item, with the reason `contract gate: <stderr text>`. Set `status` to `waiting-user` and stop. "After a stop" in Confirmation then runs the gate again from G1.
 
-If `apply` exits 2, the patch holds `## ` sections but none applies. The item stays in `pending`, so each later gate run stops here. Tell the user the way out: the user can say to drop the item. Then run the `CLOSED` call for that pull request, so `pending-remove` runs under the lock. Do not change the contract text.
+A `MERGED` item can stay stuck: its task folder is missing, or its call fails each time. Then every later gate stops at it or keeps it. If the user says to drop the item, run `pending-remove` for its pull request, with the same lock and trap lines as the `MERGED` call. Do not withdraw its decisions.
+
+A patch section can have a name that the contract does not have. Then `apply` adds the section at the end of the contract, and it prints a warning on stderr that names the section. If the output of the call holds such a warning, tell the user the section name. A misspelled name adds a near-duplicate section. If the user asks to remove it, run `delete-section` for that name, with the same lock and trap lines as the `MERGED` call.
 
 `verified_commit` does not move here. The gate's own check finds what the merged change touched, and the reader compares those sections with the code.
