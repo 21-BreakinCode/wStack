@@ -5,6 +5,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 source "$script_dir/lib/frontmatter.sh"
+source "$script_dir/lib/transcripts.sh"
 fail() { echo "collect-week: $1" >&2; exit 1; }
 
 vault="" tasks_dir="" days=7 today="$(date +%Y-%m-%d)"
@@ -40,10 +41,13 @@ for folder in "$vault/$tasks_dir"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*/;
   transcript_stats=null
   session_ids=()
   while IFS= read -r session_id; do
-    [ -n "$session_id" ] && session_ids+=("$session_id")
+    session_id_ok "$session_id" && session_ids+=("$session_id")
   done < <(frontmatter_or_empty "$folder/spec.md" | jq -r '.session_ids[]? // empty')
   if [ "${#session_ids[@]}" -gt 0 ]; then
-    transcript_stats="$(bash "$script_dir/transcript-stats.sh" "${session_ids[@]}")"
+    transcript_stats="$(bash "$script_dir/transcript-stats.sh" "${session_ids[@]}")" || {
+      echo "collect-week: transcript stats failed for $task_id" >&2
+      transcript_stats=null
+    }
   fi
   jq -n --arg task_id "$task_id" --arg folder "$folder" \
     --argjson spec "$(frontmatter_or_empty "$folder/spec.md")" \

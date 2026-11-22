@@ -24,17 +24,26 @@ out="$(bash "$script" "$session_a" "$session_b" "$unknown")"
 field() { jq -c "$1" <<<"$out"; }
 assert "sessions counts every id" '[ "$(field .sessions)" = 3 ]'
 assert "found counts transcripts that exist" '[ "$(field .found)" = 2 ]'
-assert "tool_calls by name" '[ "$(field .tool_calls)" = "{\"Bash\":3,\"Read\":1}" ]'
+assert "tool_calls by name" '[ "$(field .tool_calls)" = "{\"Bash\":5,\"Read\":1}" ]'
 assert "tool_errors counts is_error true only" '[ "$(field .tool_errors)" = 1 ]'
-assert "top_bash row 1 is git status x2" '[ "$(field ".top_bash[0]")" = "{\"command\":\"git status\",\"count\":2}" ]'
-assert "top_bash row 2 is ls -la x1" '[ "$(field ".top_bash[1]")" = "{\"command\":\"ls -la\",\"count\":1}" ]'
-assert "top_bash has two rows" '[ "$(field ".top_bash | length")" = 2 ]'
+assert "top_bash row 1 is git status x3 (newline splits words)" '[ "$(field ".top_bash[0]")" = "{\"command\":\"git status\",\"count\":3}" ]'
+assert "top_bash tie: ab cd sorts before ls -la" '[ "$(field ".top_bash[1]")" = "{\"command\":\"ab cd\",\"count\":1}" ]'
+assert "top_bash row 3 is ls -la x1" '[ "$(field ".top_bash[2]")" = "{\"command\":\"ls -la\",\"count\":1}" ]'
+assert "top_bash has three rows" '[ "$(field ".top_bash | length")" = 3 ]'
 assert "compactions" '[ "$(field .compactions)" = 1 ]'
-assert "user_turns skips results and meta" '[ "$(field .user_turns)" = 3 ]'
+assert "user_turns skips results, meta and compact summary" '[ "$(field .user_turns)" = 3 ]'
 assert "started_at is the earliest timestamp" '[ "$(field .started_at)" = "\"2026-11-22T10:20:00Z\"" ]'
 assert "ended_at is the latest timestamp" '[ "$(field .ended_at)" = "\"2026-11-22T11:12:00Z\"" ]'
 assert "subagent_tool_calls" '[ "$(field .subagent_tool_calls)" = "{\"Read\":1}" ]'
 assert "session c is not counted" '[ "$(field .tool_calls.Read)" = 1 ]'
+
+# one id in two project folders: first file lacks a trailing newline, second ends in a truncated line
+session_e=eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee
+cp "$fixtures/session-e-part1.jsonl" "$folder_one/$session_e.jsonl"
+cp "$fixtures/session-e-part2.jsonl" "$folder_two/$session_e.jsonl"
+bad_out="$(bash "$script" "$session_e")"
+assert "bad lines: exit 0 and good lines from both files count" '[ "$(jq -c .tool_calls <<<"$bad_out")" = "{\"Bash\":1,\"Read\":1}" ]'
+assert "one id in two folders: sessions 1, found 1" '[ "$(jq -c "[.sessions, .found]" <<<"$bad_out")" = "[1,1]" ]'
 
 unknown_out="$(bash "$script" "$unknown")"
 assert "unknown id gives found 0" '[ "$(jq -r .found <<<"$unknown_out")" = 0 ]'

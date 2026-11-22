@@ -28,8 +28,16 @@ mkdir -p "$stats_vault/Tasks/2026-11-18-with-sessions" "$stats_home/.claude/proj
 printf -- '---\ntask_id: 2026-11-18-with-sessions\nsession_ids: ["%s"]\n---\n' "$stats_session" > "$stats_vault/Tasks/2026-11-18-with-sessions/spec.md"
 cp "$repo_root/tests/fixtures/transcripts/session-a.jsonl" "$stats_home/.claude/projects/-proj/$stats_session.jsonl"
 stats_out="$(HOME="$stats_home" bash "$script" --vault "$stats_vault" --tasks-dir Tasks --today 2026-11-18)"
-rm -rf "$stats_home"
+# a bad id in one task must not stop the run or another task's stats
+mkdir -p "$stats_vault/Tasks/2026-11-18-bad-id" "$stats_vault/Tasks/2026-11-18-only-bad-id"
+printf -- '---\ntask_id: x\nsession_ids: ["%s", "not-a-uuid"]\n---\n' "$stats_session" > "$stats_vault/Tasks/2026-11-18-bad-id/spec.md"
+printf -- '---\ntask_id: y\nsession_ids: ["not-a-uuid"]\n---\n' > "$stats_vault/Tasks/2026-11-18-only-bad-id/spec.md"
+bad_id_out="$(HOME="$stats_home" bash "$script" --vault "$stats_vault" --tasks-dir Tasks --today 2026-11-18)"
+assert "bad id is dropped, good id still counted" '[ "$(jq -r ".[] | select(.task_id == \"2026-11-18-bad-id\") | .transcript_stats.found" <<<"$bad_id_out")" = 1 ]'
+assert "only bad ids gives null" '[ "$(jq -c ".[] | select(.task_id == \"2026-11-18-only-bad-id\") | .transcript_stats" <<<"$bad_id_out")" = null ]'
+assert "other task keeps its stats" '[ "$(jq -r ".[] | select(.task_id == \"2026-11-18-with-sessions\") | .transcript_stats.found" <<<"$bad_id_out")" = 1 ]'
 assert "session_ids gives transcript_stats with found 1" '[ "$(jq -r ".[0].transcript_stats.found" <<<"$stats_out")" = 1 ]'
 assert "transcript_stats counts the compaction" '[ "$(jq -r ".[0].transcript_stats.compactions" <<<"$stats_out")" = 1 ]'
+rm -rf "$stats_home"
 assert "bad vault exits 1" '! bash "$script" --vault "$vault" --tasks-dir Nope --today 2026-11-18 2>/dev/null'
 finish
