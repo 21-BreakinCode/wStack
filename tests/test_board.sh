@@ -83,4 +83,33 @@ assert "outside herdr: n/a fields on every row" '[ "$(jq -r "select(.herdr != \"
 assert "outside herdr: no finished row" '[ -z "$(jq -r "select(.group == \"finished\")" <<<"$rows")" ]'
 assert "outside herdr: every open task is printed" '[ "$(wc -l <<<"$rows" | tr -d " ")" = 14 ]'
 assert "outside herdr: paused goes to paused, waiting to needs you, rest to other" '[ "$(field rest-paused .group "$rows")" = paused ] && [ "$(field need-deliver .group "$rows")" = "needs you" ] && [ "$(field gone-one .group "$rows")" = other ]'
+
+# last_tool and subagents come from the newest transcript in session_ids
+vault="$work_dir/Activity Vault"; mkdir -p "$vault"
+fixture_ids="aaaaaaaa-0000-4000-8000-000000000001 aaaaaaaa-0000-4000-8000-000000000002 aaaaaaaa-0000-4000-8000-000000000003 aaaaaaaa-0000-4000-8000-000000000004"
+mkdir -p "$HOME/.claude/projects/-fake-project"
+cp -R "$repo_root/tests/fixtures/board-transcripts/." "$HOME/.claude/projects/-fake-project/"
+touch -t "$(date -v-2H +%Y%m%d%H%M)" "$HOME"/.claude/projects/-fake-project/aaaaaaaa-0000-4000-8000-000000000001/subagents/agent-stale.jsonl
+slug_index=0
+for session_id in $fixture_ids; do
+  slug_index=$((slug_index + 1))
+  bash "$repo_root/scripts/session-id-add.sh" "$(new_task "rd-$slug_index" executing)/spec.md" "$session_id"
+done
+new_task rd-none executing >/dev/null
+twice_folder="$(new_task rd-twice executing)"
+bash "$repo_root/scripts/session-id-add.sh" "$twice_folder/spec.md" aaaaaaaa-0000-4000-8000-000000000003
+bash "$repo_root/scripts/session-id-add.sh" "$twice_folder/spec.md" aaaaaaaa-0000-4000-8000-000000000002
+rows="$(/bin/bash "$script" --vault "$vault" --tasks-dir T)"
+assert "last_tool is the last tool_use, with its description as hint" '[ "$(field rd-1 .last_tool.tool "$rows")" = Bash ] && [ "$(field rd-1 .last_tool.hint "$rows")" = "Run the unit tests" ] && [ "$(field rd-1 .last_tool.at "$rows")" = 2026-11-23T01:01:00Z ]'
+assert "a Bash command with no description shows its first word only" '[ "$(field rd-2 .last_tool.hint "$rows")" = curl ] && ! grep -q abc123 <<<"$rows"'
+assert "a Read shows the base name as hint" '[ "$(field rd-3 .last_tool.hint "$rows")" = login.ts ]'
+assert "a hint is 60 characters at most with no newline or tab" '[ "$(field rd-4 .last_tool.hint "$rows" | wc -l | tr -d " ")" = 1 ] && [ "$(field rd-4 .last_tool.hint "$rows" | tr -d "\n" | wc -c | tr -d " ")" = 60 ] && ! field rd-4 .last_tool.hint "$rows" | grep -q "$(printf "\t")"'
+assert "only the running subagent is listed, with type, description and its tool" '[ "$(field rd-1 "[.subagents[] | .type + \"|\" + .description + \"|\" + .last_tool.tool] | join(\",\")" "$rows")" = "Explore|Find the login handlers|Grep" ]'
+assert "a subagent tool hint cuts a pattern to 40 characters" '[ "$(field rd-1 ".subagents[0].last_tool.hint | length" "$rows")" = 40 ]'
+assert "idle_seconds is a small number for a fresh subagent" '[ "$(field rd-1 ".subagents[0].idle_seconds < 60" "$rows")" = true ]'
+assert "a task with no session_ids has no tool and no subagents" '[ "$(field rd-none .last_tool "$rows")" = null ] && [ "$(field rd-none ".subagents | length" "$rows")" = 0 ]'
+assert "the newest session id is the one read" '[ "$(field rd-twice .last_tool.hint "$rows")" = curl ]'
+rows="$(WSTACK_BOARD_ACTIVE_MINUTES=100000 /bin/bash "$script" --vault "$vault" --tasks-dir T)"
+assert "a long active window brings the stale subagent back" '[ "$(field rd-1 "[.subagents[].type] | sort | join(\",\")" "$rows")" = "Explore,Plan" ]'
+assert "a finished subagent never shows" '[ "$(field rd-1 "[.subagents[].type] | index(\"code-reviewer\")" "$rows")" = null ]'
 finish

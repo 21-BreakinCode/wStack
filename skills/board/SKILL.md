@@ -1,6 +1,6 @@
 ---
 name: board
-description: Show every open RD, the ones that wait for the user first, write a snapshot page, and close finished workspaces.
+description: Show every open RD, the ones that wait for the user first, write a snapshot page, and close finished workspaces. With --watch, open a live monitor of the RDs, their tools, and their subagents.
 disable-model-invocation: true
 ---
 
@@ -18,6 +18,16 @@ Read the shell variables with `echo "${WSTACK_VAULT_PATH:-}" "${EVAL_WSTACK_VAUL
 If the vault path is relative, make it absolute with `cd <value> && pwd`.
 
 In this file `$vault` is the vault path, `$tasks_dir` is the tasks folder, and `$scripts` is `${CLAUDE_PLUGIN_ROOT}/scripts`.
+
+## Watch mode
+
+If the user passes `--watch`, do only these steps and stop. Skip the Steps section.
+
+1. Build the command `bash "$scripts/board-watch.sh" --vault "$vault" --tasks-dir "$tasks_dir"`.
+2. If the shell variable `HERDR_ENV` is `1`, run `herdr pane split --current --direction down --no-focus` and read the new pane id from its JSON reply. Run `herdr pane run <pane id> "<the command>"`. Print the pane id and `herdr pane close <pane id>`. If the variable `WSTACK_HERDR_SESSION` is set, write `--session $WSTACK_HERDR_SESSION` right after `herdr` in each herdr command.
+3. If `HERDR_ENV` is not `1`, print the command and tell the user to run it in another terminal.
+
+The monitor shows each open RD with its stage, the tool it calls now, and each running subagent with its tool. It refreshes every 3 seconds. Ctrl-C ends it.
 
 ## Steps
 

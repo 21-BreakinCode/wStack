@@ -7,6 +7,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 source "$script_dir/lib/frontmatter.sh"
 source "$script_dir/lib/herdr.sh"
+source "$script_dir/lib/transcripts.sh"
 fail() { echo "board: $1" >&2; exit 1; }
 
 vault="" tasks_dir=""
@@ -51,6 +52,44 @@ group_of() {  # <status> <herdr state>: the first group that matches
   esac
 }
 
+# Reads the last 200 lines of a transcript. Prints {tool, hint, at} of its last tool_use, or null.
+# A Bash command shows only its first word, because a command can hold a token.
+last_tool_of() {  # <transcript file>
+  tail -n 200 "$1" | jq -Rn '
+    def filled: strings | select(length > 0);
+    [inputs | fromjson? | select(type == "object" and .type == "assistant")
+      | .timestamp as $at | .message.content | arrays | .[] | select(.type? == "tool_use")
+      | {tool: .name, at: $at, input: ((.input | objects) // {})}] | last
+    | if . == null then null else
+        {tool, at, hint: ((.input.description | filled)
+          // (.input.file_path | filled | split("/") | last)
+          // (.input.pattern | filled | .[:40])
+          // ([.input.command | filled | scan("\\S+")] | first) // "")
+          | gsub("\\s+"; " ") | .[:60]}
+      end'
+}
+
+# Prints {last_tool, subagents} for the newest session id of a spec.
+activity_json() {  # <spec file>
+  local id main_file last_tool sub_file meta_file idle_seconds
+  local active_seconds=$(( ${WSTACK_BOARD_ACTIVE_MINUTES:-15} * 60 ))
+  id="$(fm_get "$1" session_ids | jq -r 'last // empty' 2>/dev/null)" || id=""
+  if ! session_id_ok "$id"; then echo '{"last_tool":null,"subagents":[]}'; return 0; fi
+  main_file="$(transcript_main_files "$id" | head -n 1)"
+  last_tool=null
+  [ -z "$main_file" ] || last_tool="$(last_tool_of "$main_file")"
+  while IFS= read -r sub_file; do
+    [ -n "$sub_file" ] || continue
+    meta_file="${sub_file%.jsonl}.meta.json"
+    idle_seconds=$(( $(date +%s) - $(stat -f %m "$sub_file") ))
+    [ "$idle_seconds" -lt "$active_seconds" ] || continue
+    jq -c --argjson idle "$idle_seconds" --argjson last_tool "$(last_tool_of "$sub_file")" '
+      select(.finished != true)
+      | {type: (.agentType // ""), description: (.description // ""), idle_seconds: $idle, last_tool: $last_tool}' \
+      "$meta_file" 2>/dev/null || true
+  done < <(transcript_subagent_files "$id") | jq -sc --argjson last_tool "$last_tool" '{last_tool: $last_tool, subagents: .}'
+}
+
 # One jq object per task. Add a row field here and nowhere else.
 row_json() {  # <group> <task_id> <slug> <status> <herdr> <workspace_id> <folder>
   local spec="$7/spec.md"
@@ -58,8 +97,9 @@ row_json() {  # <group> <task_id> <slug> <status> <herdr> <workspace_id> <folder
     --arg goal "$(section_lines "$spec" Goal | awk 'NF { print; exit }')" \
     --arg last_step "$(section_lines "$7/run-log.md" Steps | awk 'NF { last = $0 } END { print last }')" \
     --arg age "$(age_of "$(fm_get "$spec" created_at)")" \
+    --argjson activity "$(activity_json "$spec")" \
     '{group: $group, task_id: $task_id, slug: $slug, status: $status,
-      herdr: $herdr, workspace_id: $workspace_id, goal: $goal, last_step: $last_step, age: $age, folder: $folder}'
+      herdr: $herdr, workspace_id: $workspace_id, goal: $goal, last_step: $last_step, age: $age, folder: $folder} + $activity'
 }
 
 rows="$(

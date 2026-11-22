@@ -1,0 +1,1 @@
+{"type":"assistant","timestamp":"2026-11-23T02:00:00Z","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"curl -H 'Authorization: Bearer token=abc123' https://example.test/api"}}]}}
