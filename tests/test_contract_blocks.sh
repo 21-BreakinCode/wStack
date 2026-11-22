@@ -151,7 +151,7 @@ for shell in $test_shells; do
   assert "$shell step 9 M1: plan.before.md keeps the plan item" 'grep -qxF "## $weird_heading" "$task/plan.before.md"'
   assert "$shell step 9 M1: the output names the removed item" 'printf "%s\n" "$out" | grep -qF "plan item removed: $weird_heading"'
   assert "$shell step 9 I3: the heading text did not run" '[ -d "$world_dir/canary" ]'
-  gate_undo="$(fill "$(code_after "$confirmation" 'with the undo of the contract part:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
+  gate_undo="$(fill "$(code_after "$confirmation" 'The old-section command:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
     '<task folder>' "$task" '<applied names, joined by commas>' Interfaces)"
   cp "$CONTRACT" "$world_dir/contract.gated"
   run_block "$gate_undo" "$shell"
@@ -160,9 +160,18 @@ for shell in $test_shells; do
 
   task="$VAULT/Tasks/task-a2"
   write_brief "$task" '["Interfaces"]'
-  printf '## Interfaces\n<!-- sources: api/** -->\nGET /health answers 204.\n\n## Remove from plan\n- Gate item\n' >"$task/contract.gate-patch.md"
+  printf '## Interfaces\n<!-- sources: api/** -->\nGET /health answers 204.\n\n## Health checks\nGET /health is the probe.\n\n## Remove from plan\n- Gate item\n' >"$task/contract.gate-patch.md"
   run_block "$(filled_block step9 "$task" "Gate item" 0)" "$shell"
   assert "$shell step 9 I4: verified_commit moves when every stale section has a block" '[ "$rc" = 0 ] && [ "$(fm_get "$CONTRACT" verified_commit)" = checked123 ]'
+  undo_old="$(fill "$(code_after "$confirmation" 'The old-section command:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
+    '<task folder>' "$task" '<applied names, joined by commas>' Interfaces)"
+  undo_new="$(fill "$(code_after "$confirmation" 'once for each name that a warning named:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" '<name>' 'Health checks')"
+  undo_commit="$(fill "$(code_after "$confirmation" 'add the commit command:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
+    '<verified_commit>' "$(fm_get "$task/contract.before.md" verified_commit)")"
+  run_block "$undo_old && $undo_new && $undo_commit" "$shell"
+  assert "$shell step 9 undo: exit 0 ($out)" '[ "$rc" = 0 ]'
+  assert "$shell step 9 undo: verified_commit is back, so the drift shows again" '[ "$(fm_get "$CONTRACT" verified_commit)" = "$FIRST_COMMIT" ]'
+  assert "$shell step 9 undo: the new section is gone and Interfaces is back" '! grep -qxF "## Health checks" "$CONTRACT" && section_of "$CONTRACT" Interfaces | grep -qF "GET /health answers 200." && ! grep -qF "answers 204" "$CONTRACT"'
 
   echo "$shell: MERGED and its undo (I2, I3)"
   setup_world "merge-$shell"
@@ -175,7 +184,7 @@ for shell in $test_shells; do
   printf '## Interfaces\n<!-- sources: api/** -->\nB edit text.\n\n## Remove from plan\n- B item\n' >"$task_b/contract.patch.md"
   run_block "$(filled_block merged "$task_b" "B item" 8)" "$shell"
   assert "$shell task B MERGED: exit 0" '[ "$rc" = 0 ]'
-  printf '## Interfaces\n<!-- sources: api/** -->\nA write-back text.\n\n## Remove from plan\n- %s\n' "$weird_heading" >"$task_a/contract.patch.md"
+  printf '## Interfaces\n<!-- sources: api/** -->\nA write-back text.\n\n## Health checks\nA new section.\n\n## Remove from plan\n- %s\n' "$weird_heading" >"$task_a/contract.patch.md"
   run_block "$(filled_block merged "$task_a" "$weird_heading" 7)" "$shell"
   assert "$shell task A MERGED: exit 0 ($out)" '[ "$rc" = 0 ]'
   assert "$shell task A MERGED I3: the heading text did not run" '[ -d "$world_dir/canary" ]'
@@ -186,9 +195,12 @@ for shell in $test_shells; do
     '<task folder>' "$task_a" '<applied names, joined by commas>' Interfaces)"
   undo_plan="$(fill "$(code_after "$deliver" 'The plan part is')" '<scripts>' "$repo_root/scripts" '<contract folder>' "$contract_folder" \
     '<task folder>' "$task_a" '<removed headings, joined by commas>' "$(quote "$weird_heading")")"
+  undo_new="$(fill "$(code_after "$deliver" 'add the new-section part')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" '<name>' 'Health checks')"
   run_block "$undo_contract" "$shell"; undo_contract_rc="$rc"
   run_block "$undo_plan" "$shell"; undo_plan_rc="$rc"
-  assert "$shell undo: both parts exit 0" '[ "$undo_contract_rc" = 0 ] && [ "$undo_plan_rc" = 0 ]'
+  run_block "$undo_new" "$shell"; undo_new_rc="$rc"
+  assert "$shell undo: all parts exit 0" '[ "$undo_contract_rc" = 0 ] && [ "$undo_plan_rc" = 0 ] && [ "$undo_new_rc" = 0 ]'
+  assert "$shell undo: the new section of the write-back is gone" '! grep -qxF "## Health checks" "$CONTRACT"'
   assert "$shell undo I2: the edit of task B stays" 'section_of "$CONTRACT" Interfaces | grep -qF "B edit text."'
   assert "$shell undo I2: the write-back text of task A is gone" '! grep -qF "A write-back text." "$CONTRACT"'
   assert "$shell undo: the plan item is back" 'grep -qxF "## $weird_heading" "$contract_folder/plan.md"'
@@ -217,6 +229,16 @@ for shell in $test_shells; do
   printf '\nThe retry wrote the draft again with new words.\n' >>"$task/decisions.writeback/serve-health.md"
   run_block "$(filled_block decisions "$task" "" 0)" "$shell"
   assert "$shell decisions A2-29: a retry keeps the id and makes no copy ($out)" '[ "$rc" = 0 ] && [ ! -e "$contract_folder/decisions/0003-serve-health.md" ] && printf "%s\n" "$out" | grep -qxF "decision file: $contract_folder/decisions/0002-serve-health.md"'
+
+  echo "$shell: write-back decisions whose slugs end alike"
+  setup_world "slugs-$shell"
+  task="$VAULT/Tasks/task-t"; write_brief "$task" '[]'; mkdir -p "$task/decisions.writeback"
+  for slug in auth-token token; do
+    printf -- '---\nid: "{{id}}"\ntask: "[[Tasks/task-t/spec]]"\n---\n\n# {{id}} %s\n' "$slug" >"$task/decisions.writeback/$slug.md"
+  done
+  run_block "$(filled_block decisions "$task" "" 0)" "$shell"
+  assert "$shell decisions: auth-token and token each get a file ($out)" '[ "$rc" = 0 ] && [ -f "$contract_folder/decisions/0001-auth-token.md" ] && [ -f "$contract_folder/decisions/0002-token.md" ]'
+  assert "$shell decisions: each file is printed once" '[ "$(printf "%s\n" "$out" | grep -c "^decision file: ")" = 2 ] && printf "%s\n" "$out" | grep -qxF "decision file: $contract_folder/decisions/0002-token.md"'
 
   echo "$shell: Contract files twice"
   setup_world "files-$shell"

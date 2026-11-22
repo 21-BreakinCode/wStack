@@ -61,7 +61,8 @@ assert "contract task: the file list has a command" 'has "$write_part" "ls-tree 
 assert "contract task: a failed fetch has a rule" 'has "$write_part" "If the fetch fails, tell the user the stderr text."'
 assert "contract task: existing project asks no section question and lists what to read" 'has "$write_part" "ask no section question" && has "$write_part" "code areas to read under"'
 assert "existing contract project never writes None under Contract changes" 'has "$write_part" "For an existing \`contract\` project, list the team docs and the code areas to read. A \`contract\` task never writes \`None\` here."'
-assert "a work_type change runs the gate again" 'printf "%s\n" "$write_part" | grep "^3\. " | grep -qF "run \"Contract gate\" again from G1"'
+assert "a work_type change runs the gate again, then step 1" 'printf "%s\n" "$write_part" | grep "^3\. " | grep -qF "run \"Contract gate\" again from G1, and go back to step 1."'
+assert "G5: set up the contract first is a gate stop" 'has "$g5_part" "the reason \`contract gate: set up the contract first\`"'
 assert "spec page puts the gate patch right after the title line" 'has "$show_part" "right after the title line, under the heading \`# Contract changes from the gate\`"'
 
 # After approval, step 9
@@ -76,7 +77,9 @@ assert "step 9: set-verified uses checked_commit" 'printf "%s\n" "$step9_part" |
 assert "step 9 reads stale_sections before set-verified" 'has "$step9_part" "fm_get \"\$task_dir/contract-brief.md\" stale_sections"'
 assert "step 9: gate snapshots are contract.before.md and plan.before.md" 'has "$step9_part" "cp \"\$contract_file\" \"\$task_dir/contract.before.md\"" && has "$step9_part" "\"\$task_dir/plan.before.md\""'
 assert "step 9: a missing plan.md skips the plan lines" 'has "$step9_part" "or \`plan.md\` is not in the contract folder, skip the plan lines"'
-assert "step 9: run-log gets the undo of the contract part" 'has "$step9_part" "with the undo of the contract part:" && has "$step9_part" "contract.before.md'"'"' --sections"'
+assert "step 9: run-log gets the undo of the contract part" 'has "$step9_part" "The old-section command:" && has "$step9_part" "contract.before.md'"'"' --sections"'
+assert "step 9: the undo deletes new sections and restores verified_commit" 'has "$step9_part" "The new-section command, once for each name that a warning named:" && has "$step9_part" "add the commit command:" && has "$step9_part" "fm_get '"'"'<task folder>/contract.before.md'"'"' verified_commit"'
+assert "step 9: both undo lines say how to pass a name with a comma" '[ "$(printf "%s\n" "$step9_part" | grep -cF "If a name holds a comma, give every name as its own \`--section '"'"'<name>'"'"'\` flag in place of \`--sections\`.")" = 2 ]'
 assert "step 9: run-log gets the undo of the plan part" 'has "$step9_part" "with the undo of the plan part:"'
 
 # Verify
@@ -94,6 +97,7 @@ for needle in 'contract-brief.md' 'contract.patch.md' '=== PATCH ===' 'pending-a
 done
 assert "write-back: None patch still writes decisions" 'has "$writeback_part" "Decisions do not depend on the patch"'
 assert "write-back: decision files are written under the lock" 'has "$writeback_part" "next-decision-id \"\$decisions_dir\""'
+assert "write-back: the reuse glob needs a 4-digit id before the slug" 'has "$writeback_part" "\"\$decisions_dir\"/[0-9][0-9][0-9][0-9]-\"\$(basename \"\$draft\")\""'
 assert "write-back: a retry reuses the decision file of the same slug and task" 'has "$writeback_part" "grep -qF \"/\$(basename \"\$task_dir\")/spec]]\"" && has "$writeback_part" "so a retry makes no second copy"'
 assert "decision template links the tasks folder" 'grep -qF "task: \"[[{{tasks_dir}}/{{task_id}}/spec]]\"" "$decision_template"'
 
@@ -117,6 +121,8 @@ assert "MERGED: undo leaves out a part without names" 'has "$merged_part" "leave
 assert "MERGED: write-back snapshots have their own names" 'has "$merged_part" "\"\$task_folder/contract.writeback.before.md\"" && has "$merged_part" "\"\$task_folder/plan.writeback.before.md\"" && ! has "$pending_part" "task_folder/contract.before.md"'
 assert "MERGED: write-back undo names its own snapshot" 'has "$merged_part" "<task folder>/contract.writeback.before.md'"'"' --sections"'
 assert "CLOSED: decision files of the task are withdrawn and logged" 'has "$closed_part" "fm_set \"\$decision_file\" status withdrawn" && has "$closed_part" "For each \`decision withdrawn:\` line, write a \`step\` line in \`run-log.md\`"'
+assert "pending: a stuck item can be dropped without withdrawing decisions" 'has "$pending_part" "If the user says to drop the item, run \`pending-remove\` for its pull request" && has "$pending_part" "Do not withdraw its decisions."'
+assert "MERGED: the undo deletes a section that apply added as new" 'has "$merged_part" "add the new-section part \`bash '"'"'<scripts>/contract-edit.sh'"'"' delete-section"'
 assert "pending: a new section has a warning, not an impossible exit 2" 'has "$pending_part" "prints a warning on stderr that names the section" && ! has "$pending_part" "If \`apply\` exits 2"'
 
 # Each lock block runs in one shell: it needs set -e and a trap that unlocks.
@@ -158,7 +164,7 @@ done
 assert "Contract files: <workspace_cwd> has a source" 'has "$files_part" "\`<workspace_cwd>\` is the \`workspace_cwd\` value in the spec frontmatter."'
 assert "Contract files: decisions are checked before the first change" '[ "$(line_in "$files_part" "already exists in decisions/")" -lt "$(line_in "$files_part" "cp \"\$contract_file\" \"\$task_dir/contract.before.md")" ]'
 assert "Contract files: the clash check compares ids" 'has "$files_part" "for same_id in \"\$contract_folder/decisions/\${draft_name%%-*}\"-*; do"'
-assert "Contract files: copied decisions are listed and the undo deletes only those" 'has "$files_part" ">>\"\$task_dir/decisions.copied.txt\"" && has "$files_part" "the decision files named in <task folder>/decisions.copied.txt"'
+assert "Contract files: copied decisions are listed and the undo deletes only those" 'has "$files_part" ">>\"\$task_dir/decisions.copied.txt\"" && has "$files_part" "the files in <contract folder>/decisions/ that <task folder>/decisions.copied.txt names"'
 assert "Contract files: the undo deletes the archive folder" 'has "$files_part" "then delete the folder <contract folder>/_archive/<task_id>/"'
 assert "Contract files: the text says the glob skips dot files" 'has "$files_part" "The \`*\` glob skips dot files"'
 assert "Contract files: contract.before.md is write-once" 'has "$files_part" "[ -f \"\$task_dir/contract.before.md\" ] || cp"'
@@ -182,12 +188,14 @@ for section in 'Team docs' Consumers Gotchas 'Open questions'; do
 done
 assert "README states the sources rule of Ruling 4" 'grep -qF "Abilities, Interfaces, and Depends on each have a \`<!-- sources: -->\` comment" "$repo_root/README.md"'
 assert "design doc states the sources rule of Ruling 4" 'grep -qF "Every section except \`Team docs\`, \`Consumers\`, \`Gotchas\`, and \`Open questions\` has a \`sources\` comment." "$repo_root/docs/superpowers/specs/2026-11-21-contract-gate-design.md"'
-assert "spec.md layout lists the lib scripts" 'grep -qF "lib/frontmatter.sh" "$repo_root/docs/spec.md" && grep -qF "lib/herdr.sh" "$repo_root/docs/spec.md"'
+assert "spec.md layout lists the lib scripts" 'grep -qF "lib/frontmatter.sh         fm_get, fm_set, fm_append, fm_to_json:" "$repo_root/docs/spec.md" && grep -qF "lib/herdr.sh" "$repo_root/docs/spec.md"'
+assert "design doc names the withdrawn edit of a decision file" 'grep -qF "the gate sets the file'"'"'s \`status\` to \`withdrawn\`." "$repo_root/docs/superpowers/specs/2026-11-21-contract-gate-design.md" && grep -qF "Closed without a merge: drop the patch, set the \`status\` of the task'"'"'s decision files to \`withdrawn\`" "$repo_root/docs/superpowers/specs/2026-11-21-contract-gate-design.md"'
 assert "spec.md: contract writes are a note, not an approval rule" '! grep -qF "6. Writing the contract." "$repo_root/docs/spec.md" && grep -qxF "A contract write needs no new approval. The approved spec covers the gate'"'"'s contract update, and the write after a merge. A \`contract\` task covers \`write the contract files\` as a deliver target. Every write takes the lock folder \`<contract>.lock\`. A busy lock stops the task, and the agent never writes without the lock." "$repo_root/docs/spec.md"'
 
 # Evals for these flows. Each one needs the contract world and a grader.
 for eval_name in confirm-stale-contract contract-absorb-existing deliver-contract-pending verify-contract-mismatch gate-applies-merged-patch; do
   assert "eval $eval_name builds the contract world" 'grep -qF "__FIXTURES__/contract/setup.sh" "$repo_root/evals/$eval_name/prompt.md"'
+  assert "eval $eval_name allows the Agent tool" 'grep "^allowed_tools:" "$repo_root/evals/$eval_name/prompt.md" | grep -qF "Agent"'
   assert "eval $eval_name has a grader" 'ls "$repo_root/evals/$eval_name/graders/"*.md >/dev/null 2>&1'
 done
 assert "deliver-contract-pending grader gives the real reason for the unchanged body" 'grep -qF "because the contract gate does not run again after Deliver" "$repo_root/evals/deliver-contract-pending/graders/patch-and-pending.md"'
