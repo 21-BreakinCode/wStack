@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Usage: collect-week.sh --vault <abs> --tasks-dir <rel> [--days 7] [--today YYYY-MM-DD]
-# Prints a JSON array, one object per task folder dated today or in the --days - 1 days before (frontmatter only).
+# Prints a JSON array, one object per task folder dated today or in the --days - 1 days before (frontmatter, retro-note flag, transcript stats).
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -35,10 +35,23 @@ for folder in "$vault/$tasks_dir"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*/;
   task_id="$(basename "$folder")"
   task_date="${task_id:0:10}"
   { [[ "$task_date" > "$cutoff" || "$task_date" = "$cutoff" ]] && [[ "$task_date" < "$today" || "$task_date" = "$today" ]]; } || continue
+  has_retro_note=false
+  [ -f "$folder/retro-note.md" ] && has_retro_note=true
+  transcript_stats=null
+  session_ids=()
+  while IFS= read -r session_id; do
+    [ -n "$session_id" ] && session_ids+=("$session_id")
+  done < <(frontmatter_or_empty "$folder/spec.md" | jq -r '.session_ids[]? // empty')
+  if [ "${#session_ids[@]}" -gt 0 ]; then
+    transcript_stats="$(bash "$script_dir/transcript-stats.sh" "${session_ids[@]}")"
+  fi
   jq -n --arg task_id "$task_id" --arg folder "$folder" \
     --argjson spec "$(frontmatter_or_empty "$folder/spec.md")" \
     --argjson run_log "$(frontmatter_or_empty "$folder/run-log.md")" \
     --argjson review "$(frontmatter_or_empty "$folder/review.md")" \
     --argjson report "$(frontmatter_or_empty "$folder/report.md")" \
-    '{task_id: $task_id, folder: $folder, spec: $spec, run_log: $run_log, review: $review, report: $report}'
+    --argjson has_retro_note "$has_retro_note" \
+    --argjson transcript_stats "$transcript_stats" \
+    '{task_id: $task_id, folder: $folder, spec: $spec, run_log: $run_log, review: $review, report: $report,
+      has_retro_note: $has_retro_note, transcript_stats: $transcript_stats}'
 done | jq -s '.'
