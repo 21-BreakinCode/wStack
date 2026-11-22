@@ -94,7 +94,8 @@ is_read_only_segment() {  # <segment>
     for) [[ "${words[*]}" =~ ^for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in([[:space:]]|$) ]]; return ;;
   esac
   case "$word" in
-    cat|head|tail|grep|wc|ls|file|stat|diff|nl) return 0 ;;
+    file) for word in "${words[@]}"; do word="${word//[\'\"\\]/}"; [[ ( "$word" == -*C* && "$word" != --* ) || "$word" == --compile* ]] && return 1; done; return 0 ;;
+    cat|head|tail|grep|wc|ls|stat|diff|nl) return 0 ;;
     git)
       words=("${words[@]:1}")
       while [ "${#words[@]}" -gt 0 ]; do
@@ -102,7 +103,9 @@ is_read_only_segment() {  # <segment>
           -C) words=("${words[@]:2}") ;;
           --no-pager|-P|--no-optional-locks) words=("${words[@]:1}") ;;
           -*) return 1 ;;  # other global options take a separate value or set config
-          diff|show|log|blame|status) return 0 ;;
+          diff|show|log|blame|status)  # --output=FILE writes a file
+            for word in "${words[@]}"; do word="${word//[\'\"\\]/}"; [[ "$word" == --output* ]] && return 1; done
+            return 0 ;;
           *) return 1 ;;
         esac
       done ;;

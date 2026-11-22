@@ -123,6 +123,12 @@ check pass 'grep -rn "gh pr merge" .'
 check pass 'git -C /tmp log --oneline -- scripts/evidence-delete.sh'
 check pass 'for f in scripts/evidence-delete.sh; do cat "$f"; done'
 check pass 'cat scripts/evidence-delete.sh | head -5'
+check ask  "git diff --output=scripts/evidence-delete.sh"
+check ask  "git log -1 '--output=x' scripts/evidence-delete.sh"
+check ask  "file -C -m scripts/evidence-delete.sh"
+check ask  "file -bC scripts/evidence-delete.sh"
+check pass "file scripts/evidence-delete.sh"
+check pass "git diff --stat -- scripts/evidence-delete.sh"
 check ask  'rg "npm publish" docs'
 check ask  "sed -n 'e gh pr merge 5' f"
 check ask  "sed -n 's/.*/gh pr merge 5/e' f"
