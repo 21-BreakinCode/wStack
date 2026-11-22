@@ -5,6 +5,7 @@ set -euo pipefail
 plugin_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/wstack-live.XXXXXX")"
 trap 'rm -rf "$work_dir"' EXIT
+unset HERDR_ENV  # never ask the live herdr session
 fail_count=0
 check() { # check <description> <exit-status-of-condition>
   if [ "$2" -eq 0 ]; then echo "PASS: $1"; else echo "FAIL: $1"; fail_count=$((fail_count + 1)); fi

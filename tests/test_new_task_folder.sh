@@ -6,6 +6,7 @@ source "$repo_root/scripts/lib/frontmatter.sh"
 script="$repo_root/scripts/new-task-folder.sh"
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
+unset HERDR_ENV  # never ask the live herdr session
 vault="$work_dir/My Vault"
 mkdir -p "$vault"
 
