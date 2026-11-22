@@ -31,33 +31,26 @@ In this file `$vault` is the vault path, `$tasks_dir` is the tasks folder, `$tod
 
 This part never stops the retro. It runs after step 4 and before step 5. If `$questions` has no `### Q<n> <task id>` entry, go on to step 5 with no answers. Otherwise do the rest.
 
-Set `$answers` to `mktemp "${TMPDIR:-/tmp}/retro-answers.XXXXXX"`. Each `### Q<n> <task id>` entry can hold several `- Question:` lines. For each task id in `$questions`, do R1 to R5 once, with all the entries of that task in one prompt.
+Set `$answers` to `mktemp "${TMPDIR:-/tmp}/retro-answers.XXXXXX"`. Read it, then write it with the Write tool. Never write the text of an RD reply with a Bash heredoc. Each `### Q<n> <task id>` entry can hold several `- Question:` lines. For each task id in `$questions`, do R1 to R5 once, with all the entries of that task in one prompt.
 
 R1. Read `session_ids` and `workspace_cwd` from `spec.md` in the `folder` of that task in `$data`. Take the last id in `session_ids`. Run `source "$scripts/lib/transcripts.sh"; session_id_ok "<id>"; transcript_main_files "<id>"`. If the id is not valid or no transcript is found, the answer is `not reachable: no transcript`. Go on to the next task.
 R2. Set `$fork_dir` to `workspace_cwd`. If `workspace_cwd` is empty, use the current folder. If `$fork_dir` does not exist, run `mkdir -p "$fork_dir"` and note that this step created it. The spike showed that a resume works from a folder that was created again empty.
-R3. Set `$prompt_file` to `mktemp "${TMPDIR:-/tmp}/retro-prompt.XXXXXX"`. Write the prompt into it with the Write tool. Never put the prompt on a command line, because it can hold words that the guard hook stops on. The prompt holds the `### Q<n> <task id>` entries of that task and these rules. Answer under each Q id. Answer from what you remember and from the files. Change nothing. If you do not know, say "I do not know".
-R4. Run the fork with a timeout of 10 minutes. The prompt comes first, because `--tools` takes many values and a prompt after it becomes a tool name. `--strict-mcp-config` keeps MCP tools out of the fork. `--no-session-persistence` leaves no transcript of the fork. The fork leaves the original session as it was. The stdout of the fork is the answer.
+R3. Set `$prompt_file` to `mktemp "${TMPDIR:-/tmp}/retro-prompt.XXXXXX"`. Read it, then write the prompt into it with the Write tool. Start the prompt with the fixed line `Questions from the weekly retro:`, so that its first character is never `-`. Never put the prompt on a command line, because it can hold words that the guard hook stops on. The prompt holds the `### Q<n> <task id>` entries of that task and these rules. Answer under each Q id. Answer from what you remember and from the files. Change nothing. If you do not know, say "I do not know".
+R4. Run the fork with the Bash tool timeout set to `600000` (10 minutes). Do not use the `timeout` command, because macOS has none. The prompt comes first, because `--tools` takes many values and a prompt after it becomes a tool name. `--strict-mcp-config` keeps MCP tools out of the fork. `--no-session-persistence` leaves no transcript of the fork. The fork leaves the original session as it was. The stdout of the fork is the answer. The subshell keeps the `cd` from changing the folder of later steps.
 
    ```bash
-   cd "$fork_dir" && env -u HERDR_ENV -u HERDR_WORKSPACE_ID -u HERDR_TAB_ID -u HERDR_PANE_ID \
-     claude -p "$(cat "$prompt_file")" --resume <id> --fork-session --tools Read,Grep,Glob --strict-mcp-config --no-session-persistence </dev/null
+   ( cd "$fork_dir" && env -u HERDR_ENV -u HERDR_WORKSPACE_ID -u HERDR_TAB_ID -u HERDR_PANE_ID \
+     claude -p "$(cat "$prompt_file")" --resume <id> --fork-session --tools Read,Grep,Glob --strict-mcp-config --no-session-persistence </dev/null )
    ```
 
-   If the call fails, the answer is the first line of its stderr, and it is an error line. Go on.
+   If the call fails, the answer is the first line of its stderr, and it is an error line. If the call times out, the answer is `not reachable: timeout`. If it exits with empty stderr and no output, the answer is `not reachable: no output`. Go on.
 R5. If R2 created `$fork_dir`, run `rmdir "$fork_dir"`. Remove the prompt file. Go on to the next task.
 
 Write one entry per `### Q<n> <task id>` to `$answers`, in the shape of `## RD answers` in step 5. If at least one fork reply exists (an error line does not count), dispatch `wstack:retro-analyst` a second time. Give it the path `$data`, the path `$answers`, and the proposals of the first run. It revises the proposals with the answers, and it asks no new question. Its reply replaces `$proposals`.
 
 ## Save the retro file
 
-5. Write `$retro_dir/$retro_name.md` with this shape. Paste `$proposals` under `## Proposals` as it is. If `$answers` has entries, paste them under `## RD answers`. With no entry, leave out `## RD answers`. Each entry has this shape. Quote the whole reply with `>` on every line, so that a `##` heading in a reply cannot split the file.
-
-```
-### Q<n> <task id>
-- Question: <the question text>
-- Answer:
-  > <the reply, or the error line>
-```
+5. Write `$retro_dir/$retro_name.md` with this shape. Paste `$proposals` under `## Proposals` as it is. If `$answers` has entries, paste them under `## RD answers`. With no entry, leave out `## RD answers`. Quote the whole reply with `>` on every line, so that a `##` heading in a reply cannot split the file.
 
 ```
 # Retro <week>
@@ -75,6 +68,15 @@ Tasks read: <count>, from the 7 days up to <today>.
 ## Applied
 
 None yet.
+```
+
+Each entry under `## RD answers` has this shape.
+
+```
+### Q<n> <task id>
+- Question: <the question text>. This line can repeat.
+- Answer:
+  > <the reply, or the error line>
 ```
 
 6. Run `bash "$scripts/render-page.sh" "$retro_dir/$retro_name.md" "$retro_dir/$retro_name.html"`.
