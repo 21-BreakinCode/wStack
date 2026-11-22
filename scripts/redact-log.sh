@@ -20,7 +20,8 @@ counter_names='[A-Za-z0-9_-]*(tokens|count)'
 mark=$'\001'
 number_end='([^0-9.eE]|$)'
 LC_ALL=C sed -E \
-  -e "s/(^|[^A-Za-z0-9_-])((${counter_names}|token))([[:space:]]*:[[:space:]]*[0-9]{1,6}([[:space:]]+[A-Za-z]+)?[[:space:]]*\$)/\1\2${mark}\5/I" \
+  -e "s/(^|[^A-Za-z0-9_-])(${counter_names})([[:space:]]*:[[:space:]]*[0-9]{1,6}([[:space:]]+[A-Za-z]+)?[[:space:]]*\$)/\1\2${mark}\4/I" \
+  -e "s/(^|[^A-Za-z0-9_-])(token)([[:space:]]*:[[:space:]]*[0-9]{1,6}[[:space:]]+[A-Za-z]+[[:space:]]*\$)/\1\2${mark}\3/I" \
   -e "s/([?&;#[:space:]\"](${counter_names}))(=[0-9]{1,6}([&[:space:]\"']|\$))/\1${mark}\4/Ig" \
   -e "s/([?&;#[:space:]\"](${counter_names}))(=[0-9]{1,6}([&[:space:]\"']|\$))/\1${mark}\4/Ig" \
   -e "s/(\"(${counter_names})\")([[:space:]]*:[[:space:]]*[0-9]{1,6}${number_end})/\1${mark}\4/Ig" \

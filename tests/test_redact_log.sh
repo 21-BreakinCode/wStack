@@ -65,6 +65,7 @@ cat > "$work_dir/num.log" <<'LOG'
 GET /x?max_tokens=4096&input_tokens=1200&token=abc99
 Token: 5 requests
 Token: 1234567
+token: 482913
 {"max_tokens": 4096, "input_tokens":1200, "accessToken": 12345678, "secret": true, "password": 1234567.5}
 {"usage":{"input_tokens": 1200,"token_count": 7,"token": 7}}
 ?token=1234567&access_token=12&token_count=12
@@ -74,7 +75,7 @@ num_out="$(cat "$work_dir/num.out")"
 for kept in "max_tokens=4096" "input_tokens=1200" "Token: 5 requests" '"max_tokens": 4096' '"input_tokens":1200' '"input_tokens": 1200' '"token_count": 7' "token_count=12"; do
   assert "short counter kept: $kept" '[[ "$num_out" == *"$kept"* ]]'
 done
-for gone in abc99 1234567 12345678 true '"token": 7' "access_token=12"; do
+for gone in abc99 482913 1234567 12345678 true '"token": 7' "access_token=12"; do
   assert "value removed: $gone" '[[ "$num_out" != *"$gone"* ]]'
 done
 assert "json number secret becomes a string" '[[ "$num_out" == *"\"accessToken\": \"[REDACTED]\""* ]]'

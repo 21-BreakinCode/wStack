@@ -91,6 +91,10 @@ assert "P2 removed" "! grep -q 'P2 Redis cache' '$plan' && ! grep -qx y '$plan'"
 assert "P1 and P3 kept" "grep -q '## P1 Base' '$plan' && grep -q '## P3 Docs' '$plan'"
 rc=0; bash "$edit" delete-section "$plan" "P9 none" || rc=$?
 assert "missing section exits 1" "[ $rc -eq 1 ]"
+locked="$work/locked"; mkdir "$locked"; cp "$plan" "$locked/plan.md"; chmod 555 "$locked"
+rc=0; bash "$edit" delete-section "$locked/plan.md" "P1 Base" 2>/dev/null || rc=$?
+chmod 755 "$locked"
+assert "write failure exits 2, not the no-section 1" "[ $rc -eq 2 ] && grep -q 'P1 Base' '$locked/plan.md'"
 
 echo "pending and verified"
 write_contract

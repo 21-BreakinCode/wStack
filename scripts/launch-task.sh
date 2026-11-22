@@ -43,8 +43,7 @@ if [ "${HERDR_ENV:-}" != 1 ]; then  # this session does the work in session_cwd
     task_branch="wstack/${task_id:11}"
     if [ ! -e "$session_cwd/.git" ]; then
       mkdir -p "$HOME/.wstack/tasks"
-      worktree_output="$(git -C "$repo_path" worktree add -b "$task_branch" "$session_cwd" 2>&1 \
-        || git -C "$repo_path" worktree add "$session_cwd" "$task_branch" 2>&1)" \
+      worktree_output="$(git -C "$repo_path" worktree add -b "$task_branch" "$session_cwd" 2>&1)" \
         || cancel_and_fail "could not create worktree: $worktree_output" 6
     fi
   fi

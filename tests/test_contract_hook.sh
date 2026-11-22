@@ -29,12 +29,14 @@ assert "session start, stale: section" '[[ "$context" == *"Stale: Interfaces"* ]
 out="$(hook PostToolUse "$REPO" "git pull --ff-only")"
 assert "after git pull" '[ "$(printf "%s" "$out" | jq -r .hookSpecificOutput.hookEventName)" = PostToolUse ] && [ "$(printf "%s\n" "$out" | wc -l | tr -d " ")" = 1 ]'
 
-for compound in "git pull;ls" "ls && git pull" "git -C $REPO pull" "git -c x=y rebase main|cat" "gh pr checkout 5"; do
+for compound in "git pull;ls" "ls && git pull" "git -C $REPO pull" "git -c x=y rebase main|cat" "gh pr checkout 5" "/usr/bin/git pull" "/opt/homebrew/bin/git -C $REPO merge x"; do
   out="$(hook PostToolUse "$REPO" "$compound")"
   assert "A1-12 matches: $compound" '[[ "$out" == *"Stale: Interfaces"* ]]'
 done
 out="$(hook PostToolUse "$REPO" "git pullx")"
 assert "A1-12 git pullx does not match" '[ -z "$out" ]'
+out="$(hook PostToolUse "$REPO" 'echo "git pull"')"
+assert "an echoed git pull does not match" '[ -z "$out" ]'
 
 space_repo="$work_dir/with space"; cp -R "$REPO" "$space_repo"
 out="$(hook SessionStart "$space_repo" "")"

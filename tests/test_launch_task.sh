@@ -65,6 +65,10 @@ assert "outside herdr, code: a second launch reuses the worktree" '[ "$rc" = 3 ]
 bad_code_dir="$(new_task outside-bad code)"
 rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$bad_code_dir" --repo-path "$work_dir/repo dir" >/dev/null 2>"$work_dir/err") || rc=$?
 assert "outside herdr, code: not a git repository exits 6 and cancels" '[ "$rc" = 6 ] && grep -q "could not create worktree" "$work_dir/err" && [ "$(fm_get "$bad_code_dir/spec.md" status)" = cancelled ]'
+git -C "$real_repo" branch wstack/left-over
+left_over_dir="$(new_task left-over code)"
+rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$left_over_dir" --repo-path "$real_repo" >/dev/null 2>"$work_dir/err") || rc=$?
+assert "outside herdr, code: a leftover wstack branch exits 6 and names the branch" '[ "$rc" = 6 ] && grep -q "wstack/left-over" "$work_dir/err" && [ ! -e "$HOME/.wstack/tasks/2026-11-18-left-over" ]'
 outside_contract_dir="$(new_task outside-contract contract)"
 rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$outside_contract_dir" --repo-path "$work_dir/repo dir" >/dev/null 2>&1) || rc=$?
 assert "outside herdr, contract: exit 3 sets workspace_cwd to the repository" '[ "$rc" = 3 ] && [ "$(fm_get "$outside_contract_dir/spec.md" workspace_cwd)" = "$work_dir/repo dir" ]'

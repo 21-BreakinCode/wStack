@@ -104,15 +104,15 @@ case "$subcommand" in
   delete-section)
     target_file="${1:?usage: contract-edit.sh delete-section <target_file> <heading>}"
     heading="${2:?usage: contract-edit.sh delete-section <target_file> <heading>}"
-    tmp_file="$(mktemp "$target_file.XXXXXX")"
+    tmp_file="$(mktemp "$target_file.XXXXXX")" || exit 2  # exit 1 means only "no section"
     found="$(DELETE_HEADING="$heading" awk -v out="$tmp_file" '
       { sub(/\r$/, "") }
       /^## / { name = substr($0, 4); sub(/[ \t]+$/, "", name); skipping = (name == ENVIRON["DELETE_HEADING"]); if (skipping) found = 1 }
       !skipping { print > out }
       END { print found + 0 }
-    ' "$target_file")"
+    ' "$target_file")" || { rm -f "$tmp_file"; exit 2; }
     if [ "$found" != 1 ]; then rm -f "$tmp_file"; echo "contract-edit.sh: no section: $heading" >&2; exit 1; fi
-    fm_replace "$tmp_file" "$target_file" ;;
+    fm_replace "$tmp_file" "$target_file" || { rm -f "$tmp_file"; echo "contract-edit.sh: could not write: $target_file" >&2; exit 2; } ;;
 
   pending-add)
     contract_file="${1:?usage: contract-edit.sh pending-add <contract_file> <pr> <task_id>}"

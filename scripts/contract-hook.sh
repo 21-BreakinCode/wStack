@@ -5,7 +5,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # git [-C dir | -c key=val]... <verb>, anywhere in a compound command; the verb ends at a space or ; & |
-git_pattern='(^|[;&|[:space:]])(git([[:space:]]+(-C|-c)[[:space:]]+[^[:space:]]+)*[[:space:]]+(pull|merge|rebase|switch|checkout|reset)|gh pr checkout)([[:space:];&|]|$)'
+git_pattern='(^|[;&|[:space:]])(([^[:space:]]*/)?git([[:space:]]+(-C|-c)[[:space:]]+[^[:space:]]+)*[[:space:]]+(pull|merge|rebase|switch|checkout|reset)|gh pr checkout)([[:space:];&|]|$)'
 
 vault="${WSTACK_VAULT_PATH:-${CLAUDE_PLUGIN_OPTION_VAULT_PATH:-}}"
 [ -n "$vault" ] || exit 0
