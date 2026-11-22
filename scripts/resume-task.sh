@@ -9,6 +9,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 source "$script_dir/lib/frontmatter.sh"
 source "$script_dir/lib/herdr.sh"
+source "$script_dir/lib/transcripts.sh"
 fail() { echo "resume-task: $1" >&2; exit "${2:-1}"; }
 
 [ "${1:-}" = --task-dir ] && [ "$#" -eq 2 ] || fail "usage: resume-task.sh --task-dir <abs>"
@@ -35,12 +36,11 @@ abort_with_cleanup_hint() {  # <reason>
   echo "workspace $workspace_id is still open. To clean up: $(herdr_cli_prefix) workspace close $workspace_id" >&2
   exit 5
 }
-uuid_pattern='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 last_session_id=""
 session_ids_value="$(fm_get "$task_dir/spec.md" session_ids)"
 if [ -n "$session_ids_value" ]; then
   last_session_id="$(jq -r 'if type == "array" then (.[-1] // empty) else error("not an array") end' <<<"$session_ids_value" 2>/dev/null)" || last_session_id="bad"
-  if [ -n "$last_session_id" ] && ! [[ "$last_session_id" =~ $uuid_pattern ]]; then
+  if [ -n "$last_session_id" ] && ! session_id_ok "$last_session_id"; then
     echo "resume-task: session_ids is not a list of session ids, using --continue: $session_ids_value" >&2
     last_session_id=""
   fi

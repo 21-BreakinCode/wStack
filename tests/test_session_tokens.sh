@@ -37,4 +37,31 @@ assert "unknown cwd prints nothing" '[ -z "$out" ]'
 
 status=0; out="$(bash "$script")" 2>/dev/null || status=$?
 assert "no argument exits 2" '[ "$status" -eq 2 ]'
+
+# --session mode: lookup by session id across project folders, subagents apart.
+id_a=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa; id_b=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb; id_c=cccccccc-cccc-cccc-cccc-cccccccccccc
+other_dir="$HOME/.claude/projects/-other-project"
+mkdir -p "$other_dir"
+usage_line() { echo "{\"message\":{\"id\":\"$1\",\"usage\":{\"input_tokens\":$2,\"output_tokens\":0}}}"; }
+usage_line ma 100 > "$project_dir/$id_a.jsonl"
+usage_line mb 10 > "$project_dir/$id_b.jsonl"
+usage_line mc 5 > "$other_dir/$id_c.jsonl"
+
+out="$(bash "$script" --session "$id_a")"
+assert "--session prints main total then 0 without subagents" '[ "$out" = "$(printf "100\n0")" ]'
+out="$(bash "$script" --session "$id_a" --session "$id_c")"
+assert "--session sums ids across project folders" '[ "$out" = "$(printf "105\n0")" ]'
+
+mkdir -p "$project_dir/$id_a/subagents"
+usage_line sx 3 > "$project_dir/$id_a/subagents/agent-x.jsonl"
+usage_line sx 7 >> "$project_dir/$id_a/subagents/agent-x.jsonl"
+out="$(bash "$script" --session "$id_a")"
+assert "subagent total is line 2, repeated message id counts once, line 1 unchanged" '[ "$out" = "$(printf "100\n7")" ]'
+
+status=0; out="$(bash "$script" --session dddddddd-dddd-dddd-dddd-dddddddddddd)" || status=$?
+assert "unknown session id exits 2" '[ "$status" -eq 2 ]'
+assert "unknown session id prints nothing" '[ -z "$out" ]'
+status=0; out="$(bash "$script" --session not-a-uuid 2>/dev/null)" || status=$?
+assert "bad session id exits 2" '[ "$status" -eq 2 ]'
+assert "bad session id prints nothing" '[ -z "$out" ]'
 finish

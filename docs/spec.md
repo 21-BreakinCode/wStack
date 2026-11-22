@@ -240,6 +240,7 @@ ended_at:
 retries: 0
 stopped_for_user: []       # stop items, shape in skills/start-task/SKILL.md
 tokens_used:               # see section 17, item 1
+subagent_tokens:           # tokens of the subagents of the task's sessions; tokens_used counts only the main sessions
 ---
 ```
 
