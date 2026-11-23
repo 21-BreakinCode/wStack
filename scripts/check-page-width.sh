@@ -28,6 +28,8 @@ trap cleanup EXIT
 port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')" || { echo "check-page-width: could not pick a port" >&2; exit 2; }
 python3 -m http.server --bind 127.0.0.1 --directory "$page_dir" "$port" >/dev/null 2>&1 &
 server_pid=$!
+# Without disown, bash prints a "Terminated" job notice into the output when cleanup kills the server.
+disown "$server_pid"
 
 server_up=false
 for _ in 1 2 3 4 5 6 7 8 9 10; do
