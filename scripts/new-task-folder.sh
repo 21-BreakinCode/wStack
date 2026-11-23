@@ -41,8 +41,9 @@ mkdir -p "$tasks_root"
 
 candidate_slug="$slug"
 attempt=1
-# A slug is taken by a folder of any date or by a live herdr agent: the slug is also the agent name and the branch name.
+# A slug is taken by a folder of any date, archived or not, or by a live herdr agent: the slug is also the agent name and the branch name.
 until [ -z "$(find "$tasks_root" -maxdepth 1 -name "????-??-??-$candidate_slug" -print -quit)" ] \
+  && [ -z "$(find "$tasks_root/_archive" -mindepth 2 -maxdepth 2 -name "????-??-??-$candidate_slug" -print -quit 2>/dev/null)" ] \
   && { [ "${HERDR_ENV:-}" != 1 ] || ! herdr_cmd agent get "$candidate_slug" >/dev/null 2>&1; } \
   && mkdir "$tasks_root/$date_stamp-$candidate_slug" 2>/dev/null; do
   attempt=$((attempt + 1))

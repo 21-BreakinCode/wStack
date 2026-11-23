@@ -27,7 +27,7 @@ stop_part="$(slice "$confirmation" '## After a stop' '## Approval scope')"
 g1_line="$(printf '%s\n' "$gate_part" | grep '^G1\. ')"
 g3_line="$(printf '%s\n' "$gate_part" | grep '^G3\. ')"
 g5_part="$(slice "$confirmation" 'G5. ' 'G6. ')"
-verify_step3="$(grep '^3\. Final review' "$verify")"
+verify_final_review="$(grep '^4\. Final review' "$verify")"
 files_part="$(slice "$deliver" '### Contract files' '## Contract write-back')"
 writeback_part="$(slice "$deliver" '## Contract write-back' '## Targets that need approval')"
 pending_part="$(sed -n '/^## Pending items/,$p' "$deliver")"
@@ -84,10 +84,10 @@ assert "step 9: both undo lines say how to pass a name with a comma" '[ "$(print
 assert "step 9: run-log gets the undo of the plan part" 'has "$step9_part" "with the undo of the plan part:"'
 
 # Verify
-assert "verify step 3 passes the contract path to the reviewer" 'has "$verify_step3" "also give it the contract path"'
-assert "verify step 3 reads the gate state with fm_get" 'has "$verify_step3" "fm_get \"\$task_dir/contract-brief.md\" contract_file"'
-assert "verify step 3 names each file" 'has "$verify_step3" "If \`contract-brief.md\` does not exist" && has "$verify_step3" "If \`agents/reviewer.md\` is not there" && ! has "$verify_step3" "If the file"'
-assert "verify step 3 names file:line for contract work" 'has "$verify_step3" "file:line"'
+assert "verify final review passes the contract path to the reviewer" 'has "$verify_final_review" "also give it the contract path"'
+assert "verify final review reads the gate state with fm_get" 'has "$verify_final_review" "fm_get \"\$task_dir/contract-brief.md\" contract_file"'
+assert "verify final review names each file" 'has "$verify_final_review" "If \`contract-brief.md\` does not exist" && has "$verify_final_review" "If \`agents/reviewer.md\` is not there" && ! has "$verify_final_review" "If the file"'
+assert "verify final review names file:line for contract work" 'has "$verify_final_review" "file:line"'
 
 # Deliver: Contract write-back
 assert "deliver has Contract write-back heading" 'grep -qxF "## Contract write-back" "$deliver"'

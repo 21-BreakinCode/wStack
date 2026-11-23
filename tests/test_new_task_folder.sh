@@ -18,6 +18,7 @@ for name in spec run-log review report; do
 done
 assert "no placeholder left" '! grep -rq "{{" "$folder"'
 assert "status drafting" '[ "$(fm_get "$folder/spec.md" status)" = "drafting" ]'
+assert "spec has the empty retro_read key" 'grep -qx "retro_read:" "$folder/spec.md"'
 assert "mobile false" '[ "$(fm_get "$folder/spec.md" mobile)" = "false" ]'
 assert "work_type default code" '[ "$(fm_get "$folder/spec.md" work_type)" = "code" ]'
 assert "created_at format" '[[ "$(fm_get "$folder/spec.md" created_at)" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}[+-][0-9]{2}:[0-9]{2}$ ]]'
@@ -88,8 +89,13 @@ long_out="$(agent_run 1 "${long:0:32}" "${long:0:32}")"
 assert "suffix keeps the slug at 32 characters" '[ "${long_out##*/}" = "2026-11-18-${long:0:30}-2" ]'
 assert "outside herdr a taken agent name is ignored" '[ "$(agent_run "" "agent-out" agent-out)" = "$vault/Workflow/Tasks/2026-11-18-agent-out" ]'
 
+mkdir -p "$vault/Workflow/Tasks/_archive/2026-W45/2026-11-01-dup"
+archived_dup="$(bash "$script" --vault "$vault" --tasks-dir Workflow/Tasks --slug dup --date 2026-11-18 | tail -n 1)"
+assert "an archived folder takes the slug" '[[ "$archived_dup" = *-dup-2 ]]'
+
 headings="$(grep '^## ' "$folder/spec.md" | tr '\n' '|')"
-assert "spec has seven sections in order" '[ "$headings" = "## Goal|## Scope|## Verification plan|## Non-undoable steps|## Deliver targets|## Contract changes|## Decisions|" ]'
+assert "spec Moves and renames defaults to None" '[ "$(awk "/^## Moves and renames\$/{getline; getline; print; exit}" "$folder/spec.md")" = "None" ]'
+assert "spec has eight sections in order" '[ "$headings" = "## Goal|## Scope|## Moves and renames|## Verification plan|## Non-undoable steps|## Deliver targets|## Contract changes|## Decisions|" ]'
 assert "contract template frontmatter" 'grep -qx "pending: \[\]" "$repo_root/templates/contract.md" && grep -qx "base_branch: {{base_branch}}" "$repo_root/templates/contract.md"'
 assert "plan template" '[ -f "$repo_root/templates/plan.md" ]'
 assert "decision template" 'grep -qx "status: accepted" "$repo_root/templates/decision.md"'

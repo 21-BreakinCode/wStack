@@ -35,6 +35,8 @@ fm_set "$step_folder/spec.md" created_at "$(date -v-3H +%Y-%m-%dT%H:%M:%S%z | se
 new_task done-here delivered >/dev/null
 new_task done-closed delivered >/dev/null
 new_task old-done delivered 2020-01-01 >/dev/null
+archived_folder="$(new_task arch-done delivered 2020-01-01)"
+mkdir -p "$vault/T/_archive/2026-W45" && mv "$archived_folder" "$vault/T/_archive/2026-W45/"
 new_task paused-none paused >/dev/null
 new_task herdr-error executing >/dev/null
 z_folder="$(new_task z-stamp executing)"
@@ -46,11 +48,52 @@ empty_goal="$(new_task empty-goal executing)"
 printf -- '---\ntask_id: %s\nstatus: executing\nworkspace_cwd:\ncreated_at: 2026-11-23T01:00:00+00:00\n---\n\n## Goal\n\n## Scope\n' "$(basename "$empty_goal")" > "$empty_goal/spec.md"
 rm -f "$empty_goal/run-log.md"
 
+git_quiet() { git -c user.name=t -c user.email=t@t "$@" >/dev/null 2>&1; }
+git init -q --bare -b main "$work_dir/origin.git"
+git clone -q "$work_dir/origin.git" "$work_dir/repo" 2>/dev/null
+printf 'old\n' > "$work_dir/repo/a.txt"; printf 'same\n' > "$work_dir/repo/c.txt"
+git_quiet -C "$work_dir/repo" add a.txt c.txt
+git_quiet -C "$work_dir/repo" commit -m base
+git_quiet -C "$work_dir/repo" push -u origin main
+git_quiet -C "$work_dir/repo" checkout -b task-branch
+printf 'new1\nnew2\n' > "$work_dir/repo/a.txt"; printf 'b\n' > "$work_dir/repo/b.txt"
+git_quiet -C "$work_dir/repo" add a.txt b.txt
+git_quiet -C "$work_dir/repo" commit -m task
+printf 'new3\n' >> "$work_dir/repo/a.txt"
+touch -t 202001010000 "$work_dir/repo/c.txt"  # same content, new time: a git diff would refresh and rewrite the index
+index_before="$(shasum "$work_dir/repo/.git/index")"
+mkdir -p "$work_dir/plain-folder"
+changes_folder="$(new_task changes-one executing)"; fm_set "$changes_folder/spec.md" workspace_cwd "$work_dir/repo"
+new_task changes-empty executing >/dev/null
+gone_folder="$(new_task changes-gone executing)"; fm_set "$gone_folder/spec.md" workspace_cwd "$work_dir/no-such-folder"
+plain_folder="$(new_task changes-plain executing)"; fm_set "$plain_folder/spec.md" workspace_cwd "$work_dir/plain-folder"
+
+new_task st-exec-idle executing >/dev/null
+new_task st-verify-done verifying >/dev/null
+new_task st-exec-working executing >/dev/null
+stalled_session=bbbbbbbb-0000-4000-8000-000000000001
+mkdir -p "$HOME/.claude/projects/-stalled-project"
+printf '{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"tool_use","name":"Bash","input":{"description":"Run the tests"}}]}}\n' \
+  "$(date -u -v-30M +%Y-%m-%dT%H:%M:%S.123Z)" > "$HOME/.claude/projects/-stalled-project/$stalled_session.jsonl"
+bash "$repo_root/scripts/session-id-add.sh" "$vault/T/$(date +%Y-%m-%d)-st-exec-idle/spec.md" "$stalled_session"
+sub_folder="$(new_task st-exec-subagent executing)"
+sub_session=bbbbbbbb-0000-4000-8000-000000000002
+mkdir -p "$HOME/.claude/projects/-stalled-project/$sub_session/subagents"
+cp "$HOME/.claude/projects/-stalled-project/$stalled_session.jsonl" "$HOME/.claude/projects/-stalled-project/$sub_session.jsonl"
+cp "$HOME/.claude/projects/-stalled-project/$stalled_session.jsonl" "$HOME/.claude/projects/-stalled-project/$sub_session/subagents/agent-bg.jsonl"
+echo '{"agentType":"Explore","description":"Read the logs"}' > "$HOME/.claude/projects/-stalled-project/$sub_session/subagents/agent-bg.meta.json"
+bash "$repo_root/scripts/session-id-add.sh" "$sub_folder/spec.md" "$sub_session"
+
 export HERDR_ENV=1 WSTACK_HERDR_SESSION=wstack-test
-export FAKE_AGENT_STATES="need-idle=idle,need-idle2=done,need-blocked=blocked,need-deliver=working,busy-verify=working,busy-unknown=unknown,rest-paused=idle,odd-one=weird,empty-goal=working,herdr-error=error,z-stamp=working,crlf-goal=working"
-export FAKE_WORKSPACES="done-here=w7,other-label=w8,old-done=w9"
+export FAKE_AGENT_STATES="need-idle=idle,need-idle2=done,need-blocked=blocked,need-deliver=working,busy-verify=working,busy-unknown=unknown,rest-paused=idle,odd-one=weird,empty-goal=working,herdr-error=error,z-stamp=working,crlf-goal=working,st-exec-idle=idle,st-verify-done=done,st-exec-working=working,st-exec-subagent=idle"
+export FAKE_WORKSPACES="done-here=w7,other-label=w8,old-done=w9,arch-done=w10"
 rows="$(/bin/bash "$script" --vault "$vault" --tasks-dir T)"
 assert "every row is one JSON line" '[ "$(jq -c . <<<"$rows" | wc -l | tr -d " ")" = "$(wc -l <<<"$rows" | tr -d " ")" ]'
+assert "changes counts commits and uncommitted edits" '[ "$(field changes-one .changes "$rows")" = "2 files +4 -1" ]'
+assert "changes leaves the git index of the worktree as it was" '[ "$(shasum "$work_dir/repo/.git/index")" = "$index_before" ]'
+assert "empty workspace_cwd gives -" '[ "$(field changes-empty .changes "$rows")" = "-" ]'
+assert "missing folder gives - and the board goes on" '[ "$(field changes-gone .changes "$rows")" = "-" ]'
+assert "a folder that is not git gives -" '[ "$(field changes-plain .changes "$rows")" = "-" ]'
 assert "drafting with idle needs you" '[ "$(field need-idle .group "$rows")" = "needs you" ]'
 assert "drafting with done needs you" '[ "$(field need-idle2 .group "$rows")" = "needs you" ]'
 assert "executing with blocked needs you" '[ "$(field need-blocked .group "$rows")" = "needs you" ]'
@@ -58,17 +101,26 @@ assert "awaiting-deliver-approval with working needs you" '[ "$(field need-deliv
 assert "executing with no agent is stopped" '[ "$(field gone-one .group "$rows")" = stopped ] && [ "$(field gone-one .herdr "$rows")" = none ]'
 assert "verifying with working is working" '[ "$(field busy-verify .group "$rows")" = working ]'
 assert "executing with unknown is working and says unknown" '[ "$(field busy-unknown .group "$rows")" = working ] && [ "$(field busy-unknown .herdr "$rows")" = unknown ]'
+assert "executing and idle is stalled" '[ "$(field st-exec-idle .group "$rows")" = stalled ]'
+assert "verifying and done is stalled" '[ "$(field st-verify-done .group "$rows")" = stalled ]'
+assert "executing and working stays working" '[ "$(field st-exec-working .group "$rows")" = working ]'
+assert "executing and idle with a running subagent is working, with no idle_minutes" '[ "$(field st-exec-subagent .group "$rows")" = working ] && [ "$(field st-exec-subagent ".subagents | length" "$rows")" = 1 ] && [ "$(field st-exec-subagent "has(\"idle_minutes\")" "$rows")" = false ]'
+assert "drafting and idle stays needs you" '[ "$(field need-idle .group "$rows")" = "needs you" ]'
+assert "stalled row has idle minutes from last_tool" 'm="$(field st-exec-idle .idle_minutes "$rows")"; [ "$m" -ge 29 ] && [ "$m" -le 31 ]'
+assert "stalled row with no last_tool has idle minutes -" '[ "$(field st-verify-done .idle_minutes "$rows")" = - ]'
+assert "a row outside stalled has no idle_minutes" '[ "$(field st-exec-working "has(\"idle_minutes\")" "$rows")" = false ]'
 assert "paused status is paused" '[ "$(field rest-paused .group "$rows")" = paused ]'
 assert "a row that matches no group is other" '[ "$(field odd-one .group "$rows")" = other ]'
 assert "workspace id comes from agent get" '[ "$(field need-blocked .workspace_id "$rows")" = w-need-blocked ]'
 assert "delivered task with an open workspace is finished with its id" '[ "$(field done-here .group "$rows")" = finished ] && [ "$(field done-here .workspace_id "$rows")" = w7 ]'
 assert "delivered task with no open workspace has no row" '[ -z "$(field done-closed .group "$rows")" ]'
+assert "an archived delivered task with an open workspace is finished" '[ "$(field arch-done .group "$rows")" = finished ] && [ "$(field arch-done .workspace_id "$rows")" = w10 ]'
 assert "delivered task from long ago with an open workspace is finished" '[ "$(field old-done .group "$rows")" = finished ] && [ "$(field old-done .workspace_id "$rows")" = w9 ]'
 assert "paused with no agent is paused, not stopped" '[ "$(field paused-none .group "$rows")" = paused ] && [ "$(field paused-none .herdr "$rows")" = none ]'
 assert "a herdr error that is not agent_not_found shows unknown and works" '[ "$(field herdr-error .herdr "$rows")" = unknown ] && [ "$(field herdr-error .group "$rows")" = working ]'
 assert "a Z time stamp gives an age in days" '[[ "$(field z-stamp .age "$rows")" =~ ^[0-9]+d$ ]]'
 assert "a CRLF spec gives a goal with no carriage return" '[ "$(field crlf-goal .goal "$rows")" = "Rough idea from launch: crlf-goal" ]'
-assert "groups follow the design order" '[ "$(jq -r .group <<<"$rows" | uniq | tr "\n" ,)" = "needs you,stopped,working,paused,finished,other," ]'
+assert "groups follow the design order" '[ "$(jq -r .group <<<"$rows" | uniq | tr "\n" ,)" = "needs you,stalled,stopped,working,paused,finished,other," ]'
 assert "rows inside a group are sorted by task_id" '[ "$(jq -r "select(.group == \"needs you\") | .slug" <<<"$rows" | tr "\n" ,)" = "need-blocked,need-deliver,need-idle,need-idle2," ]'
 assert "goal is the first line under Goal" '[ "$(field need-idle .goal "$rows")" = "Rough idea from launch: need-idle" ]'
 assert "last_step is the last Steps line" '[ "$(field need-idle2 .last_step "$rows")" = "- 2026-11-23T02:00:00Z step last one" ]'
@@ -81,7 +133,7 @@ unset HERDR_ENV
 rows="$(/bin/bash "$script" --vault "$vault" --tasks-dir T)"
 assert "outside herdr: n/a fields on every row" '[ "$(jq -r "select(.herdr != \"n/a\" or .workspace_id != \"n/a\") | .slug" <<<"$rows" | wc -l | tr -d " ")" = 0 ]'
 assert "outside herdr: no finished row" '[ -z "$(jq -r "select(.group == \"finished\")" <<<"$rows")" ]'
-assert "outside herdr: every open task is printed" '[ "$(wc -l <<<"$rows" | tr -d " ")" = 14 ]'
+assert "outside herdr: every open task is printed" '[ "$(wc -l <<<"$rows" | tr -d " ")" = 22 ]'
 assert "outside herdr: paused goes to paused, waiting to needs you, rest to other" '[ "$(field rest-paused .group "$rows")" = paused ] && [ "$(field need-deliver .group "$rows")" = "needs you" ] && [ "$(field gone-one .group "$rows")" = other ]'
 
 # last_tool and subagents come from the newest transcript in session_ids

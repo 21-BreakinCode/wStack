@@ -1,6 +1,6 @@
 # Confirmation
 
-Goal: one clear spec that the user approves. When `spec.md` holds all seven sections and `approved_at` is set, this stage is done.
+Goal: one clear spec that the user approves. When `spec.md` holds all eight sections and `approved_at` is set, this stage is done.
 
 Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontmatter field with `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" <key> <value>`.
 
@@ -18,22 +18,23 @@ G4. Resolve the pending items of the contract, as "Pending items" in the `delive
 G5. Run `bash "$scripts/contract-check.sh" "<repository folder>" "$contract_file"`.
    - Exit 3: the contract file is missing. Ask the user one question: set up the contract first (a `contract` task), or go on without a contract. End the reply. Wait. To go on without a contract, go to "Write the spec" with no `contract-brief.md`. To set up the contract first, write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the reason `contract gate: set up the contract first`, as "Stop items" in `SKILL.md` says. Set `status` to `waiting-user` and stop.
    - Exit 2: tell the user the stderr text. Ask the same question, with the same meaning. End the reply. Wait.
-   - Exit 0 or 1: run `git -C "<repository folder>" rev-parse "origin/<base_branch>"` right away. This is `checked_commit`. Dispatch the `wstack:contract-reader` agent. Give it the repository folder, the contract path, the Goal text, and the output of the check. Write `$task_dir/contract-brief.md` as frontmatter, then the reply before the line `=== PATCH ===`. The frontmatter holds four keys: `contract_file`, `base_branch`, `checked_commit`, and `stale_sections`. `stale_sections` is the one-line JSON list from the `stale_sections:` line of the check. If the fetch in G3 failed, append the line `Fetch failed: the check used the local ref origin/<base_branch>.` to `contract-brief.md`. If the part after the marker is not `None`, write it to `$task_dir/contract.gate-patch.md`.
+   - Exit 0 or 1: run `git -C "<repository folder>" rev-parse "origin/<base_branch>"` right away. This is `checked_commit`. Dispatch the `wstack:contract-reader` agent. Give it the repository folder, the contract path, the Goal text, and the output of the check. Write `$task_dir/contract-brief.md` as frontmatter, then the reply before the line `=== PATCH ===`. The reply includes its `### Project facts` part, so copy that part into `contract-brief.md` as it is. The frontmatter holds four keys: `contract_file`, `base_branch`, `checked_commit`, and `stale_sections`. `stale_sections` is the one-line JSON list from the `stale_sections:` line of the check. If the fetch in G3 failed, append the line `Fetch failed: the check used the local ref origin/<base_branch>.` to `contract-brief.md`. If the part after the marker is not `None`, write it to `$task_dir/contract.gate-patch.md`.
 G6. "Write the spec" reads `contract-brief.md` together with the vault notes.
 
 The contract file changes in two places only: G4 applies the merged write-backs of pending items, and step 9 applies the approved patch.
 
 ## Write the spec
 
-1. Read the Obsidian notes in `$vault` that bear on the idea. If `contract-brief.md` is in the task folder, read it too. The vault is the ground truth. If `spec.md` has a `Rough idea from launch:` line under `## Goal`, that line is the idea. Step 4 replaces that line with the Goal.
+1. Read the Obsidian notes in `$vault` that bear on the idea. If `contract-brief.md` is in the task folder, read it too. The spec follows the project facts in it. The vault is the ground truth. If `spec.md` has a `Rough idea from launch:` line under `## Goal`, that line is the idea. Step 4 replaces that line with the Goal.
 2. Find the unclear parts.
-   - For a rough idea, ask the user one question at a time. Send one question, then end the reply and wait. Ask until you can fill all seven sections.
+   - For a rough idea, ask the user one question at a time. Send one question, then end the reply and wait. Ask until you can fill all eight sections.
    - For a written spec, ask only about the unclear parts, one question at a time. If nothing is unclear, go on.
    - For a `contract` task, do these steps first. Propose `base_branch` from the branch that recent pull requests target, and ask the user to approve it. Run `git -C "<repository folder>" fetch origin "<base_branch>"`. If the fetch fails, tell the user the stderr text. Ask one question: fix the cause, or go on with the local ref `origin/<base_branch>`. End the reply and wait. List the files with `git -C "<repository folder>" ls-tree -r --name-only "origin/<base_branch>"`. If no listed file is a source file outside the team docs, the project is new. Then take each section of `${CLAUDE_PLUGIN_ROOT}/templates/contract.md` in turn. Ask the user one question at a time until the section has content. End the reply after each question and wait. Every `sources` glob is a planned path. Step 4 writes the answers under `## Contract changes`. If the project has such files, it exists. Then ask no section question. List the team docs and the code areas to read under `## Contract changes`, and Execute absorbs the code, the team docs, and the vault docs.
 3. If the answers change `work_type`, fix it in the frontmatter. Then run "Contract gate" again from G1, and go back to step 1.
-4. If `approved_at` is set, set it to empty first: `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" approved_at ""`. A changed spec needs a new approval. Then write the body of `spec.md` with these seven headings. Each one has content.
+4. If `approved_at` is set, set it to empty first: `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" approved_at ""`. A changed spec needs a new approval. Then write the body of `spec.md` with these eight headings. Each one has content.
    - `## Goal`: what the result must do.
    - `## Scope`: what is in and what is out. For a `contract` task, also write `base_branch: <branch>` and `project: new` or `project: existing`.
+   - `## Moves and renames`: each path, file name, or name that the work moves or renames, one `- <old> -> <new>` line each. If there is none, write `None`.
    - `## Verification plan`: for each check, its name, its pass rule, and the evidence it produces.
    - `## Non-undoable steps`: every step that needs the user's approval. If there is none, write `None`.
    - `## Deliver targets`: where the result goes, for example `new Obsidian note` or `open a pull request`. For a `contract` task, write `write the contract files`.
@@ -47,12 +48,12 @@ Status stays `drafting` until the page exists.
 5. Copy the body of `spec.md` without its frontmatter into a draft file, under a first heading that names the task. The heading sets the page title.
    `{ printf '# %s spec\n\n' "<task_id>"; awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{f=0;next} !f' "$task_dir/spec.md"; } > "$draft"`, where `$draft` comes from `mktemp "${TMPDIR:-/tmp}/spec-draft.XXXXXX"`.
    If `contract.gate-patch.md` exists, put its text in the draft right after the title line, under the heading `# Contract changes from the gate`.
-6. Run `bash "$scripts/render-page.sh" "$draft" "$task_dir/spec.html"`.
+6. Run `mkdir -p "$HOME/.wstack/pages/<task_id>"`. Then run `bash "$scripts/render-page.sh" "$draft" "$HOME/.wstack/pages/<task_id>/spec.html"`. The pages stay outside the vault.
    - Exit 0: the page fits at 375 px.
    - Exit 1: the page is too wide. Shorten wide tables and long lines in the draft, and run it again. Stop after 3 tries and tell the user the width.
    - Exit 2: print the stderr of the script as it is. It names the cause and the fix. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the reason `spec page not rendered: <first stderr line>`, as "Stop items" in `SKILL.md` says. Set `status` to `waiting-user` and stop.
-7. If `mobile` is `true` in the frontmatter, publish `spec.html` as a Claude artifact. Follow `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/mobile.md` with `$page` set to `$task_dir/spec.html`.
-8. Set `status` to `awaiting-approval`. Tell the user the path of `spec.html`, and ask for approval. End the reply. Wait.
+7. If `mobile` is `true` in the frontmatter, publish the spec page as a Claude artifact. Follow `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/mobile.md` with `$page` set to `$HOME/.wstack/pages/<task_id>/spec.html`.
+8. Set `status` to `awaiting-approval`. Tell the user the path `$HOME/.wstack/pages/<task_id>/spec.html`, and ask for approval. End the reply. Wait.
 
 If the user asks for changes, go back to step 4, then run steps 5 to 8 again.
 

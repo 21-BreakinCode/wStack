@@ -70,7 +70,7 @@ The argument is a rough idea. Run these steps in order.
 
 ## Work mode
 
-The argument is `--task <task_id>`. The task folder is `$vault/$tasks_dir/<task_id>`.
+The argument is `--task <task_id>`. The task folder is `$vault/$tasks_dir/<task_id>`. If that folder does not exist and `(source "$scripts/lib/task-dir.sh" && task_dir_of "$vault" "$tasks_dir" <task_id>)` prints a path, tell the user that the task is archived, give the path, and stop.
 
 1. Record this session on the task: `bash "$scripts/session-id-add.sh" "$task_dir/spec.md" "${CLAUDE_SESSION_ID}"`. If it exits 3, write the `step` line `session id not available` in `run-log.md`. If it exits with any other non-zero code, write the `step` line `session id not recorded: <first stderr line>`. Go on in every case.
 2. Read the status from the frontmatter only: `(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" status)`.
@@ -87,6 +87,10 @@ The argument is `--task <task_id>`. The task folder is `$vault/$tasks_dir/<task_
 | `delivered`, `cancelled` | Tell the user the task is closed. Stop. |
 
 Change `status` only with `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" status <value>`.
+
+## Waiting for a subagent
+
+This rule applies to every stage. After you dispatch a subagent or start a background command, never end a turn to wait for it while it is not running. If a notice gives a result and says that the agent still waits on its own background work, find out whether the agent still runs. If it does not run, that notice is its result. Go on.
 
 ## Stop items
 

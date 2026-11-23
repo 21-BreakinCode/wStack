@@ -37,7 +37,7 @@ print_frame() {
   [ -n "$rows" ] || { echo "no RD is open"; return 0; }
   jq -r '
     def hint_of: if . == null then "-" else "\(.tool)  \(.hint)" end;
-    "\(.group | .[:11] + "           " | .[:11]) \(.slug)  \(.status)  herdr:\(.herdr)  \(.age)",
+    "\(.group | .[:11] + "           " | .[:11]) \(.slug)  \(.status)  herdr:\(.herdr)  \(.age)  changes:\(.changes)\(if .group == "stalled" then "  idle \(.idle_minutes)m" else "" end)",
     "  tool: \(.last_tool | hint_of)",
     (.subagents[] | "  subagent: \(.type)  \(.description)  \(.last_tool | hint_of)  idle \(.idle_seconds)s")' <<<"$rows"
 }

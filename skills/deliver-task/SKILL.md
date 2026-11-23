@@ -218,12 +218,13 @@ After each target, look for a remaining target. Ship a remaining target that nee
 3. Set `delivered_at` and `approval_needed` in `report.md`. Set `delivered_at` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Keep `approval_needed` as `true` only if a target waited for the user.
 4. Set `ended_at` in `run-log.md` to the same kind of time.
 5. Count the tokens. If `session_ids` in `spec.md` is not empty, run `bash "$scripts/session-tokens.sh"` with one `--session <id>` per id. Set `tokens_used` in `run-log.md` to line 1 and `subagent_tokens` to line 2. Otherwise run `bash "$scripts/session-tokens.sh" "<workspace_cwd>"`, set `tokens_used` to the number, and leave `subagent_tokens` empty. If the script exits 2, leave `tokens_used` and `subagent_tokens` empty and write a `step` line: `tokens_used not available`.
-6. Write the exit note. If `$task_dir/retro-note.md` exists, keep it and skip this step. Otherwise copy `${CLAUDE_PLUGIN_ROOT}/templates/retro-note.md` to `$task_dir/retro-note.md`. Set `task_id`. Set `written_at` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Then fill the five sections. Write them from `run-log.md` and from what you remember of the work. Next week's retro reads the note. Each bullet names its evidence: a `run-log.md` line, a file and line, or a command. A section with nothing to say holds `None.`
+6. Write the exit note. If `$task_dir/retro-note.md` exists, keep it and skip this step. Otherwise copy `${CLAUDE_PLUGIN_ROOT}/templates/retro-note.md` to `$task_dir/retro-note.md`. Set `task_id`. Set `written_at` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Then fill the six sections. Write them from `run-log.md` and from what you remember of the work. Next week's retro reads the note. Each bullet names its evidence: a `run-log.md` line, a file and line, or a command. A section with nothing to say holds `None.`
    - `## Slow or repeated steps`: what took long or ran again, and why.
    - `## Would script`: each step that you did by hand more than once, with the script that can replace it.
    - `## Spec gaps`: what the spec questions did not ask, and what that cost.
    - `## Tool and guard friction`: prompts, guard asks, failed commands, and waits.
    - `## Surprises`: anything else the next task needs to know.
+   - `## Fact candidates`: a habit or rule of the user on this project that you learned in this task, with the reason. The weekly retro asks the user about each one.
 7. Set `status` to `delivered` in `spec.md`.
 8. Tell the user what shipped, where, and how to undo it. Ask nothing.
 
@@ -240,7 +241,7 @@ Use this stop when a target fails. Never retry the target before the user says y
 
 The contract gate runs this (step G4 of Confirmation). At G4 the brief does not exist yet. `$contract_file` comes from `contract-path.sh`, and `<base_branch>` from the contract frontmatter. `<contract folder>` is the folder that holds `$contract_file`. Read `pending` with `fm_get "$contract_file" pending`. It is a list of `{"pr":<n>,"task":"<id>"}` items. If it is empty, do nothing.
 
-For each item, run `gh pr view <pr> --json state -q .state` in the repository folder. The task folder of the item is `$vault/$tasks_dir/<task>`.
+For each item, run `gh pr view <pr> --json state -q .state` in the repository folder. The task folder of the item is the output of `(source "$scripts/lib/task-dir.sh" && task_dir_of "$vault" "$tasks_dir" <task>)`. It finds the task in the archive too. If it prints nothing, the folder does not exist.
 
 - `OPEN`: keep the item.
 - `gh` fails or prints another value: keep the item.

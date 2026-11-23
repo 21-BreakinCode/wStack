@@ -129,6 +129,7 @@ wstack/
 │   └── notion.json                Notion-style theme of the board page
 ├── templates/
 │   ├── retro-note.md              exit note of a task session (RD)
+│   ├── facts.md                   project facts file next to the contract
 │   ├── contract.md                service contract
 │   ├── plan.md                    planned items that are not built yet
 │   ├── decision.md                one decision file
@@ -147,12 +148,18 @@ wstack/
 │   ├── contract-path.sh           prints the contract path of a repository
 │   ├── contract-check.sh          drift check, no network call
 │   ├── contract-edit.sh           the only writer of contract files
+│   ├── find-test-skips.sh         prints the skip lines of a saved test output
+│   ├── find-stale-refs.sh         lists the files that still name an old path or name after a rename
+│   ├── facts-add.sh               adds one confirmed or rejected fact to the facts file, under the contract lock
 │   ├── contract-hook.sh           SessionStart and PostToolUse drift hook
 │   ├── board.sh                   one JSON row per open RD (a task session), for /wstack:board
 │   ├── board-watch.sh             live refresh loop on top of board.sh, for /wstack:board --watch
+│   ├── archive-tasks.py           moves finished tasks into Tasks/_archive/<week>/ with the Obsidian CLI
+│   ├── archive-candidates.sh      prints the delivered or cancelled tasks that a retro read, for the archive question
 │   ├── session-id-add.sh          adds a session id to session_ids in spec.md
 │   ├── transcript-stats.sh        tool use, errors and time range of the sessions of a task
 │   ├── lib/transcripts.sh         finds transcripts and subagent folders by session id
+│   ├── lib/task-dir.sh            task_dir_of: finds a task folder, top level first, then the archive
 │   ├── lib/repo.sh                main_checkout: finds the main checkout from a worktree
 │   ├── lib/frontmatter.sh         fm_get, fm_set, fm_append, fm_to_json: read and write frontmatter (fm_replace keeps the file mode)
 │   ├── lib/herdr.sh               herdr helpers that the task scripts share
@@ -188,9 +195,16 @@ One folder per task in the Obsidian vault. It holds text only. Media never goes 
   spec.md       Confirmation: the approved spec and how the work will be checked
   run-log.md    Execute: steps taken, retries, where it stopped and why, tokens used
   review.md     Verify: check results, evidence list with pass/fail, reviewer findings
-  review.html   Verify: the review page
   report.md     Deliver: what shipped, where, and how to undo it
   retro-note.md Deliver: the RD's exit note for the retro (also written at a retry-limit cancel)
+```
+
+The spec page and the review page stay outside the vault, to save sync quota:
+
+```
+~/.wstack/pages/<task_id>/
+  spec.html     Confirmation: the spec page
+  review.html   Verify: the review page
 ```
 
 A paused task adds these files. Section 6.2 describes the `paused` status.
@@ -216,7 +230,7 @@ Each copy is written once. The write-back has its own copies, so its undo keeps 
 
 A `contract` task adds `contract.draft.md`, `plan.draft.md`, and `decisions.draft/`. Execute writes them. Deliver copies them into the vault. Deliver also writes `decisions.copied.txt`, the names of the decision files that it copied, so the undo deletes only those.
 
-Each agent reads the files from the steps before it. `/wstack:run-retro` reads every folder from the past week.
+Each agent reads the files from the steps before it. `/wstack:run-retro` reads every finished task folder that no retro read yet.
 
 ### 6.1 File frontmatter
 
@@ -302,7 +316,7 @@ ASSUME: `spec.md` holds the current status. The worker agent updates it at each 
 - The worker agent works out the work type (section 9) and the steps. The user does not choose a type.
 - Mobile mode: if the user asks for mobile, the task runs in mobile mode. ASSUME: the user writes `--mobile` anywhere in the arguments, or uses the word "mobile" in the request. The agent sets `mobile: true` in `spec.md`.
 - The agent creates the task folder with `scripts/new-task-folder.sh`.
-- Outside herdr, a `code` task gets a worktree at `~/.wstack/tasks/<task_id>`, recorded as `workspace_cwd`. The current session cannot work there, so the agent tells the user to run `claude` from that folder and stops. Other work types run in the current session.
+- Outside herdr, a `code` task gets a worktree at `<root>/<repo>/<branch slug>`, recorded as `workspace_cwd`. `<root>` is the `directory` key in the `[worktrees]` section of the herdr config (`$HERDR_CONFIG_PATH`, else `~/.config/herdr/config.toml`). A missing or relative value gives `~/.herdr/worktrees`. This is the same place herdr uses. The current session cannot work there, so the agent tells the user to run `claude` from that folder and stops. Other work types run in the current session.
 - Repeating jobs ("fixed workflows") also start by hand with `/wstack:start-task`.
 
 ### 7.2 Confirmation (confirmed)
@@ -315,6 +329,7 @@ Purpose: turn the rough idea into one clear spec that the user approves.
 2. The spec must hold these sections:
    - Goal: what the result must do.
    - Scope: what is in and what is out.
+   - Moves and renames: each path, file name, or name that the work moves or renames, one `<old> -> <new>` line each, or `None`.
    - Verification plan: how the work will be checked. Name each check, its pass rule, and the evidence it will produce.
    - Non-undoable steps: every step that will need the user's approval.
    - Deliver targets: where the result goes (section 11).
@@ -324,7 +339,7 @@ Purpose: turn the rough idea into one clear spec that the user approves.
 4. The agent sets `status: awaiting-approval` and waits. After the user approves, the agent sets `approved_at` and `status: executing`.
 5. Pages follow the layout rules in section 10.1. The default is a local HTML file on the Mac. In mobile mode, the agent also publishes the page as a Claude artifact.
 
-Done when: `spec.md` has all seven sections and `approved_at` is set.
+Done when: `spec.md` has all eight sections and `approved_at` is set.
 
 Contract gate. For a `code` or `ops` task, the gate runs before the spec is written:
 
@@ -356,10 +371,11 @@ Purpose: prove that the result works, prove that it can be undone, and review it
 
 Order:
 
-1. Behavior check: run each check from the spec's verification plan. Record evidence for each check (section 12).
-2. Rollback check: confirm that a working way to undo the result exists. Write the undo steps in `review.md`.
-3. Final review: start the reviewer agent (section 8.2). It writes findings into `review.md`.
-4. Build the review page (section 10).
+1. Behavior check: run each check from the spec's verification plan. Record evidence for each check (section 12). A test run that reports skipped cases fails its check, unless the spec names the skip.
+2. Stale references: if the spec lists a move or a rename, or the diff renames or deletes a file, run `find-stale-refs.sh`. It lists the files that still name the old form. The reviewer judges each hit.
+3. Rollback check: confirm that a working way to undo the result exists. Write the undo steps in `review.md`.
+4. Final review: start the reviewer agent (section 8.2). It writes findings into `review.md`.
+5. Build the review page (section 10).
 
 Findings:
 
@@ -490,7 +506,7 @@ For blog posts and videos, section 5 is a before-and-after view instead of a gui
 ### 10.4 Build method
 
 - answer-me-with-html builds the page. The reviewer agent writes `review.md`, and the answer-me-with-html CLI turns it into HTML. Its comment and decision panels are the approve and reject controls. The "copy reply" text goes back into the Claude Code session.
-- answer-me-with-html saves pages to `~/.answer-me-with-html/pages/` by default. The agent copies the page into the task folder as `review.html`.
+- answer-me-with-html saves pages to `~/.answer-me-with-html/pages/` by default. The build writes the page to `~/.wstack/pages/<task_id>/review.html`, outside the vault.
 - diagram-design draws the diagram section:
   - Default for code changes: the "architecture delta" type (before and after).
   - When the logic changed but the structure did not: sequence or flowchart.
@@ -578,7 +594,7 @@ If an upload fails, the agent keeps the R2 copy and writes the failure in `revie
 ## 13. /wstack:run-retro (confirmed)
 
 - The user runs it by hand, once a week.
-- The retro analyst agent reads every task folder from the past 7 days.
+- The retro analyst agent reads every finished task that has no `retro_read` mark, and open tasks as context. The retro sets the mark after it reads a task.
 - It looks for:
   - repeated agent steps that can become a tool or a script
   - tasks that the user started by hand several times and that can become a fixed workflow
@@ -591,7 +607,9 @@ If an upload fails, the agent keeps the R2 copy and writes the failure in `revie
 - Drift walk: the retro also checks the service contract of the current repository. It fetches `origin/<base_branch>`, resolves the pending items of the contract as the gate does, and runs `contract-check.sh`. A repository with no mapping or no contract gets a `Contract:` status line, and the retro goes on.
 - If sections are stale, the `contract-reader` agent writes a patch to `<retro>.contract-patch.md` in the Retros folder. The user picks the sections to update in the same question as the proposals.
 - Contract write: the retro applies the chosen sections under the contract lock. It first copies the contract once to `<retro>.contract-before.md` for undo. If every stale section was applied, `verified_commit` moves to the checked commit. The retro file gets a `## Contract` section with the status, the applied and still stale sections, and the undo.
+- After the user answers, the retro runs three steps. It sets `retro_read` on each finished task it read. It writes the facts the user accepted (`facts-add.sh`). It archives the tasks the user named (`archive-tasks.py`). It records the last two under `## Facts` and `## Archived` in the retro file. All three run before the proposals apply.
 - Exit notes: each RD writes `retro-note.md` in its task folder at exit. The analyst reads it.
+- Project facts: `<app_name>.facts.md` sits next to the contract. It has `## Facts` and `## Not facts`. The analyst proposes fact candidates from `## Fact candidates` of the notes. The user answers each one, and `scripts/facts-add.sh` writes the answer under the contract lock. The `contract-reader` agent returns the `## Facts` lines as `### Project facts`. Confirmation copies them into `contract-brief.md`, and the spec follows them.
 - Transcript stats: `collect-week.sh` adds `transcript_stats` for each task with `session_ids`. The analyst compares the note and the run log with the counts, and finds `top_bash` commands that repeat across tasks.
 - Targeted reopen: where the evidence raises a question, the analyst writes it in a `## Questions` block. The retro asks a read-only fork of the last RD session (`--resume <id> --fork-session --tools Read,Grep,Glob --strict-mcp-config --no-session-persistence`). The fork leaves the original session as it was. The answers go under `## RD answers` in the retro file, and the analyst revises the proposals with them. A failed fork writes its error as the answer, and the retro goes on.
 
@@ -600,18 +618,19 @@ The name is `retro`, not `review`, because "review" already means the final revi
 ### 13.1 /wstack:board
 
 - The user runs it by hand. It shows every open RD and needs no argument.
-- `scripts/board.sh` prints one JSON row per open task: group, task id, status, herdr state, workspace id, goal, last `## Steps` line of `run-log.md`, and age. Outside herdr the herdr fields are `n/a` and no finished row shows.
+- `scripts/board.sh` prints one JSON row per open task: group, task id, status, herdr state, workspace id, goal, last `## Steps` line of `run-log.md`, age, and `changes`. The `changes` field has the form `<n> files +<ins> -<del>`. It comes from `git diff-index --shortstat` against the merge base with `origin/HEAD` (or `origin/main`). If `workspace_cwd` is empty, is no git folder, or has no merge base, the field is `-`. Outside herdr the herdr fields are `n/a` and no finished row shows.
 - The groups, in order. A row goes in the first group that matches.
   1. needs you: herdr `blocked`, a status of `awaiting-approval`, `waiting-user`, or `awaiting-deliver-approval`, or `drafting` with herdr `idle` or `done`.
-  2. stopped: herdr `none` and the status is not `paused`. The RD process is gone.
-  3. working: herdr `working` or `unknown`.
-  4. paused: status `paused`.
-  5. finished: a delivered or cancelled task whose slug is the label of a workspace that is still open.
-  6. other: any row that matched no group.
+  2. stalled: status `executing` or `verifying` with herdr `idle` or `done`, and an empty `subagents` list. The RD stopped mid-stage and waits for nothing. The row adds `idle_minutes`. It holds the whole minutes since `last_tool.at`. If `last_tool` is missing or has no readable time, it holds `-`.
+  3. stopped: herdr `none` and the status is not `paused`. The RD process is gone.
+  4. working: herdr `working` or `unknown`, or a row that matches stalled except that its `subagents` list is not empty. A background subagent still runs.
+  5. paused: status `paused`.
+  6. finished: a delivered or cancelled task whose slug is the label of a workspace that is still open.
+  7. other: any row that matched no group.
 - The skill prints one table per group and `herdr workspace focus <id>` for each row. It also renders `<vault_path>/<tasks_dir>/../Board/board.html` with `themes/notion.json`. A failed render is reported and the board goes on.
 - It asks once which finished workspaces to close. A workspace with a worktree closes with `herdr worktree remove --workspace <id>`. If `git status --porcelain` in the worktree prints anything, the skill skips the task. Other workspaces close with `herdr workspace close <id>`.
 - Each row also has `last_tool` (`{tool, hint, at}` or `null`) and `subagents` (a list of `{type, description, idle_seconds, last_tool}`). They come from the last 200 lines of the newest transcript in `session_ids`, found with `scripts/lib/transcripts.sh`. The hint is the first set of: `description`, the base name of `file_path`, `pattern` cut to 40 characters. It has 60 characters at most. A Bash call shows only its description, never its command text, because a command can hold a secret. A Bash call with no description has an empty hint. If the `.meta.json` of a subagent has no `finished: true` and its file changed in the last `WSTACK_BOARD_ACTIVE_MINUTES` minutes (default 15), the list holds it. A task with no session or no transcript has `last_tool: null` and `subagents: []`.
-- `/wstack:board --watch` opens the live monitor. Inside herdr, it runs `herdr pane split --current --direction down --no-focus` and `herdr pane run <pane id> "bash scripts/board-watch.sh ..."`, then prints the pane id and `herdr pane close <pane id>`. Outside herdr, it prints the command to run in another terminal. `board-watch.sh --vault <abs> --tasks-dir <rel> [--interval <seconds>] [--once]` clears the screen and prints one frame every `--interval` seconds (default 3). A frame has one header line, one tool line, and one line per running subagent for each RD. `--once` prints one frame without clearing and exits.
+- `/wstack:board --watch` opens the live monitor. Inside herdr, it runs `herdr pane split --current --direction down --no-focus` and `herdr pane run <pane id> "bash scripts/board-watch.sh ..."`, then prints the pane id and `herdr pane close <pane id>`. Outside herdr, it prints the command to run in another terminal. `board-watch.sh --vault <abs> --tasks-dir <rel> [--interval <seconds>] [--once]` clears the screen and prints one frame every `--interval` seconds (default 3). A frame has one header line (with `changes:`), one tool line, and one line per running subagent for each RD. A stalled RD adds `idle <n>m` to its header line. `--once` prints one frame without clearing and exits.
 - `render-page.sh` takes an optional `--theme-file <path>`. The review and retro pages keep their default theme.
 
 ## 14. Approval rules, in one place
@@ -644,11 +663,11 @@ Build in this order. Each step must pass its done check before the next step sta
 |---|---|---|
 | 1 | Plugin skeleton: `plugin.json` (name `wstack`, displayName `wStack`, userConfig), empty skills | `claude plugin validate ./wstack` passes. `/wstack:start-task` appears in Claude Code. |
 | 2 | Task folder and templates | `/wstack:start-task test idea` creates `<tasks_dir>/<date>-test-idea/` with the four `.md` files and frontmatter. |
-| 3 | Confirmation | For a rough idea, the agent asks questions one at a time, writes a `spec.md` with all seven sections, and stops at `awaiting-approval`. |
+| 3 | Confirmation | For a rough idea, the agent asks questions one at a time, writes a `spec.md` with all eight sections, and stops at `awaiting-approval`. |
 | 4 | Execute | After approval, the agent works on branch `wstack/<slug>`, logs steps in `run-log.md`, and stops before a non-undoable step. |
 | 5 | Verify checks and failure path | A failing check sends the task back to Execute. After `retry_limit` failures, the status is `waiting-user`. |
 | 6 | Reviewer agent | On a sample change with one planted bug, the reviewer agent reports it as a blocking finding. |
-| 7 | Review page | `review.html` has the five sections in order, a sticky top navbar, and no horizontal scroll at 375 px width. |
+| 7 | Review page | `~/.wstack/pages/<task_id>/review.html` has the five sections in order, a sticky top navbar, and no horizontal scroll at 375 px width. |
 | 8 | Evidence capture and compression | One API check produces a text log. One UI check produces a WebP screenshot and an H.265 video. |
 | 9 | R2 upload, Access links, deletion | Files appear under `evidence/<task_id>/`. A link opens only after an allowed-email login. `evidence-delete.sh` removes the folder. |
 | 10 | Pull request attachments | `gh pr create --attach` shows a JPEG and an H.264 video inline in the PR description, each under 10 MB. |

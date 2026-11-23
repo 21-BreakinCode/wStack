@@ -2,3 +2,4 @@
 evals/results/
 tests/tmp/
 /handover
+__pycache__/

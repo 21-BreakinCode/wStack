@@ -14,7 +14,10 @@ for entry in "b-two:executing" "a-one:delivered" "c-three:waiting-user" "d-four:
   fm_set "$folder/spec.md" status "${entry#*:}"
   fm_set "$folder/spec.md" workspace_cwd "/w/$slug"
 done
+mkdir -p "$vault/T/_archive/2026-W45/2026-11-01-old"
+printf -- '---\ntask_id: 2026-11-01-old\nstatus: executing\n---\n' > "$vault/T/_archive/2026-W45/2026-11-01-old/spec.md"
 out="$(bash "$script" --vault "$vault" --tasks-dir T)"
+assert "an archived task is not listed" '! grep -q 2026-11-01-old <<<"$out"'
 assert "three lines" '[ "$(wc -l <<<"$out" | tr -d " ")" = 3 ]'
 assert "sorted, tsv" '[ "$(sed -n 1p <<<"$out")" = "$(printf "2026-11-18-b-two\texecuting\t/w/b-two\t%s" "$vault/T/2026-11-18-b-two")" ]'
 second_line="$(sed -n 2p <<<"$out")"

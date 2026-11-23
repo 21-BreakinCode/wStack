@@ -1,6 +1,6 @@
 ---
 name: contract-reader
-description: Reads one service contract for a task or a question. Returns a brief of the facts that bear on the input. Also returns the freshness of the contract, the plan items that bear on it, and a patch for the stale sections. Dispatched by start-task and by the contract skills.
+description: Reads one service contract for a task or a question. Returns a brief of the facts that bear on the input. Also returns the freshness of the contract, the plan items that bear on it, the project facts, and a patch for the stale sections. Dispatched by start-task and by the contract skills.
 model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
@@ -32,7 +32,8 @@ The output has `status:`, `base:`, `behind:`, `stale_sections:`, `stale_dependen
 2. Under `## Team docs`, each `- @<path>` line is a path relative to the repository root, not to the contract file. Read each path with Read. If a path does not exist, say so in `Freshness`.
 3. Each of the sections `Abilities`, `Interfaces`, and `Depends on` has a `<!-- sources: a, b -->` comment on the line after its heading. The sources are the files and globs that the section describes.
 4. `Consumers` and `Gotchas` carry no sources comment, because they describe things outside the code. When the facts of the task change them, update them in the patch too.
-5. Read `plan.md` in the contract folder. It has one `##` heading for each planned item that is not built yet. If `plan.md` does not exist, the service has no planned item. Write `None` under `Plan items`, and write no `## Remove from plan` block.
+5. Read the facts file next to the contract. It is `<app_name>.facts.md` in the contract folder. If it does not exist, write `None` under `Project facts`.
+6. Read `plan.md` in the contract folder. It has one `##` heading for each planned item that is not built yet. If `plan.md` does not exist, the service has no planned item. Write `None` under `Plan items`, and write no `## Remove from plan` block.
 
 ## Find the facts
 
@@ -64,6 +65,8 @@ Reply in this exact form. The line `=== PATCH ===` stands alone. Write no code f
 <status, behind, base, and stale sections from the check>
 ### Plan items
 <items from plan.md that bear on the input, marked "planned, not built", or None>
+### Project facts
+<every line under "## Facts" of the facts file, or None>
 === PATCH ===
 <## <Section> blocks with the full new text of each stale section, then an optional ## Remove from plan block with one "- <heading>" line for each built plan item, or the word None>
 ```

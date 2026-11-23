@@ -7,12 +7,17 @@ status: drafting
 workspace_cwd:
 session_ids: []
 approved_at:
+retro_read:
 created_at: {{created_at}}
 ---
 
 ## Goal
 
 ## Scope
+
+## Moves and renames
+
+None
 
 ## Verification plan
 

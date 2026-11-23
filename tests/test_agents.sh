@@ -24,8 +24,13 @@ assert "historian: a missing docs/adr/ goes on" 'grep -F "docs/adr/" "$historian
 assert "reviewer has contract-mismatch" 'grep -q "| \`contract-mismatch\` | yes |" "$repo_root/agents/reviewer.md"'
 analyst="$repo_root/agents/retro-analyst.md"
 assert "analyst reads retro-note.md and transcript_stats" 'grep -qF "retro-note.md" "$analyst" && grep -qF "transcript_stats" "$analyst"'
+assert "analyst reads state, age_days, facts_file and needs a finished task as evidence" 'grep -qF "\`age_days\`" "$analyst" && grep -qF "\`facts_file\`" "$analyst" && grep -qF "Open tasks are context only" "$analyst" && grep -qF "at least one finished task" "$analyst"'
 assert "analyst has a Questions block and no question without a session id" 'grep -qF "## Questions" "$analyst" && grep -qF "A task with an empty \`session_ids\` gets no question." "$analyst"'
 assert "analyst looks for the same top_bash command in two or more tasks" 'grep -qF "The same \`top_bash\` command in two or more tasks." "$analyst"'
 assert "analyst trusts the stats over a note, a log, or an answer" 'grep -qF "trust the stats and name the mismatch" "$analyst"'
 assert "analyst: no proposals can still come with questions" 'grep -qF "can still have a \`## Questions\` block" "$analyst"'
+assert "analyst and run-retro descriptions name the tasks that no retro read yet" 'grep "^description:" "$analyst" | grep -qF "that no retro read yet" && grep "^description:" "$repo_root/skills/run-retro/SKILL.md" | grep -qF "that no retro read yet" && ! grep -qF "past week" "$analyst" "$repo_root/skills/run-retro/SKILL.md"'
+assert "analyst proposes fact candidates with a facts file" 'grep -qF "## Fact candidates" "$analyst" && grep -qF "Facts file:" "$analyst"'
+assert "reader reads the facts file and replies with Project facts" 'grep -qF ".facts.md" "$reader" && grep -qF "### Project facts" "$reader"'
+assert "reviewer judges skipped cases and stale references" 'grep -qF "skipped cases" "$repo_root/agents/reviewer.md" && grep -qF "stale reference" "$repo_root/agents/reviewer.md"'
 finish

@@ -1,6 +1,6 @@
 ---
 name: run-retro
-description: Review the past week of wStack tasks, propose improvements, and apply the ones the user picks.
+description: Review the finished wStack tasks that no retro read yet, propose improvements, and apply the ones the user picks.
 disable-model-invocation: true
 ---
 
@@ -24,8 +24,8 @@ In this file `$vault` is the vault path, `$tasks_dir` is the tasks folder, `$tod
 
 1. Set `$week` to `date -j -f %Y-%m-%d "$today" +%G-W%V`. Set `$retro_dir` to `$vault/$(dirname "$tasks_dir")/Retros`. Run `mkdir -p "$retro_dir"`. Set `$retro_name` to `$week`. If `$retro_dir/$retro_name.md` exists, write `$week-2` instead, then `$week-3`, and so on, until the file does not exist. A second retro in the same week must never replace the first.
 2. Set `$data` to `mktemp "${TMPDIR:-/tmp}/retro-data.XXXXXX"`. Run `bash "$scripts/collect-week.sh" --vault "$vault" --tasks-dir "$tasks_dir" --today "$today" > "$data"`. If it fails, print its stderr and stop.
-3. If `jq length "$data"` is `0`, tell the user that no task folder is in the last 7 days. Skip step 4. In step 5, write `Tasks read: 0` and use `No proposals.` as the analyst reply. Set `$proposals` to `No proposals.` The retro goes on, because the contract drift part needs no task folder.
-4. Dispatch the agent `wstack:retro-analyst`. In the prompt, give the path `$data` and the count of tasks. Its reply is a list of proposal blocks `P1`, `P2`, and so on, or `No proposals.` It can end with a `## Questions` block. Keep the proposal blocks as `$proposals`. Keep the `## Questions` block as `$questions`. Then run "Ask the RDs" below. If the reply has no `## Questions` block, it does nothing.
+3. If `jq length "$data"` is `0`, tell the user that there is no task to read. Skip step 4. In step 5, write `Tasks read: 0 finished, 0 open, on <today>.` and use `No proposals.` as the analyst reply. Set `$proposals` to `No proposals.` The retro goes on, because the contract drift part needs no task folder.
+4. Dispatch the agent `wstack:retro-analyst`. In the prompt, give the path `$data` and the count of tasks. Its reply is a list of proposal blocks `P1`, `P2`, and so on, or `No proposals.` It can end with a `## Questions` block. Keep the proposal blocks as `$proposals`. Keep the `## Questions` block as `$questions`. Keep the `## Fact candidates` block as `$candidates`. If the reply has none, `$candidates` is empty. Then run "Ask the RDs" below. If the reply has no `## Questions` block, it does nothing.
 
 ## Ask the RDs
 
@@ -46,7 +46,7 @@ R4. Run the fork with the Bash tool timeout set to `600000` (10 minutes). Do not
    If the call fails, the answer is the first line of its stderr, and it is an error line. If the call times out, the answer is `not reachable: timeout`. If it exits with empty stderr and no output, the answer is `not reachable: no output`. Go on.
 R5. If R2 created `$fork_dir`, run `rmdir "$fork_dir"`. Remove the prompt file. Go on to the next task.
 
-Write one entry per `### Q<n> <task id>` to `$answers`, in the shape of `## RD answers` in step 5. If at least one fork reply exists (an error line does not count), dispatch `wstack:retro-analyst` a second time. Give it the path `$data`, the path `$answers`, and the proposals of the first run. It revises the proposals with the answers, and it asks no new question. Its reply replaces `$proposals`.
+Write one entry per `### Q<n> <task id>` to `$answers`, in the shape of `## RD answers` in step 5. If at least one fork reply exists (an error line does not count), dispatch `wstack:retro-analyst` a second time. Give it the path `$data`, the path `$answers`, and the proposals of the first run. It revises the proposals with the answers, and it asks no new question. Its reply replaces `$proposals`. If it holds a `## Fact candidates` block, that block replaces `$candidates`.
 
 ## Save the retro file
 
@@ -55,7 +55,7 @@ Write one entry per `### Q<n> <task id>` to `$answers`, in the shape of `## RD a
 ```
 # Retro <week>
 
-Tasks read: <count>, from the 7 days up to <today>.
+Tasks read: <finished count> finished, <open count> open, on <today>.
 
 ## Proposals
 
@@ -82,8 +82,12 @@ Each entry under `## RD answers` has this shape.
 6. Run `bash "$scripts/render-page.sh" "$retro_dir/$retro_name.md" "$retro_dir/$retro_name.html"`.
    - Exit 0 or 1: the page exists. Exit 1 means the page is wider than 375 px. Tell the user the width.
    - Exit 2: print the stderr of the script as it is. Keep the `.md` file. Go on.
-7. Tell the user the path of the page (or of the `.md` file when the render failed). List each proposal with its number and title. Then run "Contract drift" below. With `No proposals.` and no stale section that has a patch block, stop here.
-8. Ask which proposals to apply, by number. If at least one stale section has a patch block, also ask which contract sections to update: names, `all`, or `none`. Put both in one question. A reply with no section part means `none`. With `No proposals.`, ask only for the contract sections. End the reply. Wait.
+7. Tell the user the path of the page (or of the `.md` file when the render failed). List each proposal with its number and title. List each entry of `$candidates` with its id (`C<n>`), its service, and its statement. Set `$archive_ids` to the output of `bash "$scripts/archive-candidates.sh" --vault "$vault" --tasks-dir "$tasks_dir"`. If it fails, print its stderr and leave `$archive_ids` empty. Then run "Contract drift" below. With `No proposals.` and no stale section that has a patch block, stop here, unless step 8 has a part to ask: a finished task in `$data`, a candidate in `$candidates`, or an id in `$archive_ids`.
+8. Ask which proposals to apply, by number. If at least one stale section has a patch block, also ask which contract sections to update: names, `all`, or `none`. Put both in one question. A reply with no section part means `none`. With `No proposals.`, leave the proposal part out of the question. The same question also holds two more parts. Leave out a part that has nothing to ask.
+   - Archive: name the finished tasks of `$data` and the ids in `$archive_ids`. Ask which to archive: `all`, `none`, or task ids. A reply with no archive part means `none`.
+   - Facts: for each candidate, ask `fact` (write the statement), `not` (write it as not true), or new text (write that text as the fact). A candidate with no answer stays unwritten.
+
+   End the reply. Wait.
 
 ## Contract drift
 
@@ -128,6 +132,20 @@ D6. After the answer to step 8, read the chosen sections. If the user chose none
 D7. After `apply` ran, add the `## Contract` section to `$retro_dir/$retro_name.md`. Every other outcome added it with one status line already. It holds the status (`updated` or `still stale`), the applied section names, the still stale names, and the undo. Build the undo as step 9 of `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/confirmation.md` does, with `$retro_dir/$retro_name.contract-before.md` as the before copy. First comes the old-section command. Then comes the new-section command for each applied section that has no `## <name>` line in the before copy. Last, after a run of `set-verified`, comes the commit command. Render the page again as in step 6.
 
 ## After the user picks
+
+Do A1 to A3 first, in this order. If the user names no proposal, no candidate, and no task, they still run. Then apply the proposals.
+
+A1. For each finished task in `$data` (state `finished`), run `source "$scripts/lib/frontmatter.sh"; fm_set "<folder>/spec.md" retro_read "$week"`. Use the `folder` of its row. It is an absolute path. If a call fails, tell the user and go on.
+A2. Do this for each candidate in `$candidates`. If the user gave the candidate no answer, add `not answered C<n>: <statement>` under `## Facts` and go on with the next candidate. Otherwise set `$text_file` to `mktemp "${TMPDIR:-/tmp}/fact-text.XXXXXX"`, `$evidence_file` to `mktemp "${TMPDIR:-/tmp}/fact-evidence.XXXXXX"`, and `$path_file` to `mktemp "${TMPDIR:-/tmp}/fact-path.XXXXXX"`. Read each file, then write into it with the Write tool. Write the statement (or the new text of the user) into `$text_file`. Write the `Evidence` line into `$evidence_file`. Write the `Facts file` path of the candidate, as it is, into `$path_file`. Never write them with echo or a heredoc, because the text can hold quotes, `$`, or backticks. If the path equals one `facts_file` value in `$data`, it is valid. Check it with `jq -e --rawfile p "$path_file" '[.[].facts_file] | index($p | rtrimstr("\n")) != null' "$data"`. If the check exits non-zero, the error line is `the facts file is not the facts_file of a task`. Otherwise run `bash "$scripts/facts-add.sh" "$(cat "$path_file")" <fact|not> "$today" "$(cat "$evidence_file")" "$(cat "$text_file")"`. Use `fact` or `not` as the answer says. If it exits non-zero, the error line is its first stderr line. After the call, run `rm -f "$text_file" "$evidence_file" "$path_file"`. Add each printed line under `## Facts` in the retro file. If there is an error line, add `not written C<n>: <statement> (answer: <answer>): <error line>` under `## Facts`, so the answer of the user stays in the retro file. `<answer>` is `fact`, `not`, or the new text of the user. Tell the user, and go on with the next candidate. If `$candidates` is empty, write `None.` under `## Facts`.
+A3. If the user named tasks, use only ids from the list that step 8 showed. Before the call, each id must match `^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+$`. Skip an id that does not match, and tell the user. The word `all` means every id of `$archive_ids` and every finished task of `$data`. Run `python3 "$scripts/archive-tasks.py" --vault "$vault" --tasks-dir "$tasks_dir" --week "$week" "<id1>" "<id2>"`, with each id in its own double quotes. Run it with the Bash tool timeout set to `600000` (10 minutes), as in R4, because each file move waits for the CLI. Add its stdout under `## Archived` in the retro file. Handle its exit code this way.
+   - Exit 0: every named task is handled. A `not moved` line stays in the list.
+   - Exit 1: the call is wrong. Show the stderr to the user and add `Archive: failed, <first stderr line>` under `## Archived`.
+   - Exit 3: the pre-check failed and nothing moved. Add `Archive: skipped, <stderr>` under `## Archived`.
+   - Exit 4: the run stopped. A task can be split across two folders, or SIGTERM, SIGINT, or an unexpected error stopped the moves. Before it stops, the script tries to move the files of that task back. Show the files under `left in old folder:` and `left in archive:` to the user, and add them under `## Archived`.
+   - A timeout or any other exit code: show the output to the user and add it under `## Archived`.
+   If the user named no task, write `None.` under `## Archived`.
+
+Add the `## Facts` and `## Archived` headings to the retro file only now, after the answer, above `## Applied`. Render the page again as in step 6.
 
 Apply only the proposals the user named. Make the change that each one names in its `Change` line.
 

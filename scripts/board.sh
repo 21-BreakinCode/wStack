@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Usage: board.sh --vault <abs> --tasks-dir <rel>
 # Prints one JSON object per line: every open task, then finished tasks whose workspace is still open.
-# Sorted by group (needs you, stopped, working, paused, finished, other), then by task_id.
+# Sorted by group (needs you, stalled, stopped, working, paused, finished, other), then by task_id.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -44,6 +44,7 @@ age_of() {  # <created_at>: m, h, or d since then, "" if unreadable
 group_of() {  # <status> <herdr state>: the first group that matches
   case "$1:$2" in
     *:blocked|awaiting-approval:*|waiting-user:*|awaiting-deliver-approval:*|drafting:idle|drafting:done) echo "needs you" ;;
+    executing:idle|executing:done|verifying:idle|verifying:done) echo stalled ;;
     paused:none) echo paused ;;
     *:none) echo stopped ;;
     *:working|*:unknown) echo working ;;
@@ -100,16 +101,38 @@ activity_json() {  # <spec file>
   done | jq -sc --argjson last_tool "$last_tool" '{last_tool: $last_tool, subagents: .}'
 }
 
+board_now="$(date +%s)"
+
 # One jq object per task. Add a row field here and nowhere else.
+changes_of() {  # <dir>: "<n> files +<ins> -<del>" against the merge base with origin, or "-"
+  local dir="$1" base_ref merge_base stat
+  [ -d "$dir" ] || { echo -; return; }
+  base_ref="$(git -C "$dir" rev-parse --abbrev-ref origin/HEAD 2>/dev/null)" || base_ref=origin/main
+  merge_base="$(git -C "$dir" merge-base HEAD "$base_ref" 2>/dev/null)" || { echo -; return; }
+  # diff-index gives the counts of git diff, but it never refreshes and rewrites the index of the worktree.
+  stat="$(git -C "$dir" diff-index --shortstat "$merge_base" 2>/dev/null)" || { echo -; return; }
+  local files=0 inserted=0 deleted=0
+  [[ "$stat" =~ ([0-9]+)\ file ]] && files="${BASH_REMATCH[1]}"
+  [[ "$stat" =~ ([0-9]+)\ insertion ]] && inserted="${BASH_REMATCH[1]}"
+  [[ "$stat" =~ ([0-9]+)\ deletion ]] && deleted="${BASH_REMATCH[1]}"
+  echo "$files files +$inserted -$deleted"
+}
+
 row_json() {  # <group> <task_id> <slug> <status> <herdr> <workspace_id> <folder>
   local spec="$7/spec.md"
   jq -nc --arg group "$1" --arg task_id "$2" --arg slug "$3" --arg status "$4" --arg herdr "$5" --arg workspace_id "$6" --arg folder "$7" \
     --arg goal "$(section_lines "$spec" Goal | awk 'NF { print; exit }')" \
     --arg last_step "$(section_lines "$7/run-log.md" Steps | awk 'NF { last = $0 } END { print last }')" \
     --arg age "$(age_of "$(fm_get "$spec" created_at)")" \
+    --arg changes "$(changes_of "$(fm_get "$spec" workspace_cwd)")" \
     --argjson activity "$(activity_json "$spec")" \
-    '{group: $group, task_id: $task_id, slug: $slug, status: $status,
-      herdr: $herdr, workspace_id: $workspace_id, goal: $goal, last_step: $last_step, age: $age, folder: $folder} + $activity'
+    --argjson now "$board_now" \
+    'def idle_minutes_of: try ((($now - (.at | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)) / 60) | floor) catch "-";
+     # A running background subagent means the RD is not stalled.
+     (if $group == "stalled" and ($activity.subagents | length) > 0 then "working" else $group end) as $group
+     | {group: $group, task_id: $task_id, slug: $slug, status: $status,
+      herdr: $herdr, workspace_id: $workspace_id, goal: $goal, last_step: $last_step, age: $age, changes: $changes, folder: $folder} + $activity
+    + (if $group == "stalled" then {idle_minutes: ($activity.last_tool | if . == null then "-" else idle_minutes_of end)} else {} end)'
 }
 
 rows="$(
@@ -129,7 +152,7 @@ rows="$(
 
   if $in_herdr; then
     while IFS=$'\t' read -r workspace_id label; do
-      for folder in "$vault/$tasks_dir"/????-??-??-"$label"; do
+      for folder in "$vault/$tasks_dir"/????-??-??-"$label" "$vault/$tasks_dir"/_archive/*/????-??-??-"$label"; do
         [ -f "$folder/spec.md" ] || continue
         status="$(fm_get "$folder/spec.md" status)"
         case "$status" in (delivered|cancelled) ;; (*) continue ;; esac
@@ -141,5 +164,5 @@ rows="$(
 )"
 [ -n "$rows" ] || exit 0
 jq -sc '
-  ["needs you", "stopped", "working", "paused", "finished", "other"] as $order
+  ["needs you", "stalled", "stopped", "working", "paused", "finished", "other"] as $order
   | sort_by([(.group as $group | $order | index($group)), .task_id]) | .[]' <<<"$rows"
