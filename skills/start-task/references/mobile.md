@@ -1,6 +1,6 @@
 # Mobile mode
 
-Goal: when `mobile` is `true` in `spec.md`, the user can open `spec.html` and `review.html` on a phone as Claude artifacts.
+Goal: when `mobile` is `true` in `spec.md`, the user can open the spec page and the review page on a phone as Claude artifacts.
 
 Use this rule for one page file, `$page`. Set `$run_log` to `$task_dir/run-log.md`.
 

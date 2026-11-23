@@ -193,9 +193,16 @@ One folder per task in the Obsidian vault. It holds text only. Media never goes 
   spec.md       Confirmation: the approved spec and how the work will be checked
   run-log.md    Execute: steps taken, retries, where it stopped and why, tokens used
   review.md     Verify: check results, evidence list with pass/fail, reviewer findings
-  review.html   Verify: the review page
   report.md     Deliver: what shipped, where, and how to undo it
   retro-note.md Deliver: the RD's exit note for the retro (also written at a retry-limit cancel)
+```
+
+The spec page and the review page stay outside the vault, to save sync quota:
+
+```
+~/.wstack/pages/<task_id>/
+  spec.html     Confirmation: the spec page
+  review.html   Verify: the review page
 ```
 
 A paused task adds these files. Section 6.2 describes the `paused` status.
@@ -495,7 +502,7 @@ For blog posts and videos, section 5 is a before-and-after view instead of a gui
 ### 10.4 Build method
 
 - answer-me-with-html builds the page. The reviewer agent writes `review.md`, and the answer-me-with-html CLI turns it into HTML. Its comment and decision panels are the approve and reject controls. The "copy reply" text goes back into the Claude Code session.
-- answer-me-with-html saves pages to `~/.answer-me-with-html/pages/` by default. The agent copies the page into the task folder as `review.html`.
+- answer-me-with-html saves pages to `~/.answer-me-with-html/pages/` by default. The build writes the page to `~/.wstack/pages/<task_id>/review.html`, outside the vault.
 - diagram-design draws the diagram section:
   - Default for code changes: the "architecture delta" type (before and after).
   - When the logic changed but the structure did not: sequence or flowchart.
@@ -655,7 +662,7 @@ Build in this order. Each step must pass its done check before the next step sta
 | 4 | Execute | After approval, the agent works on branch `wstack/<slug>`, logs steps in `run-log.md`, and stops before a non-undoable step. |
 | 5 | Verify checks and failure path | A failing check sends the task back to Execute. After `retry_limit` failures, the status is `waiting-user`. |
 | 6 | Reviewer agent | On a sample change with one planted bug, the reviewer agent reports it as a blocking finding. |
-| 7 | Review page | `review.html` has the five sections in order, a sticky top navbar, and no horizontal scroll at 375 px width. |
+| 7 | Review page | `~/.wstack/pages/<task_id>/review.html` has the five sections in order, a sticky top navbar, and no horizontal scroll at 375 px width. |
 | 8 | Evidence capture and compression | One API check produces a text log. One UI check produces a WebP screenshot and an H.265 video. |
 | 9 | R2 upload, Access links, deletion | Files appear under `evidence/<task_id>/`. A link opens only after an allowed-email login. `evidence-delete.sh` removes the folder. |
 | 10 | Pull request attachments | `gh pr create --attach` shows a JPEG and an H.264 video inline in the PR description, each under 10 MB. |

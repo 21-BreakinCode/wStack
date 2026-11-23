@@ -47,12 +47,12 @@ Status stays `drafting` until the page exists.
 5. Copy the body of `spec.md` without its frontmatter into a draft file, under a first heading that names the task. The heading sets the page title.
    `{ printf '# %s spec\n\n' "<task_id>"; awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{f=0;next} !f' "$task_dir/spec.md"; } > "$draft"`, where `$draft` comes from `mktemp "${TMPDIR:-/tmp}/spec-draft.XXXXXX"`.
    If `contract.gate-patch.md` exists, put its text in the draft right after the title line, under the heading `# Contract changes from the gate`.
-6. Run `bash "$scripts/render-page.sh" "$draft" "$task_dir/spec.html"`.
+6. Run `mkdir -p "$HOME/.wstack/pages/<task_id>"`. Then run `bash "$scripts/render-page.sh" "$draft" "$HOME/.wstack/pages/<task_id>/spec.html"`. The pages stay outside the vault.
    - Exit 0: the page fits at 375 px.
    - Exit 1: the page is too wide. Shorten wide tables and long lines in the draft, and run it again. Stop after 3 tries and tell the user the width.
    - Exit 2: print the stderr of the script as it is. It names the cause and the fix. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the reason `spec page not rendered: <first stderr line>`, as "Stop items" in `SKILL.md` says. Set `status` to `waiting-user` and stop.
-7. If `mobile` is `true` in the frontmatter, publish `spec.html` as a Claude artifact. Follow `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/mobile.md` with `$page` set to `$task_dir/spec.html`.
-8. Set `status` to `awaiting-approval`. Tell the user the path of `spec.html`, and ask for approval. End the reply. Wait.
+7. If `mobile` is `true` in the frontmatter, publish the spec page as a Claude artifact. Follow `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/mobile.md` with `$page` set to `$HOME/.wstack/pages/<task_id>/spec.html`.
+8. Set `status` to `awaiting-approval`. Tell the user the path `$HOME/.wstack/pages/<task_id>/spec.html`, and ask for approval. End the reply. Wait.
 
 If the user asks for changes, go back to step 4, then run steps 5 to 8 again.
 

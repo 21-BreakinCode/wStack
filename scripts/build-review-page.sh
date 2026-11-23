@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Usage: build-review-page.sh --task-dir <abs> --work-dir <abs>
-# Builds <task-dir>/review.html from <task-dir>/review.md. Working files go in <work-dir>, never in the vault.
+# Usage: build-review-page.sh --task-dir <abs> --work-dir <abs> --page <abs>
+# Builds the page at <page> from <task-dir>/review.md. Working files go in <work-dir>. Neither goes in the vault.
 # Exit 0 built and fits at 375 px, 1 broken diagram or page too wide, 2 infrastructure failure.
 # A diagram that cannot render because of the network or the browser (render-excalidraw exit 2)
 # becomes "Diagram not rendered: <reason>" in the page and a warning. The build still succeeds.
@@ -11,20 +11,21 @@ plugin_root="$(dirname "$script_dir")"
 source "$script_dir/lib/frontmatter.sh"
 fail() { echo "build-review-page: $1" >&2; exit "${2:-2}"; }
 
-task_dir="" work_dir=""
+task_dir="" work_dir="" page_out=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --task-dir|--work-dir) [ "$#" -ge 2 ] || fail "missing value for $1" ;;
+    --task-dir|--work-dir|--page) [ "$#" -ge 2 ] || fail "missing value for $1" ;;
   esac
   case "$1" in
     --task-dir) task_dir="$2"; shift 2 ;;
     --work-dir) work_dir="$2"; shift 2 ;;
+    --page) page_out="$2"; shift 2 ;;
     *) fail "unknown argument: $1" ;;
   esac
 done
 [ -f "$task_dir/review.md" ] || fail "no review.md in task dir: $task_dir"
-[ -n "$work_dir" ] || fail "usage: build-review-page.sh --task-dir <abs> --work-dir <abs>"
-mkdir -p "$work_dir"
+[ -n "$work_dir" ] && [ -n "$page_out" ] || fail "usage: build-review-page.sh --task-dir <abs> --work-dir <abs> --page <abs>"
+mkdir -p "$work_dir" "$(dirname "$page_out")"
 
 # The fifth section depends on the work type (spec 10.3).
 work_type=""
@@ -87,9 +88,9 @@ sed "${sed_ids[@]}" "$page" | awk -v css="$work_dir/mobile-style.html" -v nav="$
   !css_done && (at = index($0, "</head>")) { printf "%s", substr($0, 1, at - 1); emit(css); print substr($0, at); css_done = 1; next }
   !nav_done && (at = index($0, "<body>")) { printf "%s", substr($0, 1, at + 5); print ""; emit(nav); print substr($0, at + 6); nav_done = 1; next }
   { print }
-' > "$task_dir/review.html"
-grep -q 'wstack-nav' "$task_dir/review.html" || fail "could not inject the navbar into the page"
+' > "$page_out"
+grep -q 'wstack-nav' "$page_out" || fail "could not inject the navbar into the page"
 
 width_exit=0
-bash "$script_dir/check-page-width.sh" "$task_dir/review.html" 375 || width_exit=$?
+bash "$script_dir/check-page-width.sh" "$page_out" 375 || width_exit=$?
 exit "$width_exit"

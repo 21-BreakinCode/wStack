@@ -18,7 +18,7 @@ Run the five steps in this order. If `result` in `review.md` is already `pass` w
    ```
 
    Take the values from the Config list in `SKILL.md`. For a task with no repository, pass an empty `--repo`. The script prints `local only: <dir>` or one `https://<domain>/evidence/<task_id>/<file>` line per file. If it exits non-zero, stop with the reason `evidence upload failed`, as in "Stop for the user". Then extend each evidence line under `## Evidence` in `review.md`: `- <check> → <file> → pass|fail → <link>`. Use the printed URL whose last part is the file name. Use `local only` when the script printed `local only` or printed no URL for that file. Set `evidence_location` in the `review.md` frontmatter to `r2` or `local only`.
-5. Review page. Run the `build-review-page` skill to build `review.html` in the task folder. If the skill is not there, stop with the reason `missing build-review-page skill`, as in "Stop for the user".
+5. Review page. Run the `build-review-page` skill to build `review.html` in `$HOME/.wstack/pages/<task_id>/`. If the skill is not there, stop with the reason `missing build-review-page skill`, as in "Stop for the user".
 
 After step 3, set `blocking_findings` and `non_blocking_findings` in the `review.md` frontmatter to the counts. A blocking finding is a spec mismatch, a correctness bug, or a security problem. Go to "A check fails" for each open blocking finding. A non-blocking finding (design or test coverage) does not stop the task.
 

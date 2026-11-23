@@ -7,6 +7,8 @@ trap 'rm -rf "$work_root"' EXIT
 build="$repo_root/scripts/build-review-page.sh"
 fixtures="$repo_root/tests/fixtures/review"
 export AM_HOME="$work_root/am-home"
+export HOME="$work_root/home"
+page_for() { echo "$HOME/.wstack/pages/$1/review.html"; }  # <case name>
 
 make_task() {  # <name> <work type> <with diagram: yes|no>
   mkdir -p "$work_root/$1/vault task"
@@ -46,9 +48,12 @@ jump_problems_js='() => { document.documentElement.style.scrollBehavior = "auto"
 make_task broken code yes
 echo '{}' > "$work_root/broken/vault task/diagram.excalidraw"
 broken_exit=0
-bash "$build" --task-dir "$work_root/broken/vault task" --work-dir "$work_root/broken/work" >/dev/null 2>&1 || broken_exit=$?
+bash "$build" --task-dir "$work_root/broken/vault task" --work-dir "$work_root/broken/work" --page "$(page_for broken)" >/dev/null 2>&1 || broken_exit=$?
 assert "broken diagram exits 1" '[ "$broken_exit" -eq 1 ]'
-assert "broken diagram writes no page" '[ ! -e "$work_root/broken/vault task/review.html" ]'
+assert "broken diagram writes no page" '[ ! -e "$(page_for broken)" ]'
+missing_page_exit=0
+bash "$build" --task-dir "$work_root/broken/vault task" --work-dir "$work_root/broken/work" >/dev/null 2>&1 || missing_page_exit=$?
+assert "missing --page exits 2" '[ "$missing_page_exit" -eq 2 ]'
 
 amjs="${WSTACK_AMJS:-}"
 if [ -z "$amjs" ]; then
@@ -64,10 +69,11 @@ if curl -fs -m 20 -r 0-0 -o /dev/null "https://cdn.jsdelivr.net/npm/@excalidraw/
   make_task code code yes
   task="$work_root/code/vault task"
   code_exit=0
-  bash "$build" --task-dir "$task" --work-dir "$work_root/code/work" >/dev/null 2>&1 || code_exit=$?
-  page="$task/review.html"
+  bash "$build" --task-dir "$task" --work-dir "$work_root/code/work" --page "$(page_for code)" >/dev/null 2>&1 || code_exit=$?
+  page="$(page_for code)"
   assert "build exits 0" '[ "$code_exit" -eq 0 ]'
   assert "review.html exists" '[ -s "$page" ]'
+  assert "task folder has no review.html" '[ ! -e "$task/review.html" ]'
   order_ok=true
   previous=0
   for heading in Findings Decisions Evidence Diagram "Guided diff"; do
@@ -100,8 +106,8 @@ if curl -fs -m 20 -r 0-0 -o /dev/null "https://cdn.jsdelivr.net/npm/@excalidraw/
   if [ -n "${WSTACK_TEST_SCREENSHOT_DIR:-}" ]; then cp "$work_root"/shot-*.png "$WSTACK_TEST_SCREENSHOT_DIR/"; fi
 
   make_task blog blog yes
-  bash "$build" --task-dir "$work_root/blog/vault task" --work-dir "$work_root/blog/work" >/dev/null 2>&1 || true
-  blog_page="$work_root/blog/vault task/review.html"
+  bash "$build" --task-dir "$work_root/blog/vault task" --work-dir "$work_root/blog/work" --page "$(page_for blog)" >/dev/null 2>&1 || true
+  blog_page="$(page_for blog)"
   blog_nav_problems="$(page_probe "$blog_page" 375 "() => ($nav_problems_js)(375)")"
   for width in 375 1280; do
     blog_jump_problems="$(page_probe "$blog_page" "$width" "$jump_problems_js")"
@@ -116,8 +122,8 @@ fi
 # network failure: the page still builds and the Diagram section says why
 make_task offline code yes
 offline_exit=0
-offline_output="$(WSTACK_EXCALIDRAW_BUNDLE_URL="http://127.0.0.1:1/none.js" bash "$build" --task-dir "$work_root/offline/vault task" --work-dir "$work_root/offline/work" 2>&1)" || offline_exit=$?
-offline_page="$work_root/offline/vault task/review.html"
+offline_output="$(WSTACK_EXCALIDRAW_BUNDLE_URL="http://127.0.0.1:1/none.js" bash "$build" --task-dir "$work_root/offline/vault task" --work-dir "$work_root/offline/work" --page "$(page_for offline)" 2>&1)" || offline_exit=$?
+offline_page="$(page_for offline)"
 assert "offline diagram still builds with exit 0" '[ "$offline_exit" -eq 0 ] && [ -s "$offline_page" ]'
 assert "offline diagram section says it was not rendered" 'grep -q "Diagram not rendered:" "$offline_page"'
 assert "offline diagram prints a warning" '[[ "$offline_output" == *"warning: diagram not rendered"* ]]'
