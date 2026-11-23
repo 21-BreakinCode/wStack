@@ -2,12 +2,13 @@
 """Move finished tasks into <tasks_dir>/_archive/<week>/ with the Obsidian CLI, so Obsidian updates links.
 
 Exit 0: every named task was handled. Exit 1: bad input. Exit 3: the pre-check failed, nothing moved.
-Exit 4: a task may sit in two folders, the run stopped.
+Exit 4: the run stopped. A task can sit in two folders, or SIGTERM, SIGINT, or an unexpected error came during the moves.
 """
 import argparse
 import json
 import os
 import re
+import signal
 import sys
 import time
 
@@ -15,6 +16,20 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "han
 from obsidian_cli import ObsidianCliError, run_cli  # noqa: E402
 
 FINISHED_STATUSES = ("delivered", "cancelled")
+STOP_SIGNALS = (signal.SIGTERM, signal.SIGINT)
+inside_moves = False  # a stop signal raises Stopped only while the moves of a task run
+held_stop_signals = []  # at other times the signal waits here, so a move back and its report finish
+
+
+class Stopped(BaseException):
+    pass
+
+
+def on_stop_signal(signum, _frame):
+    name = signal.Signals(signum).name
+    if inside_moves:
+        raise Stopped(name)
+    held_stop_signals.append(name)
 
 
 def read_status(spec_path):
@@ -111,7 +126,7 @@ def split_report(vault, task_id, reason, old_folder, dest_folder):
 
 
 def archive_task(vault, tasks_dir, week, task_id):
-    """Return (message, split). split is True when the task may sit in two folders and the run must stop."""
+    """Return (message, stop). stop is True when the run must stop: the task can sit in two folders, or the moves were stopped."""
     task_folder = os.path.join(vault, tasks_dir, task_id)
     spec_path = os.path.join(task_folder, "spec.md")
     if not os.path.isfile(spec_path):
@@ -125,22 +140,25 @@ def archive_task(vault, tasks_dir, week, task_id):
         return "not moved %s: destination exists %s" % (task_id, dest_rel), False
 
     notes, raw = list_task_entries(task_folder)
-    for inner in sorted({os.path.dirname(name) for name in notes + raw}):
-        os.makedirs(os.path.join(dest_folder, inner), exist_ok=True)
-    time.sleep(float(os.environ.get("WSTACK_ARCHIVE_WAIT", "2")))
-
-    moved = []
-    failure = None
-    for kind, names in (("note", notes), ("raw", raw)):
-        for name in names:
+    global inside_moves
+    moved, failure, stop_reason = [], None, None
+    inside_moves = True
+    try:
+        for inner in sorted({os.path.dirname(name) for name in notes + raw}):
+            os.makedirs(os.path.join(dest_folder, inner), exist_ok=True)
+        time.sleep(float(os.environ.get("WSTACK_ARCHIVE_WAIT", "2")))
+        for kind, name in [("note", name) for name in notes] + [("raw", name) for name in raw]:
             try:
                 move_entry(kind, vault, "/".join([tasks_dir, task_id, name]), "/".join([dest_rel, name]))
             except ObsidianCliError as move_error:
                 failure = "%s: %s" % (name, move_error)
                 break
             moved.append((kind, name))
-        if failure:
-            break
+    except BaseException as abort:  # a kill, an interrupt, or an unexpected error: move back, report, stop the run
+        inside_moves = False
+        what = str(abort) if isinstance(abort, Stopped) else "an unexpected error, %s: %s" % (type(abort).__name__, abort)
+        failure = stop_reason = "stopped by %s during the moves" % what
+    inside_moves = False
 
     if failure is None:
         remove_empty_folders(task_folder)
@@ -151,11 +169,13 @@ def archive_task(vault, tasks_dir, week, task_id):
     for kind, name in reversed(moved):
         try:
             move_entry(kind, vault, "/".join([dest_rel, name]), "/".join([tasks_dir, task_id, name]))
-        except ObsidianCliError:
+        except Exception:
             return split_report(vault, task_id, "move back failed", task_folder, dest_folder), True
     remove_empty_folders(dest_folder)
     if os.path.exists(dest_folder):
         return split_report(vault, task_id, "archive folder not empty after the move back", task_folder, dest_folder), True
+    if stop_reason:
+        return split_report(vault, task_id, stop_reason, task_folder, dest_folder), True
     return "not moved %s: %s" % (task_id, failure), False
 
 
@@ -182,10 +202,15 @@ def main():
         print("archive-tasks: " + failure, file=sys.stderr)
         sys.exit(3)
 
+    for stop_signal in STOP_SIGNALS:
+        signal.signal(stop_signal, on_stop_signal)
     for task_id in args.task_ids:
-        message, split = archive_task(args.vault, tasks_dir, args.week, task_id)
-        print(message)
-        if split:
+        if held_stop_signals:
+            print("run stopped by %s before %s" % (held_stop_signals[0], task_id), flush=True)
+            sys.exit(4)
+        message, stop = archive_task(args.vault, tasks_dir, args.week, task_id)
+        print(message, flush=True)
+        if stop:
             sys.exit(4)
 
 

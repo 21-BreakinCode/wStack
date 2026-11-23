@@ -60,6 +60,36 @@ make_task "$vault_ghost" 2026-11-20-f delivered 2026-W48 ghost.md
 rc_ghost=0; out_ghost="$(FAKE_VAULT="$vault_ghost" FAKE_MOVE_THEN_FAIL_MATCH=ghost python3 "$archive" --vault "$vault_ghost" --tasks-dir Tasks --week 2026-W48 2026-11-20-f 2>&1)" || rc_ghost=$?
 assert "a move that failed but really moved exits 4 and lists both sides" '[ "$rc_ghost" = 4 ] && grep -q "Tasks/2026-11-20-f/spec.md" <<<"$out_ghost" && grep -q "_archive/2026-W48/2026-11-20-f/ghost.md" <<<"$out_ghost" && ! grep -q "^not moved" <<<"$out_ghost"'
 
+wait_until() {  # <condition>: poll for up to 10 seconds
+  local tries=0
+  until eval "$1"; do
+    tries=$((tries + 1)); [ "$tries" -le 100 ] || return 1
+    sleep 0.1
+  done
+}
+vault_term="$(make_vault v7 true)"
+make_task "$vault_term" 2026-11-20-g delivered 2026-W48
+make_task "$vault_term" 2026-11-20-h delivered 2026-W48 a-first.md zz-slow.md
+term_out="$work_dir/term.out"
+FAKE_VAULT="$vault_term" FAKE_SLEEP_MATCH=zz-slow python3 "$archive" --vault "$vault_term" --tasks-dir Tasks --week 2026-W48 2026-11-20-g 2026-11-20-h >"$term_out" 2>&1 &
+term_pid=$!
+term_seen=yes
+# The slow file is still in the old folder, so the run is inside the moves of the second task.
+wait_until 'grep -q "^moved 2026-11-20-g -> " "$term_out" && [ -f "$vault_term/Tasks/_archive/2026-W48/2026-11-20-h/spec.md" ] && [ -f "$vault_term/Tasks/2026-11-20-h/zz-slow.md" ]' || term_seen=no
+kill -TERM "$term_pid" 2>/dev/null || true
+rc_term=0; wait "$term_pid" || rc_term=$?
+assert "a moved line is flushed before the run ends" '[ "$term_seen" = yes ]'
+assert "SIGTERM during the moves exits 4 with the report" '[ "$rc_term" = 4 ] && grep -q "SIGTERM" "$term_out" && grep -q "left in old folder:" "$term_out" && grep -q "left in archive:" "$term_out" && ! grep -q Traceback "$term_out"'
+assert "SIGTERM during the moves moves every file of the task back" '[ -f "$vault_term/Tasks/2026-11-20-h/spec.md" ] && [ -f "$vault_term/Tasks/2026-11-20-h/a-first.md" ] && [ -f "$vault_term/Tasks/2026-11-20-h/zz-slow.md" ] && [ ! -e "$vault_term/Tasks/_archive/2026-W48/2026-11-20-h" ]'
+assert "SIGTERM keeps the task moved before it" '[ -f "$vault_term/Tasks/_archive/2026-W48/2026-11-20-g/spec.md" ] && [ ! -e "$vault_term/Tasks/2026-11-20-g" ]'
+
+vault_bytes="$(make_vault v8 true)"
+make_task "$vault_bytes" 2026-11-20-i delivered 2026-W48 a-first.md zz-bytes.md
+make_task "$vault_bytes" 2026-11-20-j delivered 2026-W48
+rc_bytes=0; out_bytes="$(FAKE_VAULT="$vault_bytes" FAKE_BAD_BYTES_MATCH=zz-bytes PYTHONUTF8=1 python3 "$archive" --vault "$vault_bytes" --tasks-dir Tasks --week 2026-W48 2026-11-20-i 2026-11-20-j 2>&1)" || rc_bytes=$?
+assert "an unexpected error during the moves exits 4 with the report, no traceback" '[ "$rc_bytes" = 4 ] && grep -q "UnicodeDecodeError" <<<"$out_bytes" && grep -q "left in old folder:" <<<"$out_bytes" && ! grep -q Traceback <<<"$out_bytes"'
+assert "an unexpected error moves the files back and stops the run" '[ -f "$vault_bytes/Tasks/2026-11-20-i/a-first.md" ] && [ -f "$vault_bytes/Tasks/2026-11-20-i/spec.md" ] && [ ! -e "$vault_bytes/Tasks/_archive/2026-W48/2026-11-20-i" ] && [ -d "$vault_bytes/Tasks/2026-11-20-j" ]'
+
 vault2="$(make_vault v2 false)"
 make_task "$vault2" 2026-11-20-a delivered 2026-W48
 rc_links=0; FAKE_VAULT="$vault2" python3 "$archive" --vault "$vault2" --tasks-dir Tasks --week 2026-W48 2026-11-20-a >/dev/null 2>&1 || rc_links=$?
