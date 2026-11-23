@@ -48,11 +48,33 @@ empty_goal="$(new_task empty-goal executing)"
 printf -- '---\ntask_id: %s\nstatus: executing\nworkspace_cwd:\ncreated_at: 2026-11-23T01:00:00+00:00\n---\n\n## Goal\n\n## Scope\n' "$(basename "$empty_goal")" > "$empty_goal/spec.md"
 rm -f "$empty_goal/run-log.md"
 
+git_quiet() { git -c user.name=t -c user.email=t@t "$@" >/dev/null 2>&1; }
+git init -q --bare -b main "$work_dir/origin.git"
+git clone -q "$work_dir/origin.git" "$work_dir/repo" 2>/dev/null
+printf 'old\n' > "$work_dir/repo/a.txt"
+git_quiet -C "$work_dir/repo" add a.txt
+git_quiet -C "$work_dir/repo" commit -m base
+git_quiet -C "$work_dir/repo" push -u origin main
+git_quiet -C "$work_dir/repo" checkout -b task-branch
+printf 'new1\nnew2\n' > "$work_dir/repo/a.txt"; printf 'b\n' > "$work_dir/repo/b.txt"
+git_quiet -C "$work_dir/repo" add a.txt b.txt
+git_quiet -C "$work_dir/repo" commit -m task
+printf 'new3\n' >> "$work_dir/repo/a.txt"
+mkdir -p "$work_dir/plain-folder"
+changes_folder="$(new_task changes-one executing)"; fm_set "$changes_folder/spec.md" workspace_cwd "$work_dir/repo"
+new_task changes-empty executing >/dev/null
+gone_folder="$(new_task changes-gone executing)"; fm_set "$gone_folder/spec.md" workspace_cwd "$work_dir/no-such-folder"
+plain_folder="$(new_task changes-plain executing)"; fm_set "$plain_folder/spec.md" workspace_cwd "$work_dir/plain-folder"
+
 export HERDR_ENV=1 WSTACK_HERDR_SESSION=wstack-test
 export FAKE_AGENT_STATES="need-idle=idle,need-idle2=done,need-blocked=blocked,need-deliver=working,busy-verify=working,busy-unknown=unknown,rest-paused=idle,odd-one=weird,empty-goal=working,herdr-error=error,z-stamp=working,crlf-goal=working"
 export FAKE_WORKSPACES="done-here=w7,other-label=w8,old-done=w9,arch-done=w10"
 rows="$(/bin/bash "$script" --vault "$vault" --tasks-dir T)"
 assert "every row is one JSON line" '[ "$(jq -c . <<<"$rows" | wc -l | tr -d " ")" = "$(wc -l <<<"$rows" | tr -d " ")" ]'
+assert "changes counts commits and uncommitted edits" '[ "$(field changes-one .changes "$rows")" = "2 files +4 -1" ]'
+assert "empty workspace_cwd gives -" '[ "$(field changes-empty .changes "$rows")" = "-" ]'
+assert "missing folder gives - and the board goes on" '[ "$(field changes-gone .changes "$rows")" = "-" ]'
+assert "a folder that is not git gives -" '[ "$(field changes-plain .changes "$rows")" = "-" ]'
 assert "drafting with idle needs you" '[ "$(field need-idle .group "$rows")" = "needs you" ]'
 assert "drafting with done needs you" '[ "$(field need-idle2 .group "$rows")" = "needs you" ]'
 assert "executing with blocked needs you" '[ "$(field need-blocked .group "$rows")" = "needs you" ]'
@@ -84,7 +106,7 @@ unset HERDR_ENV
 rows="$(/bin/bash "$script" --vault "$vault" --tasks-dir T)"
 assert "outside herdr: n/a fields on every row" '[ "$(jq -r "select(.herdr != \"n/a\" or .workspace_id != \"n/a\") | .slug" <<<"$rows" | wc -l | tr -d " ")" = 0 ]'
 assert "outside herdr: no finished row" '[ -z "$(jq -r "select(.group == \"finished\")" <<<"$rows")" ]'
-assert "outside herdr: every open task is printed" '[ "$(wc -l <<<"$rows" | tr -d " ")" = 14 ]'
+assert "outside herdr: every open task is printed" '[ "$(wc -l <<<"$rows" | tr -d " ")" = 18 ]'
 assert "outside herdr: paused goes to paused, waiting to needs you, rest to other" '[ "$(field rest-paused .group "$rows")" = paused ] && [ "$(field need-deliver .group "$rows")" = "needs you" ] && [ "$(field gone-one .group "$rows")" = other ]'
 
 # last_tool and subagents come from the newest transcript in session_ids

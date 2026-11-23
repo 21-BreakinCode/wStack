@@ -101,15 +101,29 @@ activity_json() {  # <spec file>
 }
 
 # One jq object per task. Add a row field here and nowhere else.
+changes_of() {  # <dir>: "<n> files +<ins> -<del>" against the merge base with origin, or "-"
+  local dir="$1" base_ref merge_base stat
+  [ -d "$dir" ] || { echo -; return; }
+  base_ref="$(git -C "$dir" rev-parse --abbrev-ref origin/HEAD 2>/dev/null)" || base_ref=origin/main
+  merge_base="$(git -C "$dir" merge-base HEAD "$base_ref" 2>/dev/null)" || { echo -; return; }
+  stat="$(git -C "$dir" diff --shortstat "$merge_base" 2>/dev/null)" || { echo -; return; }
+  local files=0 inserted=0 deleted=0
+  [[ "$stat" =~ ([0-9]+)\ file ]] && files="${BASH_REMATCH[1]}"
+  [[ "$stat" =~ ([0-9]+)\ insertion ]] && inserted="${BASH_REMATCH[1]}"
+  [[ "$stat" =~ ([0-9]+)\ deletion ]] && deleted="${BASH_REMATCH[1]}"
+  echo "$files files +$inserted -$deleted"
+}
+
 row_json() {  # <group> <task_id> <slug> <status> <herdr> <workspace_id> <folder>
   local spec="$7/spec.md"
   jq -nc --arg group "$1" --arg task_id "$2" --arg slug "$3" --arg status "$4" --arg herdr "$5" --arg workspace_id "$6" --arg folder "$7" \
     --arg goal "$(section_lines "$spec" Goal | awk 'NF { print; exit }')" \
     --arg last_step "$(section_lines "$7/run-log.md" Steps | awk 'NF { last = $0 } END { print last }')" \
     --arg age "$(age_of "$(fm_get "$spec" created_at)")" \
+    --arg changes "$(changes_of "$(fm_get "$spec" workspace_cwd)")" \
     --argjson activity "$(activity_json "$spec")" \
     '{group: $group, task_id: $task_id, slug: $slug, status: $status,
-      herdr: $herdr, workspace_id: $workspace_id, goal: $goal, last_step: $last_step, age: $age, folder: $folder} + $activity'
+      herdr: $herdr, workspace_id: $workspace_id, goal: $goal, last_step: $last_step, age: $age, changes: $changes, folder: $folder} + $activity'
 }
 
 rows="$(

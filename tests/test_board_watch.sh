@@ -20,6 +20,7 @@ bash "$repo_root/scripts/session-id-add.sh" "$folder/spec.md" aaaaaaaa-0000-4000
 frame="$(/bin/bash "$script" --vault "$vault" --tasks-dir T --once)" && status=0 || status=$?
 assert "--once exits 0" '[ "$status" = 0 ]'
 assert "header line holds the group and the slug" 'grep -qE "^other +watch-me +executing" <<<"$frame"'
+assert "header line holds changes" 'grep -qE "^other +watch-me .* changes:" <<<"$frame"'
 assert "tool line holds the tool and the hint" 'grep -qE "^  tool: Bash +Run the unit tests" <<<"$frame"'
 assert "one line per running subagent, none for finished or stale" '[ "$(grep -c "^  subagent:" <<<"$frame")" = 1 ] && grep -qE "^  subagent: Explore +Find the login handlers +Grep" <<<"$frame"'
 assert "--once does not clear the screen" '! grep -q "$(printf "\033")" <<<"$frame"'
