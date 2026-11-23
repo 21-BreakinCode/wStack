@@ -314,7 +314,7 @@ ASSUME: `spec.md` holds the current status. The worker agent updates it at each 
 - The worker agent works out the work type (section 9) and the steps. The user does not choose a type.
 - Mobile mode: if the user asks for mobile, the task runs in mobile mode. ASSUME: the user writes `--mobile` anywhere in the arguments, or uses the word "mobile" in the request. The agent sets `mobile: true` in `spec.md`.
 - The agent creates the task folder with `scripts/new-task-folder.sh`.
-- Outside herdr, a `code` task gets a worktree at `~/.wstack/tasks/<task_id>`, recorded as `workspace_cwd`. The current session cannot work there, so the agent tells the user to run `claude` from that folder and stops. Other work types run in the current session.
+- Outside herdr, a `code` task gets a worktree at `<root>/<repo>/<branch slug>`, recorded as `workspace_cwd`. `<root>` is the `directory` key in the `[worktrees]` section of the herdr config (`$HERDR_CONFIG_PATH`, else `~/.config/herdr/config.toml`). A missing or relative value gives `~/.herdr/worktrees`. This is the same place herdr uses. The current session cannot work there, so the agent tells the user to run `claude` from that folder and stops. Other work types run in the current session.
 - Repeating jobs ("fixed workflows") also start by hand with `/wstack:start-task`.
 
 ### 7.2 Confirmation (confirmed)

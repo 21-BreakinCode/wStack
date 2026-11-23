@@ -7,6 +7,8 @@ script="$repo_root/scripts/launch-task.sh"
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 export HOME="$work_dir/home dir"; mkdir -p "$HOME"
+export HERDR_CONFIG_PATH="$work_dir/herdr config.toml"
+printf '[worktrees]\ndirectory = "%s/wt"\n' "$work_dir" >"$HERDR_CONFIG_PATH"
 export PATH="$repo_root/tests/fixtures/bin:$PATH"
 export FAKE_LOG="$work_dir/log" HERDR_ENV=1 WSTACK_HERDR_SESSION=wstack-test FAKE_AGENT_NAME=fix-login-2 WSTACK_TRUST_TIMEOUT=2
 vault="$work_dir/my vault"; mkdir -p "$vault"
@@ -56,8 +58,8 @@ git init -q -b main "$real_repo"
 git -C "$real_repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
 outside_code_dir="$(new_task outside-code code)"
 rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$outside_code_dir" --repo-path "$real_repo" >/dev/null 2>&1) || rc=$?
-code_worktree="$HOME/.wstack/tasks/2026-11-18-outside-code"
-assert "outside herdr, code: exit 3 sets workspace_cwd to a worktree under ~/.wstack/tasks" '[ "$rc" = 3 ] && [ "$(fm_get "$outside_code_dir/spec.md" workspace_cwd)" = "$code_worktree" ]'
+code_worktree="$work_dir/wt/real repo/wstack-outside-code"
+assert "outside herdr, code: exit 3 sets workspace_cwd to a worktree under the configured root" '[ "$rc" = 3 ] && [ "$(fm_get "$outside_code_dir/spec.md" workspace_cwd)" = "$code_worktree" ]'
 assert "outside herdr, code: the worktree is on wstack/outside-code" '[ "$(git -C "$code_worktree" symbolic-ref --short HEAD)" = wstack/outside-code ]'
 assert "outside herdr, code: the main checkout stays on main" '[ "$(git -C "$real_repo" symbolic-ref --short HEAD)" = main ]'
 rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$outside_code_dir" --repo-path "$real_repo" >/dev/null 2>&1) || rc=$?
@@ -68,7 +70,24 @@ assert "outside herdr, code: not a git repository exits 6 and cancels" '[ "$rc" 
 git -C "$real_repo" branch wstack/left-over
 left_over_dir="$(new_task left-over code)"
 rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$left_over_dir" --repo-path "$real_repo" >/dev/null 2>"$work_dir/err") || rc=$?
-assert "outside herdr, code: a leftover wstack branch exits 6 and names the branch" '[ "$rc" = 6 ] && grep -q "wstack/left-over" "$work_dir/err" && [ ! -e "$HOME/.wstack/tasks/2026-11-18-left-over" ]'
+assert "outside herdr, code: a leftover wstack branch exits 6 and names the branch" '[ "$rc" = 6 ] && grep -q "wstack/left-over" "$work_dir/err" && [ ! -e "$work_dir/wt/real repo/wstack-left-over" ]'
+# one config per case: missing key, relative value, single quotes with a trailing comment
+launch_outside_with_config() {  # <slug> <config content>; prints workspace_cwd
+  local task_folder; task_folder="$(new_task "$1" code)"
+  printf '%s\n' "$2" >"$work_dir/case.toml"
+  (cd "$outside_dir" && HERDR_ENV=0 HERDR_CONFIG_PATH="$work_dir/case.toml" bash "$script" --task-dir "$task_folder" --repo-path "$real_repo" >/dev/null 2>&1) || true
+  fm_get "$task_folder/spec.md" workspace_cwd
+}
+cwd_no_key="$(launch_outside_with_config no-key '[other]
+directory = "/elsewhere"')"
+cwd_relative="$(launch_outside_with_config rel-root '[worktrees]
+directory = "rel/wt"')"
+cwd_quoted="$(launch_outside_with_config quoted-root "[worktrees]
+directory = '$work_dir/wt2' # note")"
+assert "configured root holds the worktree" '[ "$(fm_get "$outside_code_dir/spec.md" workspace_cwd)" = "$work_dir/wt/real repo/wstack-outside-code" ] && [ -e "$work_dir/wt/real repo/wstack-outside-code/.git" ]'
+assert "missing key falls back to ~/.herdr/worktrees" '[[ "$cwd_no_key" == "$HOME/.herdr/worktrees/"* ]]'
+assert "relative value falls back" '[[ "$cwd_relative" == "$HOME/.herdr/worktrees/"* ]]'
+assert "single quotes and a trailing comment resolve" '[[ "$cwd_quoted" == "$work_dir/wt2/"* ]]'
 outside_contract_dir="$(new_task outside-contract contract)"
 rc=0; (cd "$outside_dir" && HERDR_ENV=0 bash "$script" --task-dir "$outside_contract_dir" --repo-path "$work_dir/repo dir" >/dev/null 2>&1) || rc=$?
 assert "outside herdr, contract: exit 3 sets workspace_cwd to the repository" '[ "$rc" = 3 ] && [ "$(fm_get "$outside_contract_dir/spec.md" workspace_cwd)" = "$work_dir/repo dir" ]'

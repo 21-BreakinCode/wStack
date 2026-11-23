@@ -4,7 +4,7 @@
 # Exit codes:
 #   1 bad input
 #   3 not running inside herdr (sets workspace_cwd first: for a code task with a repository, a new
-#     worktree at ~/.wstack/tasks/<task_id> on branch wstack/<slug>; else the repository or the current folder)
+#     worktree at <herdr worktrees root>/<repo>/<branch slug> on branch wstack/<slug>; else the repository or the current folder)
 #   4 agent name taken
 #   5 the claude agent did not start or take the prompt. The workspace stays open and
 #     stderr prints the workspace id and the cleanup commands. Nothing is closed automatically.
@@ -20,6 +20,26 @@ fail() { echo "launch-task: $1" >&2; exit "${2:-1}"; }
 cancel_and_fail() {  # <message> <exit code>
   fm_set "$task_dir/spec.md" status cancelled
   fail "$1" "$2"
+}
+
+herdr_worktree_root() {  # the [worktrees] directory of the herdr config, or ~/.herdr/worktrees
+  local config_file="${HERDR_CONFIG_PATH:-$HOME/.config/herdr/config.toml}" root=""
+  if [ -f "$config_file" ]; then
+    root="$(awk '
+      /^[[:space:]]*\[/ { in_worktrees = ($0 ~ /^[[:space:]]*\[worktrees\][[:space:]]*(#.*)?$/); next }
+      in_worktrees && /^[[:space:]]*directory[[:space:]]*=/ {
+        value = $0; sub(/^[^=]*=[[:space:]]*/, "", value)
+        if (match(value, /^"[^"]*"/) || match(value, /^'"'"'[^'"'"']*'"'"'/)) value = substr(value, 2, RLENGTH - 2)
+        else { sub(/[[:space:]]*#.*$/, "", value); sub(/[[:space:]]+$/, "", value) }
+        print value; exit
+      }' "$config_file")"
+  fi
+  case "$root" in
+    "~") root="$HOME" ;;
+    "~/"*) root="$HOME/${root#"~/"}" ;;
+  esac
+  [[ "$root" = /* ]] || root="$HOME/.herdr/worktrees"
+  printf '%s\n' "$root"
 }
 
 task_dir="" repo_path="" mobile=false
@@ -39,10 +59,11 @@ if [ "${HERDR_ENV:-}" != 1 ]; then  # this session does the work in session_cwd
   session_cwd="$PWD"
   if [ -n "$repo_path" ] && { [ "$work_type" = code ] || [ "$work_type" = contract ]; }; then session_cwd="$repo_path"; fi
   if [ -n "$repo_path" ] && [ "$work_type" = code ]; then  # a worktree keeps two tasks in one repository apart
-    session_cwd="$HOME/.wstack/tasks/$task_id"
     task_branch="wstack/${task_id:11}"
+    repo_name="$(basename "$(git -C "$repo_path" rev-parse --show-toplevel 2>/dev/null || echo "$repo_path")")"
+    session_cwd="$(herdr_worktree_root)/$repo_name/${task_branch//\//-}"  # herdr turns the branch slash into a dash
     if [ ! -e "$session_cwd/.git" ]; then
-      mkdir -p "$HOME/.wstack/tasks"
+      mkdir -p "$(dirname "$session_cwd")"
       worktree_output="$(git -C "$repo_path" worktree add -b "$task_branch" "$session_cwd" 2>&1)" \
         || cancel_and_fail "could not create worktree: $worktree_output" 6
     fi
