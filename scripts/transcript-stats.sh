@@ -44,14 +44,14 @@ slurp_files "$main_files" | jq \
       tool_errors: (items("user"; "tool_result") | map(select(.is_error == true)) | length),
       # Secrets stay out. Escaped characters go first, then quoted text. A command that still holds a quote
       # or a backslash drops out. Leading NAME=value words drop. The first word must be a plain command name.
-      # A second word stays only after a tool that takes subcommands, and only in the shape of a subcommand.
+      # A second word stays only after a tool with a fixed set of subcommands, and only in the shape of a subcommand.
       top_bash: ([$tool_uses[] | select(.name == "Bash") | .input.command | strings
           | gsub("\\\\."; "") | gsub("\"[^\"]*\"|\u0027[^\u0027]*\u0027"; "")
           | select(test("[\"\u0027\\\\]") | not)
           | [scan("\\S+")] | until(.[0] // "" | test("^[A-Za-z_][A-Za-z0-9_]*=") | not; .[1:])
           | select(.[0] // "" | test("^[A-Za-z0-9_./+-]+$"))
-          | if (.[0] | IN("git", "gh", "herdr", "claude", "docker", "kubectl", "npm", "pnpm", "yarn", "cargo",
-                "go", "brew", "make", "just", "uv", "security", "aws", "gcloud", "terraform"))
+          | if (.[0] | IN("git", "gh", "herdr", "docker", "kubectl", "npm", "cargo", "go", "brew", "security",
+                "aws", "gcloud", "terraform"))
               and (.[1] // "" | test("^[a-z][a-z0-9-]{0,24}$"))
             then .[:2] else .[:1] end | join(" ")]
         | group_by(.) | map({command: .[0], count: length})

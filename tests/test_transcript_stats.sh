@@ -67,9 +67,10 @@ session_g=99999999-9999-4999-8999-999999999999
   bash_line 'AUTH="Bearer ghp_UNCLOSED8 curl -H x'
   bash_line "TOKEN=\$'it\\'s ghp_DOLLAR9 more' curl x"
   bash_line 'echo hunter10'
+  bash_line 'claude hunter11 fix the bug'
 } >"$folder_one/$session_g.jsonl"
 shapes_out="$(bash "$script" "$session_g")"
-assert "top_bash lists only safe words for the leak shapes" '[ "$(jq -c "[.top_bash[].command]" <<<"$shapes_out")" = "[\"curl\",\"echo\",\"cmd\",\"make\",\"run\",\"wget\"]" ]'
+assert "top_bash lists only safe words for the leak shapes" '[ "$(jq -c "[.top_bash[].command]" <<<"$shapes_out")" = "[\"curl\",\"echo\",\"claude\",\"cmd\",\"make\",\"run\",\"wget\"]" ]'
 assert "no output holds the leak-shape secrets" '! grep -q -e ghp_ -e LITERAL -e tail2 -e pw5 -e Bearer -e hunter <<<"$shapes_out"'
 assert "a subcommand tool keeps its subcommand" '[ "$(jq -r ".top_bash[0].command" <<<"$out")" = "git status" ]'
 
