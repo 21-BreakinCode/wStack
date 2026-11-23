@@ -7,8 +7,8 @@ trap 'rm -rf "$work_root"' EXIT
 build="$repo_root/scripts/build-review-page.sh"
 fixtures="$repo_root/tests/fixtures/review"
 export AM_HOME="$work_root/am-home"
-export HOME="$work_root/home"
-page_for() { echo "$HOME/.wstack/pages/$1/review.html"; }  # <case name>
+page_home="$work_root/home"  # HOME for page builds. The plugin lookup below needs the real HOME.
+page_for() { echo "$page_home/.wstack/pages/$1/review.html"; }  # <case name>
 
 make_task() {  # <name> <work type> <with diagram: yes|no>
   mkdir -p "$work_root/$1/vault task"
@@ -60,6 +60,7 @@ if [ -z "$amjs" ]; then
   install_path="$(claude plugin list --json 2>/dev/null | jq -r '[.[] | select(.id == "answer-me-with-html@answer-me-with-html" and .enabled == true)] | first | .installPath // empty' 2>/dev/null || true)"
   [ -z "$install_path" ] || amjs="$install_path/answer-me-with-html/scripts/am.mjs"
 fi
+export WSTACK_AMJS="$amjs" HOME="$page_home"
 if ! command -v playwright-cli >/dev/null 2>&1 || [ ! -f "$amjs" ]; then
   echo "SKIP page cases: playwright-cli or answer-me-with-html not found"
   finish; exit
