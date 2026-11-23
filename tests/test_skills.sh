@@ -130,4 +130,11 @@ assert "run-retro: step 5 quotes each reply with > and the fork step is bounded 
 assert "deliver-task finds the task folder through the archive lookup" 'grep -qF "task_dir_of \"\$vault\" \"\$tasks_dir\"" "$repo_root/skills/deliver-task/SKILL.md"'
 assert "start-task task mode stops on an archived task" 'grep -qF "is archived" "$start_skill"'
 assert "G5 copies Project facts into contract-brief.md and the spec follows them" 'grep "^G5\." -A4 "$repo_root/skills/start-task/references/confirmation.md" | grep -qF "### Project facts" && grep -qF "The spec follows the project facts" "$repo_root/skills/start-task/references/confirmation.md"'
+assert "run-retro marks each finished task with retro_read" 'grep -qF "fm_set \"<folder>/spec.md\" retro_read \"\$week\"" "$retro_skill"'
+assert "run-retro archives through archive-candidates.sh and archive-tasks.py with the week" 'grep -qF "archive-candidates.sh" "$retro_skill" && grep -qF "archive-tasks.py\" --vault \"\$vault\" --tasks-dir \"\$tasks_dir\" --week \"\$week\"" "$retro_skill"'
+assert "run-retro writes facts through facts-add.sh and keeps the candidates block" 'grep -qF "facts-add.sh" "$retro_skill" && grep -qF "## Fact candidates" "$retro_skill" && grep -qF "not written C<n>:" "$retro_skill"'
+assert "run-retro has the Archived and Facts headings and the answer words" 'grep -qF "## Archived" "$retro_skill" && grep -qF "## Facts" "$retro_skill" && grep -qF "\`fact\`" "$retro_skill" && grep -qF "\`not\`" "$retro_skill" && grep -qF "\`all\`" "$retro_skill" && grep -qF "\`none\`" "$retro_skill"'
+assert "run-retro archive handles exit 1, 3, and 4" 'grep -qF "Archive: failed, " "$retro_skill" && grep -qF "Archive: skipped, " "$retro_skill" && grep -qF "left in old folder:" "$retro_skill"'
+assert "run-retro: marks, facts, and archive come before the proposals apply" '[ "$(grep -n "retro_read" "$retro_skill" | tail -1 | cut -d: -f1)" -lt "$(grep -n "^Apply only the proposals" "$retro_skill" | cut -d: -f1)" ] && [ "$(grep -n "archive-tasks.py" "$retro_skill" | tail -1 | cut -d: -f1)" -lt "$(grep -n "^Apply only the proposals" "$retro_skill" | cut -d: -f1)" ]'
+assert "README says the retro reads every finished task with no retro read" '! grep -qF "last 7 days" "$repo_root/README.md" && grep -qF "no retro read yet" "$repo_root/README.md"'
 finish

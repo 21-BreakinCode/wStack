@@ -14,7 +14,7 @@ You type `/wstack:start-task <rough idea>`. Then the task goes through five step
 
 If a check fails and the spec is right, the task goes back to Execute. It tries again up to `retry_limit` times, then waits for you. If the spec is wrong, the task goes back to Confirmation.
 
-Once a week, run `/wstack:run-retro`. It reads the task folders of the last 7 days and proposes improvements to wStack. It also checks the service contract of the current repository for drift, and proposes updates for the stale sections. You choose which proposals and sections to apply.
+Once a week, run `/wstack:run-retro`. It reads every finished task that no retro read yet and proposes improvements to wStack. It also checks the service contract of the current repository for drift, and proposes updates for the stale sections. You choose which proposals and sections to apply.
 
 ![The wStack pipeline with its fail loops](docs/diagrams/pipeline.svg)
 
@@ -37,7 +37,7 @@ Add `--mobile` to the idea to publish the spec page and the review page as Claud
 User commands:
 
 - `/wstack:start-task`: run the pipeline for one task.
-- `/wstack:run-retro`: weekly retro over the last 7 days of task folders, with a drift check of the service contract of the current repository.
+- `/wstack:run-retro`: weekly retro over every finished task that no retro read yet, with a drift check of the service contract of the current repository.
 - `/wstack:board`: show every open task session in groups, the ones that wait for you first. A task session is also called an RD. Each row has its `herdr workspace focus` command. The command writes a snapshot page `Board/board.html` in a Notion style next to the `Retros` folder. It also offers to close the workspaces of finished tasks. A worktree with changes stays. `/wstack:board --watch` opens a live monitor in a new herdr pane below your session. It refreshes every 3 seconds and shows, for each RD, its stage, the tool it calls now, and each running subagent with its tool. A Bash call shows only its description, never its command text. Outside herdr, the command prints the line to run in another terminal.
 - `/wstack:pause-work`: pause the work of any session. It writes a resume note, then stops the background agents, shells, and processes the session started. Run it before you close the computer.
 - `/wstack:resume-work`: resume from the newest resume note of the current folder. For a task, it prints `cd "<workspace_cwd>" && claude "/wstack:start-task --task <task_id>"`, so the task resumes in its own folder with its configuration values.
