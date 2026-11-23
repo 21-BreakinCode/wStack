@@ -54,6 +54,20 @@ assert "top_bash drops a leading NAME=value word" '[ "$(jq -r ".top_bash[].comma
 assert "top_bash keeps only curl when the second word is an option" 'jq -r ".top_bash[].command" <<<"$secret_out" | grep -qx curl'
 assert "no output holds the secrets" '! grep -q -e abc -e xyz -e "u:p" <<<"$secret_out"'
 
+# top_bash keeps no secret from a quoted value, an escaped space, a literal second word, or a URL command
+session_g=99999999-9999-4999-8999-999999999999
+{ bash_line 'AUTH="Bearer ghp_QUOTED1" curl -H x'
+  bash_line "X='one ghp_QUOTED2' run it"
+  bash_line 'TOKEN=part\ tail2 make'
+  bash_line 'echo ghp_LITERAL3 | gh auth login --with-token'
+  bash_line 'wget host.example/path/LITERAL4'
+  bash_line 'https://u:pw5@h/x'
+  bash_line 'echo "unclosed LITERAL6'
+} >"$folder_one/$session_g.jsonl"
+shapes_out="$(bash "$script" "$session_g")"
+assert "top_bash lists only safe words for the leak shapes" '[ "$(jq -c "[.top_bash[].command]" <<<"$shapes_out")" = "[\"echo\",\"curl\",\"make\",\"run it\",\"wget\"]" ]'
+assert "no output holds the leak-shape secrets" '! grep -q -e ghp_ -e LITERAL -e tail2 -e pw5 -e Bearer <<<"$shapes_out"'
+
 unknown_out="$(bash "$script" "$unknown")"
 assert "unknown id gives found 0" '[ "$(jq -r .found <<<"$unknown_out")" = 0 ]'
 assert "unknown id gives null times" '[ "$(jq -r .started_at <<<"$unknown_out")" = null ]'

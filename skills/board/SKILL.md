@@ -40,5 +40,5 @@ The monitor shows each open RD with its stage, the tool it calls now, and each r
    - Run `git -C <workspace_cwd> rev-parse --path-format=absolute --git-dir` and the same with `--git-common-dir`. If the two paths differ, the workspace has a worktree. Run `git -C <workspace_cwd> status --porcelain`. If it fails or prints anything, skip the task and say why. Otherwise run `herdr worktree remove --workspace <id>`.
    - If the two paths are the same, or `workspace_cwd` is not a git directory, run `herdr workspace close <id>`.
    - If the variable `WSTACK_HERDR_SESSION` is set, write `--session $WSTACK_HERDR_SESSION` right after `herdr`.
-If a close command fails, report that task as skipped with the first line of its stderr, and go on.
+   - If a close command fails, report that task as skipped with the first line of its stderr, and go on.
 7. Report what was closed and what was skipped, each with its reason.

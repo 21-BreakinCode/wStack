@@ -42,8 +42,13 @@ slurp_files "$main_files" | jq \
       found: $found,
       tool_calls: ($tool_uses | group_by(.name) | map({key: .[0].name, value: length}) | from_entries),
       tool_errors: (items("user"; "tool_result") | map(select(.is_error == true)) | length),
-      top_bash: ([$tool_uses[] | select(.name == "Bash") | .input.command | strings | [scan("\\S+")] | until(.[0] // "" | test("^[A-Za-z_][A-Za-z0-9_]*=") | not; .[1:])
-          | if (.[1] // "" | test("^-|[=:@\"'"'"'`]")) then .[:1] else .[:2] end | join(" ")]
+      # Secrets stay out: quoted text and escaped characters go first, then leading NAME=value words.
+      # The first word must be a plain command name. A second word stays only in the shape of a subcommand.
+      top_bash: ([$tool_uses[] | select(.name == "Bash") | .input.command | strings
+          | gsub("\"[^\"]*\"|\u0027[^\u0027]*\u0027|\\\\."; "")
+          | [scan("\\S+")] | until(.[0] // "" | test("^[A-Za-z_][A-Za-z0-9_]*=") | not; .[1:])
+          | select(.[0] // "" | test("^[A-Za-z0-9_./+-]+$"))
+          | if (.[1] // "" | test("^[a-z][a-z0-9-]{0,24}$")) then .[:2] else .[:1] end | join(" ")]
         | group_by(.) | map({command: .[0], count: length})
         | sort_by([-.count, .command]) | .[:10]),
       compactions: ([.[] | select(.type == "system" and .subtype == "compact_boundary")] | length),

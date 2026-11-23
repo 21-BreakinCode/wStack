@@ -82,6 +82,7 @@ id_e=eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee
 out="$(bash "$script" --session "$id_e")"
 assert "--session skips a cut-off line" '[ "$out" = "$(printf "40\n0")" ]'
 { cat "$project_dir/new.jsonl"; echo '{"message":{"id":"cut","usa'; } > "$project_dir/new2.jsonl"
+touch -t 203001010000 "$project_dir/new2.jsonl"  # newest even on a file system with whole-second times
 out="$(bash "$script" "$work_cwd")"
 assert "cwd mode skips a cut-off line" '[ "$out" = 110 ]'
 

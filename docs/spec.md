@@ -128,7 +128,7 @@ wstack/
 ├── themes/
 │   └── notion.json                Notion-style theme of the board page
 ├── templates/
-│   ├── retro-note.md              the RD exit note
+│   ├── retro-note.md              exit note of a task session (RD)
 │   ├── contract.md                service contract
 │   ├── plan.md                    planned items that are not built yet
 │   ├── decision.md                one decision file
