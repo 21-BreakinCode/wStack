@@ -30,6 +30,8 @@ done
 for skill in build-review-page capture-evidence deliver-task; do
   assert "$skill is a helper" 'grep -qx "user-invocable: false" "$repo_root/skills/$skill/SKILL.md"'
 done
+assert "board skill lists needs you, stalled, stopped in order" 'grep -qE "needs you.*stalled.*stopped" "$repo_root/skills/board/SKILL.md"'
+assert "start-task holds the wait rule" 'grep -qF "never end a turn to wait" "$repo_root/skills/start-task/SKILL.md"'
 assert "board --watch splits a pane and runs board-watch.sh" 'grep -qF "board-watch.sh" "$repo_root/skills/board/SKILL.md" && grep -qF "herdr pane split --current --direction down --no-focus" "$repo_root/skills/board/SKILL.md" && grep -qF "herdr pane run" "$repo_root/skills/board/SKILL.md"'
 assert "run-retro names the -2 rule for a second retro in a week" 'grep -qF "write \`\$week-2\` instead, then \`\$week-3\`" "$repo_root/skills/run-retro/SKILL.md"'
 assert "run-retro uses retro_name in every retro file path" '! grep -qF "\$retro_dir/\$week" "$repo_root/skills/run-retro/SKILL.md"'

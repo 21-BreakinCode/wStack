@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Usage: board.sh --vault <abs> --tasks-dir <rel>
 # Prints one JSON object per line: every open task, then finished tasks whose workspace is still open.
-# Sorted by group (needs you, stopped, working, paused, finished, other), then by task_id.
+# Sorted by group (needs you, stalled, stopped, working, paused, finished, other), then by task_id.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -44,6 +44,7 @@ age_of() {  # <created_at>: m, h, or d since then, "" if unreadable
 group_of() {  # <status> <herdr state>: the first group that matches
   case "$1:$2" in
     *:blocked|awaiting-approval:*|waiting-user:*|awaiting-deliver-approval:*|drafting:idle|drafting:done) echo "needs you" ;;
+    executing:idle|executing:done|verifying:idle|verifying:done) echo stalled ;;
     paused:none) echo paused ;;
     *:none) echo stopped ;;
     *:working|*:unknown) echo working ;;
@@ -100,6 +101,8 @@ activity_json() {  # <spec file>
   done | jq -sc --argjson last_tool "$last_tool" '{last_tool: $last_tool, subagents: .}'
 }
 
+board_now="$(date +%s)"
+
 # One jq object per task. Add a row field here and nowhere else.
 changes_of() {  # <dir>: "<n> files +<ins> -<del>" against the merge base with origin, or "-"
   local dir="$1" base_ref merge_base stat
@@ -122,8 +125,11 @@ row_json() {  # <group> <task_id> <slug> <status> <herdr> <workspace_id> <folder
     --arg age "$(age_of "$(fm_get "$spec" created_at)")" \
     --arg changes "$(changes_of "$(fm_get "$spec" workspace_cwd)")" \
     --argjson activity "$(activity_json "$spec")" \
-    '{group: $group, task_id: $task_id, slug: $slug, status: $status,
-      herdr: $herdr, workspace_id: $workspace_id, goal: $goal, last_step: $last_step, age: $age, changes: $changes, folder: $folder} + $activity'
+    --argjson now "$board_now" \
+    'def idle_minutes_of: try ((($now - (.at | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)) / 60) | floor) catch "-";
+     {group: $group, task_id: $task_id, slug: $slug, status: $status,
+      herdr: $herdr, workspace_id: $workspace_id, goal: $goal, last_step: $last_step, age: $age, changes: $changes, folder: $folder} + $activity
+    + (if $group == "stalled" then {idle_minutes: ($activity.last_tool | if . == null then "-" else idle_minutes_of end)} else {} end)'
 }
 
 rows="$(
@@ -155,5 +161,5 @@ rows="$(
 )"
 [ -n "$rows" ] || exit 0
 jq -sc '
-  ["needs you", "stopped", "working", "paused", "finished", "other"] as $order
+  ["needs you", "stalled", "stopped", "working", "paused", "finished", "other"] as $order
   | sort_by([(.group as $group | $order | index($group)), .task_id]) | .[]' <<<"$rows"

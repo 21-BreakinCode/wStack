@@ -66,8 +66,17 @@ new_task changes-empty executing >/dev/null
 gone_folder="$(new_task changes-gone executing)"; fm_set "$gone_folder/spec.md" workspace_cwd "$work_dir/no-such-folder"
 plain_folder="$(new_task changes-plain executing)"; fm_set "$plain_folder/spec.md" workspace_cwd "$work_dir/plain-folder"
 
+new_task st-exec-idle executing >/dev/null
+new_task st-verify-done verifying >/dev/null
+new_task st-exec-working executing >/dev/null
+stalled_session=bbbbbbbb-0000-4000-8000-000000000001
+mkdir -p "$HOME/.claude/projects/-stalled-project"
+printf '{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"tool_use","name":"Bash","input":{"description":"Run the tests"}}]}}\n' \
+  "$(date -u -v-30M +%Y-%m-%dT%H:%M:%S.123Z)" > "$HOME/.claude/projects/-stalled-project/$stalled_session.jsonl"
+bash "$repo_root/scripts/session-id-add.sh" "$vault/T/$(date +%Y-%m-%d)-st-exec-idle/spec.md" "$stalled_session"
+
 export HERDR_ENV=1 WSTACK_HERDR_SESSION=wstack-test
-export FAKE_AGENT_STATES="need-idle=idle,need-idle2=done,need-blocked=blocked,need-deliver=working,busy-verify=working,busy-unknown=unknown,rest-paused=idle,odd-one=weird,empty-goal=working,herdr-error=error,z-stamp=working,crlf-goal=working"
+export FAKE_AGENT_STATES="need-idle=idle,need-idle2=done,need-blocked=blocked,need-deliver=working,busy-verify=working,busy-unknown=unknown,rest-paused=idle,odd-one=weird,empty-goal=working,herdr-error=error,z-stamp=working,crlf-goal=working,st-exec-idle=idle,st-verify-done=done,st-exec-working=working"
 export FAKE_WORKSPACES="done-here=w7,other-label=w8,old-done=w9,arch-done=w10"
 rows="$(/bin/bash "$script" --vault "$vault" --tasks-dir T)"
 assert "every row is one JSON line" '[ "$(jq -c . <<<"$rows" | wc -l | tr -d " ")" = "$(wc -l <<<"$rows" | tr -d " ")" ]'
@@ -82,6 +91,13 @@ assert "awaiting-deliver-approval with working needs you" '[ "$(field need-deliv
 assert "executing with no agent is stopped" '[ "$(field gone-one .group "$rows")" = stopped ] && [ "$(field gone-one .herdr "$rows")" = none ]'
 assert "verifying with working is working" '[ "$(field busy-verify .group "$rows")" = working ]'
 assert "executing with unknown is working and says unknown" '[ "$(field busy-unknown .group "$rows")" = working ] && [ "$(field busy-unknown .herdr "$rows")" = unknown ]'
+assert "executing and idle is stalled" '[ "$(field st-exec-idle .group "$rows")" = stalled ]'
+assert "verifying and done is stalled" '[ "$(field st-verify-done .group "$rows")" = stalled ]'
+assert "executing and working stays working" '[ "$(field st-exec-working .group "$rows")" = working ]'
+assert "drafting and idle stays needs you" '[ "$(field need-idle .group "$rows")" = "needs you" ]'
+assert "stalled row has idle minutes from last_tool" 'm="$(field st-exec-idle .idle_minutes "$rows")"; [ "$m" -ge 29 ] && [ "$m" -le 31 ]'
+assert "stalled row with no last_tool has idle minutes -" '[ "$(field st-verify-done .idle_minutes "$rows")" = - ]'
+assert "a row outside stalled has no idle_minutes" '[ "$(field st-exec-working "has(\"idle_minutes\")" "$rows")" = false ]'
 assert "paused status is paused" '[ "$(field rest-paused .group "$rows")" = paused ]'
 assert "a row that matches no group is other" '[ "$(field odd-one .group "$rows")" = other ]'
 assert "workspace id comes from agent get" '[ "$(field need-blocked .workspace_id "$rows")" = w-need-blocked ]'
@@ -93,7 +109,7 @@ assert "paused with no agent is paused, not stopped" '[ "$(field paused-none .gr
 assert "a herdr error that is not agent_not_found shows unknown and works" '[ "$(field herdr-error .herdr "$rows")" = unknown ] && [ "$(field herdr-error .group "$rows")" = working ]'
 assert "a Z time stamp gives an age in days" '[[ "$(field z-stamp .age "$rows")" =~ ^[0-9]+d$ ]]'
 assert "a CRLF spec gives a goal with no carriage return" '[ "$(field crlf-goal .goal "$rows")" = "Rough idea from launch: crlf-goal" ]'
-assert "groups follow the design order" '[ "$(jq -r .group <<<"$rows" | uniq | tr "\n" ,)" = "needs you,stopped,working,paused,finished,other," ]'
+assert "groups follow the design order" '[ "$(jq -r .group <<<"$rows" | uniq | tr "\n" ,)" = "needs you,stalled,stopped,working,paused,finished,other," ]'
 assert "rows inside a group are sorted by task_id" '[ "$(jq -r "select(.group == \"needs you\") | .slug" <<<"$rows" | tr "\n" ,)" = "need-blocked,need-deliver,need-idle,need-idle2," ]'
 assert "goal is the first line under Goal" '[ "$(field need-idle .goal "$rows")" = "Rough idea from launch: need-idle" ]'
 assert "last_step is the last Steps line" '[ "$(field need-idle2 .last_step "$rows")" = "- 2026-11-23T02:00:00Z step last one" ]'
@@ -106,7 +122,7 @@ unset HERDR_ENV
 rows="$(/bin/bash "$script" --vault "$vault" --tasks-dir T)"
 assert "outside herdr: n/a fields on every row" '[ "$(jq -r "select(.herdr != \"n/a\" or .workspace_id != \"n/a\") | .slug" <<<"$rows" | wc -l | tr -d " ")" = 0 ]'
 assert "outside herdr: no finished row" '[ -z "$(jq -r "select(.group == \"finished\")" <<<"$rows")" ]'
-assert "outside herdr: every open task is printed" '[ "$(wc -l <<<"$rows" | tr -d " ")" = 18 ]'
+assert "outside herdr: every open task is printed" '[ "$(wc -l <<<"$rows" | tr -d " ")" = 21 ]'
 assert "outside herdr: paused goes to paused, waiting to needs you, rest to other" '[ "$(field rest-paused .group "$rows")" = paused ] && [ "$(field need-deliver .group "$rows")" = "needs you" ] && [ "$(field gone-one .group "$rows")" = other ]'
 
 # last_tool and subagents come from the newest transcript in session_ids

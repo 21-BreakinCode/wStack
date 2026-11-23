@@ -88,6 +88,10 @@ The argument is `--task <task_id>`. The task folder is `$vault/$tasks_dir/<task_
 
 Change `status` only with `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" status <value>`.
 
+## Waiting for a subagent
+
+This rule applies to every stage. After you dispatch a subagent or start a background command, never end a turn to wait for it while it is not running. If a notice gives a result and says that the agent still waits on its own background work, find out whether the agent still runs. If it does not run, that notice is its result. Go on.
+
 ## Stop items
 
 Each time a stage sets `status` to `waiting-user`, it first appends one stop item to `stopped_for_user` in `run-log.md`:
