@@ -5,12 +5,14 @@
 # FAKE_FAIL_ARCHIVE_SOURCE=1: a move whose path starts with <FAKE_TASKS_DIR>/_archive/ fails.
 # FAKE_SLEEP_MATCH: a move whose path contains this text waits 5 seconds first.
 # FAKE_BAD_BYTES_MATCH: a move whose path contains this text prints bytes that are not UTF-8.
+# Like the real CLI, a to= value whose last part has no dot is a folder.
 set -uo pipefail
 command_name="${1:-}"
 case "$command_name" in
   vault) echo "$FAKE_VAULT" ;;
   move)
     from_rel="${2#path=}"; to_rel="${3#to=}"
+    case "${to_rel##*/}" in *.*) ;; *) to_rel="$to_rel/${from_rel##*/}" ;; esac
     if [ -n "${FAKE_SLEEP_MATCH:-}" ] && [[ "$from_rel" == *"$FAKE_SLEEP_MATCH"* ]]; then sleep 5; fi
     if [ -n "${FAKE_BAD_BYTES_MATCH:-}" ] && [[ "$from_rel" == *"$FAKE_BAD_BYTES_MATCH"* ]]; then printf '\377\376\n'; exit 0; fi
     if [ -n "${FAKE_FAIL_MATCH:-}" ] && [[ "$from_rel" == *"$FAKE_FAIL_MATCH"* ]]; then echo "Error: fake failure"; exit 0; fi

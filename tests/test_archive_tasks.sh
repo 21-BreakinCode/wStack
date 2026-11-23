@@ -90,6 +90,21 @@ rc_bytes=0; out_bytes="$(FAKE_VAULT="$vault_bytes" FAKE_BAD_BYTES_MATCH=zz-bytes
 assert "an unexpected error during the moves exits 4 with the report, no traceback" '[ "$rc_bytes" = 4 ] && grep -q "UnicodeDecodeError" <<<"$out_bytes" && grep -q "left in old folder:" <<<"$out_bytes" && ! grep -q Traceback <<<"$out_bytes"'
 assert "an unexpected error moves the files back and stops the run" '[ -f "$vault_bytes/Tasks/2026-11-20-i/a-first.md" ] && [ -f "$vault_bytes/Tasks/2026-11-20-i/spec.md" ] && [ ! -e "$vault_bytes/Tasks/_archive/2026-W48/2026-11-20-i" ] && [ -d "$vault_bytes/Tasks/2026-11-20-j" ]'
 
+vault_alone="$(make_vault v9 true)"
+make_task "$vault_alone" 2026-11-20-k delivered 2026-W48 fail-me.md
+out_alone="$(FAKE_VAULT="$vault_alone" FAKE_FAIL_MATCH=fail-me python3 "$archive" --vault "$vault_alone" --tasks-dir Tasks --week 2026-W48 2026-11-20-k 2>&1)"
+assert "a move back leaves no empty week folder and no empty _archive folder" 'grep -q "^not moved 2026-11-20-k: " <<<"$out_alone" && [ -f "$vault_alone/Tasks/2026-11-20-k/fail-me.md" ] && [ ! -e "$vault_alone/Tasks/_archive" ]'
+assert "a move back keeps a week folder that holds other tasks" '[ -d "$vault/Tasks/_archive/2026-W48/2026-11-20-a" ]'
+
+vault_dotless="$(make_vault v10 true)"
+make_task "$vault_dotless" 2026-11-20-l delivered 2026-W48 LICENSE docs/NOTES docs/a.md
+out_dotless="$(FAKE_VAULT="$vault_dotless" python3 "$archive" --vault "$vault_dotless" --tasks-dir Tasks --week 2026-W48 2026-11-20-l 2>&1)"
+dest_dotless="$vault_dotless/Tasks/_archive/2026-W48/2026-11-20-l"
+assert "a file with no dot in its name moves as a file" 'grep -q "^moved 2026-11-20-l -> " <<<"$out_dotless" && [ -f "$dest_dotless/LICENSE" ] && [ -f "$dest_dotless/docs/NOTES" ] && [ -f "$dest_dotless/docs/a.md" ] && [ ! -e "$vault_dotless/Tasks/2026-11-20-l" ]'
+
+rc_empty_dir=0; err_empty_dir="$(python3 "$archive" --vault "$vault_dotless" --tasks-dir "" --week 2026-W48 2026-11-20-l 2>&1)" || rc_empty_dir=$?
+assert "an empty --tasks-dir exits 1 with a clear message" '[ "$rc_empty_dir" = 1 ] && grep -q "tasks-dir" <<<"$err_empty_dir" && [ ! -e "$vault_dotless/_archive" ]'
+
 vault2="$(make_vault v2 false)"
 make_task "$vault2" 2026-11-20-a delivered 2026-W48
 rc_links=0; FAKE_VAULT="$vault2" python3 "$archive" --vault "$vault2" --tasks-dir Tasks --week 2026-W48 2026-11-20-a >/dev/null 2>&1 || rc_links=$?

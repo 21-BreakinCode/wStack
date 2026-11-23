@@ -74,7 +74,7 @@ def is_unindexed(parent, name):
 
 
 def list_task_entries(task_folder):
-    """Return (notes, raw). Notes move with the CLI. Raw entries (dot names, symlinks) move with os.rename."""
+    """Return (notes, raw). Notes move with the CLI. Raw entries (dot names, symlinks, file names with no dot) move with os.rename."""
     notes, raw = [], []
     for folder, dir_names, file_names in os.walk(task_folder):
         for name in list(dir_names):
@@ -82,7 +82,7 @@ def list_task_entries(task_folder):
                 dir_names.remove(name)
                 raw.append(os.path.relpath(os.path.join(folder, name), task_folder))
         for name in file_names:
-            target = raw if is_unindexed(folder, name) else notes
+            target = raw if is_unindexed(folder, name) or "." not in name else notes  # the CLI reads a to= with no dot as a folder
             target.append(os.path.relpath(os.path.join(folder, name), task_folder))
     return sorted(notes), sorted(raw)
 
@@ -172,6 +172,11 @@ def archive_task(vault, tasks_dir, week, task_id):
         except Exception:
             return split_report(vault, task_id, "move back failed", task_folder, dest_folder), True
     remove_empty_folders(dest_folder)
+    for empty_parent in (os.path.dirname(dest_folder), os.path.join(vault, tasks_dir, "_archive")):  # the week folder, then _archive
+        try:
+            os.rmdir(empty_parent)
+        except OSError:
+            pass
     if os.path.exists(dest_folder):
         return split_report(vault, task_id, "archive folder not empty after the move back", task_folder, dest_folder), True
     if stop_reason:
@@ -193,6 +198,8 @@ def main():
     if os.path.isabs(args.tasks_dir) or ".." in args.tasks_dir.split("/"):
         sys.exit("archive-tasks: --tasks-dir must be relative to the vault")
     tasks_dir = args.tasks_dir.strip("/")
+    if not tasks_dir:
+        sys.exit("archive-tasks: --tasks-dir must name a folder inside the vault")
     for task_id in args.task_ids:
         if "/" in task_id or task_id in ("", ".", "..", "_archive"):
             sys.exit("archive-tasks: bad task id: %s" % task_id)
