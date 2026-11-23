@@ -129,6 +129,7 @@ wstack/
 │   └── notion.json                Notion-style theme of the board page
 ├── templates/
 │   ├── retro-note.md              exit note of a task session (RD)
+│   ├── facts.md                   project facts file next to the contract
 │   ├── contract.md                service contract
 │   ├── plan.md                    planned items that are not built yet
 │   ├── decision.md                one decision file
@@ -147,6 +148,7 @@ wstack/
 │   ├── contract-path.sh           prints the contract path of a repository
 │   ├── contract-check.sh          drift check, no network call
 │   ├── contract-edit.sh           the only writer of contract files
+│   ├── facts-add.sh               adds one confirmed or rejected fact to the facts file, under the contract lock
 │   ├── contract-hook.sh           SessionStart and PostToolUse drift hook
 │   ├── board.sh                   one JSON row per open RD (a task session), for /wstack:board
 │   ├── board-watch.sh             live refresh loop on top of board.sh, for /wstack:board --watch
@@ -595,6 +597,7 @@ If an upload fails, the agent keeps the R2 copy and writes the failure in `revie
 - If sections are stale, the `contract-reader` agent writes a patch to `<retro>.contract-patch.md` in the Retros folder. The user picks the sections to update in the same question as the proposals.
 - Contract write: the retro applies the chosen sections under the contract lock. It first copies the contract once to `<retro>.contract-before.md` for undo. If every stale section was applied, `verified_commit` moves to the checked commit. The retro file gets a `## Contract` section with the status, the applied and still stale sections, and the undo.
 - Exit notes: each RD writes `retro-note.md` in its task folder at exit. The analyst reads it.
+- Project facts: `<app_name>.facts.md` sits next to the contract. It has `## Facts` and `## Not facts`. The analyst proposes fact candidates from `## Fact candidates` of the notes. The user answers each one, and `scripts/facts-add.sh` writes the answer under the contract lock. The `contract-reader` agent returns the `## Facts` lines as `### Project facts`. Confirmation copies them into `contract-brief.md`, and the spec follows them.
 - Transcript stats: `collect-week.sh` adds `transcript_stats` for each task with `session_ids`. The analyst compares the note and the run log with the counts, and finds `top_bash` commands that repeat across tasks.
 - Targeted reopen: where the evidence raises a question, the analyst writes it in a `## Questions` block. The retro asks a read-only fork of the last RD session (`--resume <id> --fork-session --tools Read,Grep,Glob --strict-mcp-config --no-session-persistence`). The fork leaves the original session as it was. The answers go under `## RD answers` in the retro file, and the analyst revises the proposals with them. A failed fork writes its error as the answer, and the retro goes on.
 

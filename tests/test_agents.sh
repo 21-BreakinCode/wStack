@@ -29,4 +29,6 @@ assert "analyst has a Questions block and no question without a session id" 'gre
 assert "analyst looks for the same top_bash command in two or more tasks" 'grep -qF "The same \`top_bash\` command in two or more tasks." "$analyst"'
 assert "analyst trusts the stats over a note, a log, or an answer" 'grep -qF "trust the stats and name the mismatch" "$analyst"'
 assert "analyst: no proposals can still come with questions" 'grep -qF "can still have a \`## Questions\` block" "$analyst"'
+assert "analyst proposes fact candidates with a facts file" 'grep -qF "## Fact candidates" "$analyst" && grep -qF "Facts file:" "$analyst"'
+assert "reader reads the facts file and replies with Project facts" 'grep -qF ".facts.md" "$reader" && grep -qF "### Project facts" "$reader"'
 finish

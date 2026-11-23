@@ -12,3 +12,5 @@ written_at:
 ## Tool and guard friction
 
 ## Surprises
+
+## Fact candidates

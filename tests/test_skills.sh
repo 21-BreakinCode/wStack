@@ -107,7 +107,7 @@ add_line="$(grep -nF -- "$add_text" <<<"$work_section" | head -1 | cut -d: -f1)"
 status_line="$(grep -nF -- "$status_text" <<<"$work_section" | head -1 | cut -d: -f1)"
 assert "start-task work mode records the session id before it reads the status" '[ -n "$add_line" ] && [ -n "$status_line" ] && [ "$add_line" -lt "$status_line" ]'
 note_template="$repo_root/templates/retro-note.md"
-assert "retro-note template has its frontmatter keys and five headings in order" '[ -f "$note_template" ] && grep -q "^task_id:" "$note_template" && grep -q "^written_at:" "$note_template" && [ "$(grep "^## " "$note_template" | tr "\n" "|")" = "## Slow or repeated steps|## Would script|## Spec gaps|## Tool and guard friction|## Surprises|" ]'
+assert "retro-note template has its frontmatter keys and six headings in order" '[ -f "$note_template" ] && grep -q "^task_id:" "$note_template" && grep -q "^written_at:" "$note_template" && [ "$(grep "^## " "$note_template" | tr "\n" "|")" = "## Slow or repeated steps|## Would script|## Spec gaps|## Tool and guard friction|## Surprises|## Fact candidates|" ]'
 deliver_skill="$repo_root/skills/deliver-task/SKILL.md"
 finish_note_line="$(sed -n '/^## Finish/,/^## Stop/p' "$deliver_skill" | grep -n 'templates/retro-note.md' | head -1 | cut -d: -f1)"
 finish_status_line="$(sed -n '/^## Finish/,/^## Stop/p' "$deliver_skill" | grep -n 'Set `status` to `delivered`' | head -1 | cut -d: -f1)"
@@ -129,4 +129,5 @@ assert "run-retro: step 3 sets proposals to No proposals" 'grep -qF "Set \`\$pro
 assert "run-retro: step 5 quotes each reply with > and the fork step is bounded and starts with a fixed line" 'grep -qF "Quote the whole reply with \`>\` on every line" "$retro_skill" && grep -qF "Questions from the weekly retro:" <<<"$ask_section" && grep -qF "not reachable: timeout" <<<"$ask_section" && grep -qF "not reachable: no output" <<<"$ask_section"'
 assert "deliver-task finds the task folder through the archive lookup" 'grep -qF "task_dir_of \"\$vault\" \"\$tasks_dir\"" "$repo_root/skills/deliver-task/SKILL.md"'
 assert "start-task task mode stops on an archived task" 'grep -qF "is archived" "$start_skill"'
+assert "G5 copies Project facts into contract-brief.md and the spec follows them" 'grep "^G5\." -A4 "$repo_root/skills/start-task/references/confirmation.md" | grep -qF "### Project facts" && grep -qF "The spec follows the project facts" "$repo_root/skills/start-task/references/confirmation.md"'
 finish

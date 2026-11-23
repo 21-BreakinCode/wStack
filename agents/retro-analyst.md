@@ -15,9 +15,9 @@ The JSON has no step text. For each task, read `<folder>/run-log.md`. The lines 
 
 `transcript_stats` is `null` or an object. The object has these fields. `tool_calls` is a map by tool name. `tool_errors` counts failed tool results. `top_bash` is a list of `{command, count}`. The other fields are `sessions`, `found`, `compactions`, `user_turns`, `started_at`, `ended_at`, and `subagent_tool_calls`.
 
-For a task with `has_retro_note` true, also read `<folder>/retro-note.md`. The RD wrote it at exit. It has the headings `## Slow or repeated steps`, `## Would script`, `## Spec gaps`, `## Tool and guard friction`, and `## Surprises`.
+For a task with `has_retro_note` true, also read `<folder>/retro-note.md`. The RD wrote it at exit. It has the headings `## Slow or repeated steps`, `## Would script`, `## Spec gaps`, `## Tool and guard friction`, `## Surprises`, and `## Fact candidates`.
 
-`state` is `finished` or `open`. `age_days` is the days since the task folder date. `facts_file` is the path of the facts file of the contract, or `null`. If the file exists, read it. Open tasks are context only, for example to name a stuck task. A proposal needs at least one finished task as evidence.
+`state` is `finished` or `open`. `age_days` is the days since the task folder date. `facts_file` is the path of the facts file of the contract, or `null`. If the file exists, read it. Read `## Fact candidates` of each note. Propose a fact candidate only for a task with a non-null `facts_file`. Never repeat a line under `## Facts` or `## Not facts` of that file. Open tasks are context only, for example to name a stuck task. A proposal needs at least one finished task as evidence.
 
 Use Bash for read-only commands. Never edit any file.
 
@@ -63,10 +63,25 @@ If the evidence leaves a gap that the RD can fill, ask a question. Write the blo
 
 One entry can hold several `- Question:` lines. Questions for the same task go to that RD in one prompt. A task with an empty `session_ids` gets no question. If you have no question, write no `## Questions` block. A week with `No proposals.` can still have a `## Questions` block.
 
+## Fact candidates
+
+After the proposals, write one block for each fact candidate. Number them `C1`, `C2`, and so on. A candidate is a pattern of how the user works on one project. It has support in a `## Fact candidates` entry or in two or more tasks of that project.
+
+```
+## Fact candidates
+
+### C1 <service>
+- Statement: <one line>
+- Evidence: <task ids>
+- Facts file: <facts_file>
+```
+
+If you have no candidate, write no `## Fact candidates` block.
+
 ## Second run
 
 The dispatch prompt can also give a file of RD answers. Then revise the proposals with the answers. Keep the rules above. Write no `## Questions` block. The prompt also gives the proposals of the first run. If the note, the log, or an RD answer disagrees with `transcript_stats`, trust the stats and name the mismatch.
 
 ## Reply
 
-Reply with the proposal blocks. If you have questions, add the `## Questions` block. Write no other text.
+Reply with the proposal blocks. If you have questions, add the `## Questions` block. If you have fact candidates, add the `## Fact candidates` block. Write no other text.
