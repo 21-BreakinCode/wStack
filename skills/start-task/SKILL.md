@@ -70,7 +70,7 @@ The argument is a rough idea. Run these steps in order.
 
 ## Work mode
 
-The argument is `--task <task_id>`. The task folder is `$vault/$tasks_dir/<task_id>`.
+The argument is `--task <task_id>`. The task folder is `$vault/$tasks_dir/<task_id>`. If that folder does not exist and `(source "$scripts/lib/task-dir.sh" && task_dir_of "$vault" "$tasks_dir" <task_id>)` prints a path, tell the user that the task is archived, give the path, and stop.
 
 1. Record this session on the task: `bash "$scripts/session-id-add.sh" "$task_dir/spec.md" "${CLAUDE_SESSION_ID}"`. If it exits 3, write the `step` line `session id not available` in `run-log.md`. If it exits with any other non-zero code, write the `step` line `session id not recorded: <first stderr line>`. Go on in every case.
 2. Read the status from the frontmatter only: `(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" status)`.

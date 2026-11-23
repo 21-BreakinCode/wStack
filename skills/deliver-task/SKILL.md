@@ -240,7 +240,7 @@ Use this stop when a target fails. Never retry the target before the user says y
 
 The contract gate runs this (step G4 of Confirmation). At G4 the brief does not exist yet. `$contract_file` comes from `contract-path.sh`, and `<base_branch>` from the contract frontmatter. `<contract folder>` is the folder that holds `$contract_file`. Read `pending` with `fm_get "$contract_file" pending`. It is a list of `{"pr":<n>,"task":"<id>"}` items. If it is empty, do nothing.
 
-For each item, run `gh pr view <pr> --json state -q .state` in the repository folder. The task folder of the item is `$vault/$tasks_dir/<task>`.
+For each item, run `gh pr view <pr> --json state -q .state` in the repository folder. The task folder of the item is the output of `(source "$scripts/lib/task-dir.sh" && task_dir_of "$vault" "$tasks_dir" <task>)`. It finds the task in the archive too. If it prints nothing, the folder does not exist.
 
 - `OPEN`: keep the item.
 - `gh` fails or prints another value: keep the item.

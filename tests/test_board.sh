@@ -35,6 +35,8 @@ fm_set "$step_folder/spec.md" created_at "$(date -v-3H +%Y-%m-%dT%H:%M:%S%z | se
 new_task done-here delivered >/dev/null
 new_task done-closed delivered >/dev/null
 new_task old-done delivered 2020-01-01 >/dev/null
+archived_folder="$(new_task arch-done delivered 2020-01-01)"
+mkdir -p "$vault/T/_archive/2026-W45" && mv "$archived_folder" "$vault/T/_archive/2026-W45/"
 new_task paused-none paused >/dev/null
 new_task herdr-error executing >/dev/null
 z_folder="$(new_task z-stamp executing)"
@@ -48,7 +50,7 @@ rm -f "$empty_goal/run-log.md"
 
 export HERDR_ENV=1 WSTACK_HERDR_SESSION=wstack-test
 export FAKE_AGENT_STATES="need-idle=idle,need-idle2=done,need-blocked=blocked,need-deliver=working,busy-verify=working,busy-unknown=unknown,rest-paused=idle,odd-one=weird,empty-goal=working,herdr-error=error,z-stamp=working,crlf-goal=working"
-export FAKE_WORKSPACES="done-here=w7,other-label=w8,old-done=w9"
+export FAKE_WORKSPACES="done-here=w7,other-label=w8,old-done=w9,arch-done=w10"
 rows="$(/bin/bash "$script" --vault "$vault" --tasks-dir T)"
 assert "every row is one JSON line" '[ "$(jq -c . <<<"$rows" | wc -l | tr -d " ")" = "$(wc -l <<<"$rows" | tr -d " ")" ]'
 assert "drafting with idle needs you" '[ "$(field need-idle .group "$rows")" = "needs you" ]'
@@ -63,6 +65,7 @@ assert "a row that matches no group is other" '[ "$(field odd-one .group "$rows"
 assert "workspace id comes from agent get" '[ "$(field need-blocked .workspace_id "$rows")" = w-need-blocked ]'
 assert "delivered task with an open workspace is finished with its id" '[ "$(field done-here .group "$rows")" = finished ] && [ "$(field done-here .workspace_id "$rows")" = w7 ]'
 assert "delivered task with no open workspace has no row" '[ -z "$(field done-closed .group "$rows")" ]'
+assert "an archived delivered task with an open workspace is finished" '[ "$(field arch-done .group "$rows")" = finished ] && [ "$(field arch-done .workspace_id "$rows")" = w10 ]'
 assert "delivered task from long ago with an open workspace is finished" '[ "$(field old-done .group "$rows")" = finished ] && [ "$(field old-done .workspace_id "$rows")" = w9 ]'
 assert "paused with no agent is paused, not stopped" '[ "$(field paused-none .group "$rows")" = paused ] && [ "$(field paused-none .herdr "$rows")" = none ]'
 assert "a herdr error that is not agent_not_found shows unknown and works" '[ "$(field herdr-error .herdr "$rows")" = unknown ] && [ "$(field herdr-error .group "$rows")" = working ]'

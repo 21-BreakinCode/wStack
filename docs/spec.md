@@ -153,6 +153,7 @@ wstack/
 │   ├── session-id-add.sh          adds a session id to session_ids in spec.md
 │   ├── transcript-stats.sh        tool use, errors and time range of the sessions of a task
 │   ├── lib/transcripts.sh         finds transcripts and subagent folders by session id
+│   ├── lib/task-dir.sh            task_dir_of: finds a task folder, top level first, then the archive
 │   ├── lib/repo.sh                main_checkout: finds the main checkout from a worktree
 │   ├── lib/frontmatter.sh         fm_get, fm_set, fm_append, fm_to_json: read and write frontmatter (fm_replace keeps the file mode)
 │   ├── lib/herdr.sh               herdr helpers that the task scripts share

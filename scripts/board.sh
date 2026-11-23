@@ -129,7 +129,7 @@ rows="$(
 
   if $in_herdr; then
     while IFS=$'\t' read -r workspace_id label; do
-      for folder in "$vault/$tasks_dir"/????-??-??-"$label"; do
+      for folder in "$vault/$tasks_dir"/????-??-??-"$label" "$vault/$tasks_dir"/_archive/*/????-??-??-"$label"; do
         [ -f "$folder/spec.md" ] || continue
         status="$(fm_get "$folder/spec.md" status)"
         case "$status" in (delivered|cancelled) ;; (*) continue ;; esac

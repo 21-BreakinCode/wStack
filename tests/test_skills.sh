@@ -126,4 +126,6 @@ assert "run-retro: rmdir only a folder that the step created, with a 10 minute t
 assert "run-retro: writes quoted RD answers and dispatches the analyst a second time on a fork reply" 'grep -qF "## RD answers" "$retro_skill" && grep -qF -- "- Answer:" "$retro_skill" && grep -qF "If at least one fork reply exists (an error line does not count), dispatch \`wstack:retro-analyst\` a second time" <<<"$ask_section"'
 assert "run-retro: step 3 sets proposals to No proposals" 'grep -qF "Set \`\$proposals\` to \`No proposals.\`" "$retro_skill"'
 assert "run-retro: step 5 quotes each reply with > and the fork step is bounded and starts with a fixed line" 'grep -qF "Quote the whole reply with \`>\` on every line" "$retro_skill" && grep -qF "Questions from the weekly retro:" <<<"$ask_section" && grep -qF "not reachable: timeout" <<<"$ask_section" && grep -qF "not reachable: no output" <<<"$ask_section"'
+assert "deliver-task finds the task folder through the archive lookup" 'grep -qF "task_dir_of \"\$vault\" \"\$tasks_dir\"" "$repo_root/skills/deliver-task/SKILL.md"'
+assert "start-task task mode stops on an archived task" 'grep -qF "is archived" "$start_skill"'
 finish
