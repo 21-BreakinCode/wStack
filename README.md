@@ -42,7 +42,7 @@ User commands:
 - `/wstack:pause-work`: pause the work of any session. It writes a resume note, then stops the background agents, shells, and processes the session started. Run it before you close the computer.
 - `/wstack:resume-work`: resume from the newest resume note of the current folder. For a task, it prints `cd "<workspace_cwd>" && claude "/wstack:start-task --task <task_id>"`, so the task resumes in its own folder with its configuration values.
 - `/wstack:init-org`: scaffold the handover initiation file for an org. Run it once per org.
-- `/wstack:init-service`: set up the current repository for handovers. Run it once per repository.
+- `/wstack:init-service`: set up a repository for handovers. Run it once per repository. `/wstack:init-service <repo-path> ...` sets up each repository you name, from any folder. `/wstack:init-service --check` reports the state of every mapped repository and changes nothing.
 - `/wstack:create-handover`: create a handover document from the current conversation.
 - `/wstack:wrap-up-handovers`: wrap up all active handovers in the vault.
 
@@ -53,7 +53,7 @@ Helper skills (the agent uses them, you do not): `build-review-page`, `capture-e
 A handover document carries the state of a piece of work to the next session. The handover commands keep these documents in your Obsidian vault and link them into each repository.
 
 1. Run `/wstack:init-org` once per org. It writes `handover_handler__initiation.md` in `01Project/<ORG>/` of the vault. That file holds the service mapping table.
-2. Run `/wstack:init-service` once in each repository. It finds or adds the mapping row for the repository, and creates the vault folder if it is missing. It links `./handover` to that folder. It writes the entry `/handover` to the local git exclude file, which `git rev-parse --git-path info/exclude` names. It never edits `.gitignore`. If a gitignore already ignores `handover`, it changes nothing and prints `already present`.
+2. Run `/wstack:init-service` once in each repository. It finds or adds the mapping row for the repository, and creates the vault folder if it is missing. It links `./handover` to that folder. It writes the entry `/handover` to the local git exclude file, which `git rev-parse --git-path info/exclude` names. It never edits `.gitignore`. If a gitignore already ignores `handover`, it changes nothing and prints `already present`. Before it writes, it asks you to approve each repository, and it shows the link path and the exclude file path. To set up several repositories at once, pass their paths. Run `/wstack:init-service --check` to check every row of the mapping table. For each row, it reports whether the repository exists, whether `./handover` links to the vault folder, whether git ignores `handover`, whether the vault folder exists, and the state of the contract. It then offers to run the setup for the rows that need it.
 3. Run `/wstack:create-handover` to write a handover document under `./handover/`, seeded from the conversation.
 4. Run `/wstack:wrap-up-handovers` to wrap up. It finds the active handovers in the vault. It asks you for one batch of decisions, then archives, updates, or suspends each handover. Archived files go to `<vault>/04Archive/<ORG>/`. The archive root is fixed at `04Archive`.
 

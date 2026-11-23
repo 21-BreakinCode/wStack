@@ -163,7 +163,7 @@ wstack/
 │   ├── lib/repo.sh                main_checkout: finds the main checkout from a worktree
 │   ├── lib/frontmatter.sh         fm_get, fm_set, fm_append, fm_to_json: read and write frontmatter (fm_replace keeps the file mode)
 │   ├── lib/herdr.sh               herdr helpers that the task scripts share
-│   └── handover/                  resolvers, exclude and symlink scripts, Python helpers
+│   └── handover/                  resolvers, exclude and symlink scripts, the mapping check, Python helpers
 ├── docs/
 │   └── decisions.md               changes to ASSUME rules, with reasons
 └── README.md

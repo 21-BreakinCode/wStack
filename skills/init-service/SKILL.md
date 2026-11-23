@@ -1,13 +1,14 @@
 ---
 name: init-service
-description: "Per-repo setup. Adds the current repo to the service mapping table and creates the ./handover symlink into LifeOS."
+description: "Per-repo setup. Adds a repo to the service mapping table and creates the ./handover symlink into LifeOS. Takes repo paths, or --check for a read-only check of every mapped row."
+argument-hint: "[<repo-path> ...] | --check"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "AskUserQuestion"]
 disable-model-invocation: true
 ---
 
 # /wstack:init-service
 
-One-time per repo. It resolves the current org, and finds or appends the service mapping row for this repo. If the LifeOS handover folder is missing, it creates one. It symlinks `./handover` to that folder, and writes `/handover` to the local git exclude file. Last, it offers to set up the service contract.
+One-time per repo. It resolves the org of the repo, and finds or appends the service mapping row for the repo. If the LifeOS handover folder is missing, it creates one. It symlinks `./handover` to that folder, and writes `/handover` to the local git exclude file. Last, it offers to set up the service contract. It works on the current folder, or on each repo path that the user gives. `--check` reports the state of every mapped row and changes nothing.
 
 ## Vault location
 
@@ -19,12 +20,28 @@ printf '%s\n' "VAULT_PATH WSTACK=${WSTACK_VAULT_PATH:-} EVAL=${EVAL_WSTACK_VAULT
 
 If no value is set, ask the user for it and stop. If the value is a relative path, make it absolute with `cd <value> && pwd`. Each Bash call is a new shell. Start each Bash call that needs the vault with `vault=<the absolute path>; export LIFEOS_ROOT="$vault"`.
 
+## Arguments
+
+Read `$ARGUMENTS`:
+
+- Empty: one target, the current folder (`$PWD`).
+- `--check`: run "Check mode" below, then stop.
+- One or more paths: the targets, in the order given. A path with a space must be quoted. Expand a leading `~` to `$HOME`. Make each relative path absolute against `$PWD`.
+
+Test each target before Phase 1:
+
+```bash
+[ "$(git -C "$TARGET" rev-parse --is-inside-work-tree 2>/dev/null)" = true ] && echo "ok: $(git -C "$TARGET" rev-parse --show-toplevel)" || echo "not a git work tree: $TARGET"
+```
+
+Drop each target that is not a git work tree, and list it under `Skipped:` in the Phase 9 report. If two targets print the same repo root, keep the first one only. Run Phases 1 to 8 for each other target, one target at a time. An error or a "No" in one target stops that target only. Then go on to the next target. A vault that is not reachable (Phase 1, exit 3) stops the whole run. Each Bash call is a new shell, so start each call that reads the repo with `TARGET=<the absolute path>`.
+
 ## Flow
 
 ### Phase 1 — Resolve ORG
 
 ```bash
-ORG=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/resolve-org.sh") || {
+ORG=$(cd "$TARGET" && bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/resolve-org.sh") || {
     rc=$?
     [ "$rc" -eq 3 ] && { echo "Vault not reachable at $vault. Check the vault path and stop."; exit 3; }
     ORG=""
@@ -47,17 +64,17 @@ INIT="$vault/01Project/$ORG/handover_handler__initiation.md"
 Find the repository root and the main checkout. They differ in a worktree and in a subfolder:
 
 ```bash
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-MAIN_CHECKOUT="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+REPO_ROOT="$(git -C "$TARGET" rev-parse --show-toplevel)"
+MAIN_CHECKOUT="$(dirname "$(git -C "$TARGET" rev-parse --path-format=absolute --git-common-dir)")"
 ```
 
 Each Bash call is a new shell. If Phase 6 or Phase 7 runs in a later Bash call, set these two variables again there. Phase 8 needs only `REPO_ROOT` and `vault`.
 
 ```bash
-RESULT=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/resolve-service.sh" "$PWD" "$ORG") && EXIT=$? || EXIT=$?
+RESULT=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/resolve-service.sh" "$TARGET" "$ORG") && EXIT=$? || EXIT=$?
 ```
 
-- **Exit 0:** parse `app_name|lifeos_subpath` from `$RESULT`. Report "Mapped: $APP_NAME → $LIFEOS_SUBPATH" and skip to Phase 5.
+- **Exit 0:** parse `app_name|lifeos_subpath` from `$RESULT`. Report "Mapped: $APP_NAME → $LIFEOS_SUBPATH" and skip to Phase 4a.
 - **Exit 1:** the repo is not mapped yet. Continue to Phase 4.
 - **Exit 2 or 3:** report the error and stop.
 
@@ -84,19 +101,31 @@ Single-space padding is enough. Obsidian tables tolerate it.
 
 ### Phase 4a — Confirm with user
 
+This phase runs for every target, mapped or new, before any write. Find the exclude file:
+
+```bash
+EXCLUDE_FILE="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-path info/exclude)"
+```
+
 `AskUserQuestion`:
-- `question`: "Append this row to $INIT and create $vault/01Project/$ORG/$LIFEOS_SUBPATH/handover/?\n| $APP_NAME | $REPO_PATH_FOR_ROW | $LIFEOS_SUBPATH |"
+- `question`: "Write these for $REPO_ROOT?" followed by one line per write, each with its full path:
+  - New repo only: "Append this row to $INIT: | $APP_NAME | $REPO_PATH_FOR_ROW | $LIFEOS_SUBPATH |"
+  - "Folder: $vault/01Project/$ORG/$LIFEOS_SUBPATH/handover/"
+  - "Link $REPO_ROOT/handover -> $vault/01Project/$ORG/$LIFEOS_SUBPATH/handover"
+  - "Exclude file: $EXCLUDE_FILE"
+
+  If the folder is missing, Phase 5 creates it. If no rule ignores `handover` yet, Phase 7 writes `/handover` to the exclude file.
 - `options`:
   - "Yes, write it"
-  - "No, abort"
+  - "No, skip this repo"
 
-If the user picks "No, abort", stop. Do not write the row and do not run Phase 5.
+If the user picks "No, skip this repo", write nothing for this target, and do not run Phases 5 to 8 for it. Its Phase 9 entry says `skipped by user`.
 
 ### Phase 5 — Write the row and create the LifeOS handover folder
 
 If the user said yes:
 
-Use `Edit` to append the new row from Phase 4 to `$INIT`. If the table is empty, append it after the separator row. Otherwise, append it after the last existing data row. Keep all other content.
+For a new repo, use `Edit` to append the new row from Phase 4 to `$INIT`. If the table is empty, append it after the separator row. Otherwise, append it after the last existing data row. Keep all other content. A mapped repo already has its row, so skip the append.
 
 ```bash
 mkdir -p "$vault/01Project/$ORG/$LIFEOS_SUBPATH/handover"
@@ -157,6 +186,8 @@ In every case go to Phase 9.
 
 ### Phase 9 — Report
 
+Print one block for each target, in the order given. For a target that stopped early, print its path and the reason instead of the block. Then print the dropped targets:
+
 ```
 ✓ Service initialized:
     ORG:            $ORG
@@ -166,10 +197,40 @@ In every case go to Phase 9.
     Local exclude:  /handover (added | already present)
     Contract:       present (<status>) | task <task_id> launched | not set up | <error>
 
+✗ $REPO_ROOT: skipped by user | <the error that stopped it>
+
+Skipped:
+    <path>: not a git work tree
+
 Next: /wstack:create-handover <topic>
 ```
 
+If no target was dropped, leave out the `Skipped:` part.
+
+## Check mode
+
+`--check` reads the service mapping table of one org and reports each row. It writes nothing.
+
+1. Resolve the ORG as in Phase 1, with `TARGET="$PWD"`. If `$ORG` is empty, ask with `AskUserQuestion`, and list the folders under `$vault/01Project/` that have a `handover_handler__initiation.md`.
+2. Run the check:
+
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/handover/check-mapping.sh" "$vault" "$ORG" && rc=0 || rc=$?
+   echo "rc=$rc"
+   ```
+
+   The output is one header line and one tab-separated line per row. Exit 0 means every row is `ok`. Exit 1 means at least one row is `fix` or `broken`. For exit 2, report the stderr text and stop.
+3. Show the rows as a table with the columns status, app_name, repo_path, link, ignore, vault, contract, and notes. Then explain each row that is not `ok`:
+   - `fix`: the repo exists, but the link, the ignore rule, or the vault folder is missing or wrong. The init flow fixes it.
+   - `broken`: the repo path does not exist, it is not a git work tree, or the row has no `lifeos_subpath`. Tell the user to fix or remove the row by hand, because this command never rewrites rows. The contract check needs the repo, so a `broken` row shows only whether the contract file is `present` or `missing`.
+   - The note `app_name is not kebab-case`: the contract file name uses `app_name` as written, but `/wstack:create-handover` converts it to kebab-case. Suggest a rename of the row by hand.
+   - A `contract` value of `missing` or `stale` does not make a row fail. Name the repos with no contract, and say that the init flow offers a contract task.
+4. If one or more rows are `fix`, ask one `AskUserQuestion`: "Run the init flow for the <N> repos that need it?", with the options "Yes, all <N>" and "Not now". The user can name a subset in the free-text answer.
+5. On yes, use the `repo_path` values of the chosen rows as the targets, and run the flow from "Arguments" on. The rows come from this org's table. So in Phase 1, use the `$ORG` of this check for every target, and do not run `resolve-org.sh`. Each repo still gets its own Phase 4a question.
+
 ## Non-negotiable rules
+
+- Check mode writes nothing. Only the init flow writes, after the Phase 4a question.
 
 - Never destroy a non-empty `./handover/` folder. If there is a conflict, stop and ask the user.
 - Service mapping rows are append-only via this command. Never rewrite existing rows.

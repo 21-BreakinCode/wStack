@@ -51,7 +51,12 @@ assert "run-retro reads every finished task once, with no 7-day window" 'grep -q
 assert "run-retro: every skip adds a Contract status line to the retro file" 'grep -qF "Every outcome has a status line that starts with \`Contract:\`" "$retro_skill" && grep -qF "Contract: missing" "$retro_skill"'
 assert "no obsidian-kit names in skills" '! grep -rqE "obsidian-kit:|OBSIDIAN_KIT_|resolve_via_handover" "$repo_root/skills"'
 for s in init-org init-service create-handover wrap-up-handovers pause-work resume-work; do assert "$s reads vault_path" 'grep -qF "\${user_config.vault_path}" "$repo_root/skills/$s/SKILL.md"'; done
-assert "init-service sets REPO_ROOT before the mapped skip" '[ "$(grep -n "REPO_ROOT=" "$repo_root/skills/init-service/SKILL.md" | head -1 | cut -d: -f1)" -lt "$(grep -n "skip to Phase 5" "$repo_root/skills/init-service/SKILL.md" | head -1 | cut -d: -f1)" ]'
+assert "init-service sets REPO_ROOT before the mapped skip" '[ "$(grep -n "REPO_ROOT=" "$repo_root/skills/init-service/SKILL.md" | head -1 | cut -d: -f1)" -lt "$(grep -n "skip to Phase 4a" "$repo_root/skills/init-service/SKILL.md" | head -1 | cut -d: -f1)" ]'
+init_skill="$repo_root/skills/init-service/SKILL.md"
+assert "init-service takes repo paths and --check" 'grep -qF "argument-hint: \"[<repo-path> ...] | --check\"" "$init_skill" && grep -qF "not a git work tree: \$TARGET" "$init_skill" && grep -qF "stops that target only" "$init_skill"'
+assert "init-service reads the repo from TARGET, never from the session folder" 'grep -qF "cd \"\$TARGET\" && bash" "$init_skill" && grep -qF "resolve-service.sh\" \"\$TARGET\"" "$init_skill" && ! grep -qE "git rev-parse --show-toplevel|resolve-service.sh\" \"\$PWD\"" "$init_skill"'
+assert "init-service confirms every repo with the link and exclude file paths" 'grep -qF "runs for every target, mapped or new, before any write" "$init_skill" && grep -qF "Exclude file: \$EXCLUDE_FILE" "$init_skill" && grep -qF "No, skip this repo" "$init_skill"'
+assert "init-service check mode runs the read-only script and offers the init flow" 'grep -qF "scripts/handover/check-mapping.sh\" \"\$vault\" \"\$ORG\"" "$init_skill" && grep -qF "Check mode writes nothing." "$init_skill" && grep -qF "Each repo still gets its own Phase 4a question." "$init_skill"'
 assert "init-service uses the exclude script" 'grep -q "scripts/handover/ensure-exclude.sh" "$repo_root/skills/init-service/SKILL.md"'
 # A3-8: a later Verify round replaces the evidence lines
 assert "verify clears old evidence lines first" 'grep -q "First delete every line under .## Evidence." "$repo_root/skills/start-task/references/verify.md"'
