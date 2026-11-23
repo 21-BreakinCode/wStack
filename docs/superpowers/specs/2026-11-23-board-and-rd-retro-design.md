@@ -104,7 +104,7 @@ written_at: <ISO time>
 
 - C1. New script `scripts/transcript-stats.sh <session id>...` finds the transcripts as A4 says, main and subagent. It prints one JSON object with these fields:
   - tool calls by tool name, and tool results with an error
-  - the 10 most repeated Bash commands (first two words)
+  - the 10 most repeated Bash commands, as the command name plus the subcommand of a tool such as git or gh (no quoted text and no secrets)
   - the number of compactions and of user turns
   - the start and end times
 

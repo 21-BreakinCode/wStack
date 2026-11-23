@@ -27,7 +27,7 @@ assert "found counts transcripts that exist" '[ "$(field .found)" = 2 ]'
 assert "tool_calls by name" '[ "$(field .tool_calls)" = "{\"Bash\":5,\"Read\":1}" ]'
 assert "tool_errors counts is_error true only" '[ "$(field .tool_errors)" = 1 ]'
 assert "top_bash row 1 is git status x3 (newline splits words)" '[ "$(field ".top_bash[0]")" = "{\"command\":\"git status\",\"count\":3}" ]'
-assert "top_bash tie: ab cd sorts before ls" '[ "$(field ".top_bash[1]")" = "{\"command\":\"ab cd\",\"count\":1}" ]'
+assert "top_bash tie: ab sorts before ls (ab takes no subcommand)" '[ "$(field ".top_bash[1]")" = "{\"command\":\"ab\",\"count\":1}" ]'
 assert "top_bash row 3 is ls x1 (option word dropped)" '[ "$(field ".top_bash[2]")" = "{\"command\":\"ls\",\"count\":1}" ]'
 assert "top_bash has three rows" '[ "$(field ".top_bash | length")" = 3 ]'
 assert "compactions" '[ "$(field .compactions)" = 1 ]'
@@ -63,10 +63,15 @@ session_g=99999999-9999-4999-8999-999999999999
   bash_line 'wget host.example/path/LITERAL4'
   bash_line 'https://u:pw5@h/x'
   bash_line 'echo "unclosed LITERAL6'
+  bash_line 'TOKEN="a \" ghp_ESCAPED7 \" b" cmd'
+  bash_line 'AUTH="Bearer ghp_UNCLOSED8 curl -H x'
+  bash_line "TOKEN=\$'it\\'s ghp_DOLLAR9 more' curl x"
+  bash_line 'echo hunter10'
 } >"$folder_one/$session_g.jsonl"
 shapes_out="$(bash "$script" "$session_g")"
-assert "top_bash lists only safe words for the leak shapes" '[ "$(jq -c "[.top_bash[].command]" <<<"$shapes_out")" = "[\"echo\",\"curl\",\"make\",\"run it\",\"wget\"]" ]'
-assert "no output holds the leak-shape secrets" '! grep -q -e ghp_ -e LITERAL -e tail2 -e pw5 -e Bearer <<<"$shapes_out"'
+assert "top_bash lists only safe words for the leak shapes" '[ "$(jq -c "[.top_bash[].command]" <<<"$shapes_out")" = "[\"curl\",\"echo\",\"cmd\",\"make\",\"run\",\"wget\"]" ]'
+assert "no output holds the leak-shape secrets" '! grep -q -e ghp_ -e LITERAL -e tail2 -e pw5 -e Bearer -e hunter <<<"$shapes_out"'
+assert "a subcommand tool keeps its subcommand" '[ "$(jq -r ".top_bash[0].command" <<<"$out")" = "git status" ]'
 
 unknown_out="$(bash "$script" "$unknown")"
 assert "unknown id gives found 0" '[ "$(jq -r .found <<<"$unknown_out")" = 0 ]'
