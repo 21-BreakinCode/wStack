@@ -230,7 +230,7 @@ Each copy is written once. The write-back has its own copies, so its undo keeps 
 
 A `contract` task adds `contract.draft.md`, `plan.draft.md`, and `decisions.draft/`. Execute writes them. Deliver copies them into the vault. Deliver also writes `decisions.copied.txt`, the names of the decision files that it copied, so the undo deletes only those.
 
-Each agent reads the files from the steps before it. `/wstack:run-retro` reads every folder from the past week.
+Each agent reads the files from the steps before it. `/wstack:run-retro` reads every finished task folder that no retro read yet.
 
 ### 6.1 File frontmatter
 

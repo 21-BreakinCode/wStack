@@ -26,7 +26,7 @@ Once a week, run `/wstack:run-retro`. It reads every finished task that no retro
 
 wStack accepts the folder trust prompt for the worktree that it creates from your repository, so the `.claude` hooks and MCP servers of that repository load in the task.
 
-Outside herdr, the launcher opens no workspace. A `code` task gets a worktree at `~/.wstack/tasks/<task_id>`, and the agent tells you to run `claude` from that folder. Other task types run in your current Claude session.
+Outside herdr, the launcher opens no workspace. A `code` task gets a worktree at `<root>/<repo>/<branch-slug>`, the place where herdr puts its worktrees. `<root>` is the `directory` under `[worktrees]` in the herdr configuration, or `~/.herdr/worktrees`. The agent tells you to run `claude` from that folder. Other task types run in your current Claude session.
 
 To resume an open task, run `/wstack:start-task` with no arguments. It lists the open tasks and asks which one to resume.
 
