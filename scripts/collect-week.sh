@@ -23,7 +23,9 @@ done
 
 [[ "$vault" = /* ]] && [ -d "$vault/$tasks_dir" ] || fail "tasks folder not found: $vault/$tasks_dir"
 [[ "$today" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || fail "bad today: $today"
-today_epoch="$(TZ=UTC date -j -f %Y-%m-%d "$today" +%s)"
+# Midnight is explicit: date -j fills a missing time of day from the clock, which can tick between two calls.
+day_epoch() { TZ=UTC date -j -f '%Y-%m-%d %H:%M:%S' "$1 00:00:00" +%s; }
+today_epoch="$(day_epoch "$today")"
 
 frontmatter_or_empty() {  # <file>
   if [ -f "$1" ]; then fm_to_json "$1"; else echo '{}'; fi
@@ -37,7 +39,7 @@ for folder in "$vault/$tasks_dir"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*/;
   [ -z "$(fm_get "$folder/spec.md" retro_read 2>/dev/null)" ] || continue
   state=open
   case "$(fm_get "$folder/spec.md" status 2>/dev/null)" in delivered|cancelled) state=finished ;; esac
-  age_days="$(( (today_epoch - $(TZ=UTC date -j -f %Y-%m-%d "$task_date" +%s)) / 86400 ))"
+  age_days="$(( (today_epoch - $(day_epoch "$task_date")) / 86400 ))"
   facts_file=null
   contract_file="$(fm_get "$folder/contract-brief.md" contract_file 2>/dev/null || true)"
   [ -z "$contract_file" ] || facts_file="$(jq -n --arg file "${contract_file%.md}.facts.md" '$file')"

@@ -35,6 +35,22 @@ assert "archive is never read" '! jq -e ".[] | select(.task_id==\"2026-11-01-old
 assert "facts_file comes from contract-brief.md" 'jq -e ".[] | select(.task_id==\"2026-11-10-long\") | .facts_file==\"$mark_vault/Services/app/app.facts.md\"" <<<"$mark_out" >/dev/null'
 assert "no contract-brief.md gives null" 'jq -e ".[] | select(.task_id==\"2026-11-25-open\") | .facts_file==null" <<<"$mark_out" >/dev/null'
 assert "--days is gone" '! bash "$script" --vault "$mark_vault" --tasks-dir Tasks --days 7 2>/dev/null'
+
+# macOS date -j fills a missing time of day from the clock. This fake date makes each date-only parse one second later.
+clock_dir="$(dirname "$mark_vault")/clock"
+mkdir -p "$clock_dir"
+cat > "$clock_dir/date" <<'FAKE'
+#!/bin/bash
+if [ "$1 $2 $3" = "-j -f %Y-%m-%d" ]; then
+  calls=$(( $(cat "$0.calls" 2>/dev/null || echo 0) + 1 )); echo "$calls" > "$0.calls"
+  echo $(( $(/bin/date -j -f '%Y-%m-%d %H:%M:%S' "$4 00:00:00" +%s) + calls ))
+  exit 0
+fi
+exec /bin/date "$@"
+FAKE
+chmod +x "$clock_dir/date"
+tick_out="$(PATH="$clock_dir:$PATH" bash "$script" --vault "$mark_vault" --tasks-dir Tasks --today 2026-11-30)"
+assert "age_days stays exact when the clock ticks during the run" 'jq -e ".[] | select(.task_id==\"2026-11-25-open\") | .age_days==5" <<<"$tick_out" >/dev/null'
 assert "task with retro-note.md has_retro_note true" '[ "$(jq -r ".[] | select(.task_id == \"2026-11-17-write-intro\") | .has_retro_note" <<<"$out")" = true ]'
 assert "task without retro-note.md has_retro_note false" '[ "$(jq -r ".[] | select(.task_id == \"2026-11-16-fix-date-parser\") | .has_retro_note" <<<"$out")" = false ]'
 assert "no session_ids gives null transcript_stats" '[ "$(jq -c ".[] | select(.task_id == \"2026-11-16-fix-date-parser\") | .transcript_stats" <<<"$out")" = null ]'
