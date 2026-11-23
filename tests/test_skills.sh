@@ -3,7 +3,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$repo_root/tests/_assert.sh"
 
-expected_skills="build-review-page capture-evidence create-handover deliver-task init-org init-service pause-work resume-work run-retro start-task wrap-up-handovers"
+expected_skills="board build-review-page capture-evidence create-handover deliver-task init-org init-service pause-work resume-work run-retro start-task wrap-up-handovers"
 actual_skills="$(ls "$repo_root/skills" | sort | tr '\n' ' ' | sed 's/ $//')"
 assert "skill folders" '[ "$actual_skills" = "$expected_skills" ]'
 
@@ -24,12 +24,13 @@ old_status=0
 old_hits="$(git -C "$repo_root" grep -lE "$old_names" -- . ':!CHANGELOG.md' ':!docs/decisions.md' ':!docs/superpowers' ':!tests/test_skills.sh')" || old_status=$?
 assert "old-name search ran" '[ "$old_status" -le 1 ]'
 assert "no old skill names in current files" '[ -z "$old_hits" ]'
-for skill in create-handover init-org init-service pause-work resume-work run-retro start-task wrap-up-handovers; do
+for skill in board create-handover init-org init-service pause-work resume-work run-retro start-task wrap-up-handovers; do
   assert "$skill is user-invoked" 'grep -qx "disable-model-invocation: true" "$repo_root/skills/$skill/SKILL.md"'
 done
 for skill in build-review-page capture-evidence deliver-task; do
   assert "$skill is a helper" 'grep -qx "user-invocable: false" "$repo_root/skills/$skill/SKILL.md"'
 done
+assert "board --watch splits a pane and runs board-watch.sh" 'grep -qF "board-watch.sh" "$repo_root/skills/board/SKILL.md" && grep -qF "herdr pane split --current --direction down --no-focus" "$repo_root/skills/board/SKILL.md" && grep -qF "herdr pane run" "$repo_root/skills/board/SKILL.md"'
 assert "run-retro names the -2 rule for a second retro in a week" 'grep -qF "write \`\$week-2\` instead, then \`\$week-3\`" "$repo_root/skills/run-retro/SKILL.md"'
 assert "run-retro uses retro_name in every retro file path" '! grep -qF "\$retro_dir/\$week" "$repo_root/skills/run-retro/SKILL.md"'
 # Contract drift in run-retro
@@ -98,4 +99,31 @@ assert "start-task exit 3 row says init-service hands a contract task off" 'grep
 assert "init-service Phase 8 intro does not name LIFEOS_ROOT" '! grep -qF "Set \`vault\`, \`LIFEOS_ROOT\`" "$repo_root/skills/init-service/SKILL.md" && grep -qF "Set \`vault\` and \`REPO_ROOT\` again" "$repo_root/skills/init-service/SKILL.md"'
 assert "new-section check strips a trailing space and carriage return" 'grep -qF "trailing space and a trailing carriage return" "$repo_root/skills/start-task/references/confirmation.md" && grep -qF "trailing space and a trailing carriage return" "$repo_root/skills/deliver-task/SKILL.md"'
 assert "run-evals fills __PLUGIN_ROOT__ and the contract evals use it for plugin scripts" 'grep -qF "s|__PLUGIN_ROOT__|" "$repo_root/tests/run-evals.sh" && for e in confirm-stale-contract gate-applies-merged-patch; do grep -qF "__PLUGIN_ROOT__/scripts/new-task-folder.sh" "$repo_root/evals/$e/prompt.md" && grep -qF "__PLUGIN_ROOT__/scripts/frontmatter-set.sh" "$repo_root/evals/$e/prompt.md" || exit 1; done'
+add_text='session-id-add.sh" "$task_dir/spec.md" "${CLAUDE_SESSION_ID}"'
+status_text='fm_get "$task_dir/spec.md" status'
+work_section="$(sed -n '/^## Work mode/,/^## Stop items/p' "$start_skill")"
+add_line="$(grep -nF -- "$add_text" <<<"$work_section" | head -1 | cut -d: -f1)"
+status_line="$(grep -nF -- "$status_text" <<<"$work_section" | head -1 | cut -d: -f1)"
+assert "start-task work mode records the session id before it reads the status" '[ -n "$add_line" ] && [ -n "$status_line" ] && [ "$add_line" -lt "$status_line" ]'
+note_template="$repo_root/templates/retro-note.md"
+assert "retro-note template has its frontmatter keys and five headings in order" '[ -f "$note_template" ] && grep -q "^task_id:" "$note_template" && grep -q "^written_at:" "$note_template" && [ "$(grep "^## " "$note_template" | tr "\n" "|")" = "## Slow or repeated steps|## Would script|## Spec gaps|## Tool and guard friction|## Surprises|" ]'
+deliver_skill="$repo_root/skills/deliver-task/SKILL.md"
+finish_note_line="$(sed -n '/^## Finish/,/^## Stop/p' "$deliver_skill" | grep -n 'templates/retro-note.md' | head -1 | cut -d: -f1)"
+finish_status_line="$(sed -n '/^## Finish/,/^## Stop/p' "$deliver_skill" | grep -n 'Set `status` to `delivered`' | head -1 | cut -d: -f1)"
+assert "deliver Finish writes retro-note.md before it sets status to delivered" '[ -n "$finish_note_line" ] && [ -n "$finish_status_line" ] && [ "$finish_note_line" -lt "$finish_status_line" ]'
+finish_note_step="$(sed -n '/^## Finish/,/^## Stop/p' "$deliver_skill" | grep 'templates/retro-note.md')"
+assert "deliver Finish note step carries the rules, the written_at command, and the resume skip" 'grep -qF "date -u +%Y-%m-%dT%H:%M:%SZ" <<<"$finish_note_step" && grep -qF "Each bullet names its evidence" <<<"$finish_note_step" && grep -qF "None." <<<"$finish_note_step" && grep -qF "If \`\$task_dir/retro-note.md\` exists, keep it and skip this step" <<<"$finish_note_step"'
+verify_ref="$repo_root/skills/start-task/references/verify.md"
+retry_block="$(sed -n '/^Retry-limit stop:/,/^Any other stop/p' "$verify_ref")"
+assert "verify retry-limit Cancel writes retro-note.md before status cancelled and names the stop cause, other Cancel unchanged" 'grep "^- Cancel:" <<<"$retry_block" | grep -q "retro-note.md.*Spec gaps.*Surprises.*run-log.md.*cancelled" && [ "$(grep -c "^- Cancel: set .status. to .cancelled.\.$" "$verify_ref")" = 1 ]'
+assert "execute.md holds the herdr pane rule" 'grep -qF "herdr pane split --current" "$repo_root/skills/start-task/references/execute.md" && grep -qF "close it before Deliver" "$repo_root/skills/start-task/references/execute.md"'
+assert "spec lists retro-note.md" 'grep -q "retro-note.md Deliver" "$repo_root/docs/spec.md"'
+ask_section="$(awk '/^## Ask the RDs/{f=1;next} /^## /{f=0} f' "$retro_skill")"
+assert "run-retro: Ask the RDs sits between the analyst dispatch and the retro file" '[ "$(grep -n "^4\. Dispatch the agent" "$retro_skill" | head -1 | cut -d: -f1)" -lt "$(grep -n "^## Ask the RDs" "$retro_skill" | cut -d: -f1)" ] && [ "$(grep -n "^## Ask the RDs" "$retro_skill" | cut -d: -f1)" -lt "$(grep -n "^5\. Write" "$retro_skill" | head -1 | cut -d: -f1)" ]'
+assert "run-retro: the fork reads the prompt from a file, prompt first, read-only, no herdr variables" 'grep -qF "claude -p \"\$(cat \"\$prompt_file\")\" --resume <id> --fork-session --tools Read,Grep,Glob --strict-mcp-config --no-session-persistence --add-dir \"<task folder>\" </dev/null )" <<<"$ask_section" && grep -qF "env -u HERDR_ENV" <<<"$ask_section" && grep -qF "( cd \"\$fork_dir\" &&" <<<"$ask_section"'
+assert "run-retro: the prompt is written with the Write tool, never on a command line" 'grep -qF "write the prompt into it with the Write tool" <<<"$ask_section" && grep -qF "Never put the prompt on a command line" <<<"$ask_section"'
+assert "run-retro: rmdir only a folder that the step created, with a 10 minute timeout" 'grep -qF "If R2 created \`\$fork_dir\`, run \`rmdir \"\$fork_dir\"\`" <<<"$ask_section" && grep -qF "Bash tool timeout set to \`600000\`" <<<"$ask_section"'
+assert "run-retro: writes quoted RD answers and dispatches the analyst a second time on a fork reply" 'grep -qF "## RD answers" "$retro_skill" && grep -qF -- "- Answer:" "$retro_skill" && grep -qF "If at least one fork reply exists (an error line does not count), dispatch \`wstack:retro-analyst\` a second time" <<<"$ask_section"'
+assert "run-retro: step 3 sets proposals to No proposals" 'grep -qF "Set \`\$proposals\` to \`No proposals.\`" "$retro_skill"'
+assert "run-retro: step 5 quotes each reply with > and the fork step is bounded and starts with a fixed line" 'grep -qF "Quote the whole reply with \`>\` on every line" "$retro_skill" && grep -qF "Questions from the weekly retro:" <<<"$ask_section" && grep -qF "not reachable: timeout" <<<"$ask_section" && grep -qF "not reachable: no output" <<<"$ask_section"'
 finish

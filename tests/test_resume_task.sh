@@ -27,6 +27,29 @@ assert "restart workspace" 'has_call workspace create --cwd "$work_dir/cwd dir" 
 assert "restart with --continue" 'has_call agent start my-task --kind claude --pane w3:p1 -- --remote-control my-task --name my-task --permission-mode bypassPermissions --continue'
 assert "restart focus" 'has_call workspace focus w3'
 
+fm_set "$task_dir/spec.md" session_ids '["0f8fad5b-d9cb-469f-a165-70867728950e","1b4e28ba-2fa1-11d2-883f-0016d3cca427"]'
+: >"$FAKE_LOG"
+bash "$script" --task-dir "$task_dir" >/dev/null
+assert "restart with --resume <last id>" 'has_call agent start my-task --kind claude --pane w3:p1 -- --remote-control my-task --name my-task --permission-mode bypassPermissions --resume 1b4e28ba-2fa1-11d2-883f-0016d3cca427'
+fm_set "$task_dir/spec.md" session_ids '[]'
+: >"$FAKE_LOG"
+bash "$script" --task-dir "$task_dir" >/dev/null
+assert "empty session_ids restarts with --continue" 'grep -q -- "--continue" "$FAKE_LOG" && ! grep -q -- "--resume" "$FAKE_LOG"'
+grep -v '^session_ids:' "$task_dir/spec.md" >"$work_dir/nofield.md" && mv "$work_dir/nofield.md" "$task_dir/spec.md"
+: >"$FAKE_LOG"
+bash "$script" --task-dir "$task_dir" >/dev/null
+assert "no session_ids field restarts with --continue" 'grep -q -- "--continue" "$FAKE_LOG" && ! grep -q -- "--resume" "$FAKE_LOG"'
+for bad_value in '["not-a-uuid"]' '{"a":1}' '[oops'; do
+  fm_set "$task_dir/spec.md" session_ids "$bad_value"
+  : >"$FAKE_LOG"
+  bash "$script" --task-dir "$task_dir" >/dev/null 2>"$work_dir/err"
+  assert "bad session_ids $bad_value warns and uses --continue" 'grep -q "session_ids is not a list of session ids" "$work_dir/err" && grep -q -- "--continue" "$FAKE_LOG" && ! grep -q -- "--resume" "$FAKE_LOG"'
+done
+sed 's/^session_ids:.*/session_ids:\n  - 0f8fad5b-d9cb-469f-a165-70867728950e/' "$task_dir/spec.md" >"$work_dir/block.md" && cp "$work_dir/block.md" "$task_dir/spec.md"
+: >"$FAKE_LOG"
+bash "$script" --task-dir "$task_dir" >/dev/null 2>"$work_dir/err"
+assert "block-style session_ids warns and uses --continue" 'grep -q "session_ids is not a list of session ids" "$work_dir/err" && grep -q -- "--continue" "$FAKE_LOG" && ! grep -q -- "--resume" "$FAKE_LOG"'
+
 fm_set "$task_dir/spec.md" workspace_cwd "$work_dir/gone"
 rc=0; bash "$script" --task-dir "$task_dir" >/dev/null 2>"$work_dir/err" || rc=$?
 assert "missing dir exits 1" '[ "$rc" = 1 ] && grep -q "working directory $work_dir/gone is gone; start a new task" "$work_dir/err"'

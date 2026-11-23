@@ -1,0 +1,4 @@
+{"type":"assistant","timestamp":"2026-11-23T01:00:00Z","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/old/first.ts"}}]}}
+this line is not JSON
+{"type":"user","timestamp":"2026-11-23T01:00:05Z","message":{"content":"ok"}}
+{"type":"assistant","timestamp":"2026-11-23T01:01:00Z","message":{"content":[{"type":"text","text":"running tests"},{"type":"tool_use","name":"Bash","input":{"command":"npm test","description":"Run the unit tests"}}]}}

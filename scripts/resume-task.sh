@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Usage: resume-task.sh --task-dir <abs>
-# Prints "focused" if the task agent is live, "restarted" if it started a new one.
+# Prints "focused" if the task agent is live, "restarted" if it started a new one
+# (claude --resume <last id> when session_ids has ids, else claude --continue).
 # Exit: 1 working directory gone or bad input, 5 agent did not start or the workspace could
 # not be focused (a restarted workspace stays open, stderr prints the cleanup command),
 # 6 herdr could not create the workspace or printed unexpected output.
@@ -9,6 +10,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 source "$script_dir/lib/frontmatter.sh"
 source "$script_dir/lib/herdr.sh"
+source "$script_dir/lib/transcripts.sh"
 fail() { echo "resume-task: $1" >&2; exit "${2:-1}"; }
 
 [ "${1:-}" = --task-dir ] && [ "$#" -eq 2 ] || fail "usage: resume-task.sh --task-dir <abs>"
@@ -35,6 +37,17 @@ abort_with_cleanup_hint() {  # <reason>
   echo "workspace $workspace_id is still open. To clean up: $(herdr_cli_prefix) workspace close $workspace_id" >&2
   exit 5
 }
-herdr_start_claude "$slug" "$pane_id" --continue || abort_with_cleanup_hint "agent $slug did not start"
+last_session_id=""
+session_ids_value="$(fm_get "$task_dir/spec.md" session_ids)"
+if [ -z "$session_ids_value" ] && fm_has_block_list "$task_dir/spec.md" session_ids; then session_ids_value="(block-style list)"; fi
+if [ -n "$session_ids_value" ]; then
+  last_session_id="$(jq -r 'if type == "array" then (.[-1] // empty) else error("not an array") end' <<<"$session_ids_value" 2>/dev/null)" || last_session_id="bad"
+  if [ -n "$last_session_id" ] && ! session_id_ok "$last_session_id"; then
+    echo "resume-task: session_ids is not a list of session ids, using --continue: $session_ids_value" >&2
+    last_session_id=""
+  fi
+fi
+if [ -n "$last_session_id" ]; then resume_flags=(--resume "$last_session_id"); else resume_flags=(--continue); fi
+herdr_start_claude "$slug" "$pane_id" "${resume_flags[@]}" || abort_with_cleanup_hint "agent $slug did not start"
 herdr_cmd workspace focus "$workspace_id" >/dev/null || abort_with_cleanup_hint "could not focus workspace $workspace_id"
 echo restarted

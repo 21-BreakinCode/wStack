@@ -63,7 +63,7 @@ Retry-limit stop:
 
 - Try again: set `retries` to `0`, set `status` to `executing`, and write a `step` line with the user's direction. Fix the work. If `stage` is `verify`, set `status` to `verifying` and run the Order again from step 1. If `stage` is `execute`, go on with Execute.
 - Change the spec: set `retries` to `0` and `status` to `drafting`. Then follow `confirmation.md`.
-- Cancel: set `status` to `cancelled`.
+- Cancel: write `retro-note.md` as step 6 of "Finish" in `${CLAUDE_PLUGIN_ROOT}/skills/deliver-task/SKILL.md` says. The note covers the work done so far, because Deliver never ran. `## Spec gaps` or `## Surprises` names the cause of the stop, with its `run-log.md` stop line. Then set `status` to `cancelled`.
 
 Any other stop (a missing file, a missing tool, or a failed evidence upload):
 

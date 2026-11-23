@@ -5,6 +5,7 @@ repo: {{repo}}
 mobile: {{mobile}}
 status: drafting
 workspace_cwd:
+session_ids: []
 approved_at:
 created_at: {{created_at}}
 ---

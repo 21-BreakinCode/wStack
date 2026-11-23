@@ -72,8 +72,9 @@ The argument is a rough idea. Run these steps in order.
 
 The argument is `--task <task_id>`. The task folder is `$vault/$tasks_dir/<task_id>`.
 
-1. Read the status from the frontmatter only: `(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" status)`.
-2. Continue from that stage:
+1. Record this session on the task: `bash "$scripts/session-id-add.sh" "$task_dir/spec.md" "${CLAUDE_SESSION_ID}"`. If it exits 3, write the `step` line `session id not available` in `run-log.md`. If it exits with any other non-zero code, write the `step` line `session id not recorded: <first stderr line>`. Go on in every case.
+2. Read the status from the frontmatter only: `(source "$scripts/lib/frontmatter.sh" && fm_get "$task_dir/spec.md" status)`.
+3. Continue from that stage:
 
 | Status | Stage |
 |---|---|
@@ -114,6 +115,6 @@ No arguments.
 2. If there are no lines, tell the user there is no open task. Stop.
 3. Ask the user which task to resume. Show the task id and the status of each.
 4. Read `echo "${HERDR_ENV:-}"`. If it is not `1`, skip the steps below. For a `code` task, tell the user to run `cd "<workspace_cwd>" && claude "/wstack:start-task --task <task_id>"`, and stop. For any other work type, run work mode for the chosen task in this session.
-5. Run `bash "$scripts/resume-task.sh" --task-dir "<folder>"`. It prints `focused` or `restarted`. Tell the user which one. For a `paused` task, also tell the user to run `/wstack:start-task --task <task_id>` in that session. `restarted` runs `claude --continue` with no prompt, and `focused` only focuses the pane, so neither one runs the resume.
+5. Run `bash "$scripts/resume-task.sh" --task-dir "<folder>"`. It prints `focused` or `restarted`. Tell the user which one. For a `paused` task, also tell the user to run `/wstack:start-task --task <task_id>` in that session. `restarted` runs `claude --resume <last id>` with no prompt. If `session_ids` has no ids, it runs `claude --continue` with no prompt. `focused` only focuses the pane. Neither result runs `/wstack:start-task`.
 6. If it exits 1, tell the user that the working directory of the task is gone, and print the stderr.
 7. If it exits 5 or 6, print the stderr. Stop.

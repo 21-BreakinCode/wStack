@@ -87,6 +87,10 @@ Use this for a `contract` task. Execute writes drafts only, in the task folder. 
 - Input: find and prepare material for the user to read, watch, or study.
 - Output: help the user make notes, a blog post, or a talk. Test what the user learned with quizzes, flashcards, or an "explain it back" exercise.
 
+## Panes
+
+If you open a herdr pane for this task, open it in your own workspace with `herdr pane split --current --direction right --no-focus`, and close it before Deliver.
+
 ## Finish
 
 When the spec is met, write a `step` line that says so. Set `status` to `verifying`. Then read `${CLAUDE_PLUGIN_ROOT}/skills/start-task/references/verify.md` and follow it.
