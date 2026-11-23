@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # facts-add.sh <facts_file> <fact|not> <YYYY-MM-DD> <evidence> <text>
-# Adds one entry to the project facts file next to the contract. Exit 0 written, 1 bad input, 2 lock busy or folder missing.
+# Adds one entry to the project facts file next to the contract. Exit 0 written, 1 bad input, 2 lock busy or folder missing, 3 target heading not found.
 set -euo pipefail
 
 plugin_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,7 +43,11 @@ ENTRY="$entry_line" DETAIL="$detail_line" SECTION="$section" awk '
   /^## / { flush(); inside = ($0 == ENVIRON["SECTION"]) }
   inside && /^[ \t]*$/ { held = held $0 "\n"; next }
   { printf "%s", held; held = ""; print }
-  END { flush() }
-' "$facts_file" > "$tmp_file"
+  END { flush(); if (!done) exit 3 }
+' "$facts_file" > "$tmp_file" || {
+  rm -f "$tmp_file"
+  echo "facts-add: heading $section not found in $facts_file" >&2
+  exit 3
+}
 mv "$tmp_file" "$facts_file"
 printf '%s\n' "$entry_line"

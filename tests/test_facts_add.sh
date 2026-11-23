@@ -38,4 +38,17 @@ mkdir "$dir/app.md.lock"
 rc_lock=0; bash "$script" "$dir/app.facts.md" fact 2026-11-30 t1 x 2>/dev/null || rc_lock=$?
 assert "a busy lock exits 2" '[ "$rc_lock" = 2 ]'
 assert "a busy lock stays in place" '[ -d "$dir/app.md.lock" ]'
+bad_dir="$root/Services/bad"
+mkdir -p "$bad_dir"
+printf -- '---\napp_name: bad\n---\n' > "$bad_dir/bad.md"
+printf -- '---\nservice: bad\n---\n\n## Facts\n' > "$bad_dir/bad.facts.md"
+cp "$bad_dir/bad.facts.md" "$root/before-no-not"
+rc=0; out="$(bash "$script" "$bad_dir/bad.facts.md" not 2026-11-30 "" x 2>/dev/null)" || rc=$?
+assert "a missing Not facts heading exits 3 with no stdout" '[ "$rc" = 3 ] && [ -z "$out" ]'
+assert "the file is unchanged after a missing heading" 'cmp -s "$bad_dir/bad.facts.md" "$root/before-no-not"'
+printf -- '---\nservice: bad\n---\n\n## Facts \n\n## Not facts\n' > "$bad_dir/bad.facts.md"
+cp "$bad_dir/bad.facts.md" "$root/before-space"
+rc=0; bash "$script" "$bad_dir/bad.facts.md" fact 2026-11-30 t1 x >/dev/null 2>&1 || rc=$?
+assert "a Facts heading with a trailing space exits 3" '[ "$rc" = 3 ] && cmp -s "$bad_dir/bad.facts.md" "$root/before-space"'
+assert "no temp file or lock is left" '[ "$(ls -A "$bad_dir" | tr "\n" " ")" = "bad.facts.md bad.md " ]'
 finish
