@@ -19,10 +19,11 @@ wStack acts as the tech lead and the user is the final quality gate. Every chang
 - G1. The retro reads each finished task exactly once, whatever its start date.
 - G2. After the user agrees, the retro moves each read task to `Tasks/_archive/<week>/<task_id>/`. It uses the Obsidian CLI, so Obsidian updates every link to the moved notes.
 - G3. Every lookup of a task folder still works after the move.
-- G4. Each project with a contract gets `<app_name>.facts.md` next to its contract. The retro proposes fact candidates, the user answers each one, and the confirmed facts reach every later RD of that project at `Confirmation`.
+- G4. Each project with a contract gets `<app_name>.facts.md` next to its contract. The retro proposes fact candidates, the user answers each one, and the accepted facts reach every later RD of that project at `Confirmation`.
 - G5. `spec.html` and `review.html` live in `~/.wstack/pages/<task_id>/`.
 - G7. A code task started outside herdr puts its worktree under the same root as herdr, at `<root>/<repo>/<branch-slug>`, and no longer at `~/.wstack/tasks/<task_id>`.
 - G6. `/wstack:board` and its live monitor show the size of the changes of each task. Several tasks can work in the same project, each in its own worktree, and the user sees all their changes in one view.
+- G8. wStack guards against three mistakes that came up while this release was built (added 2026-11-23, the user picked all three): a stalled RD, a test run that skips cases silently, and a stale reference after a rename.
 
 ## Non-goals
 
@@ -128,7 +129,7 @@ A new helper `task_dir_of <vault> <tasks_dir> <task_id>` finds a task folder. If
 
 ### D. Project facts
 
-File: `<contract folder>/<app_name>.facts.md`, made from a new `templates/facts.md` on the first confirmed fact.
+File: `<contract folder>/<app_name>.facts.md`. The first fact that the user accepts makes it from a new `templates/facts.md`.
 
 ```
 ---
@@ -186,6 +187,37 @@ Inside herdr, `scripts/launch-task.sh:59` runs `herdr worktree create` without `
 - Claude Code's own worktrees in `<repo>/.claude/worktrees/` do not change, because herdr does not create them.
 - Existing worktrees stay where they are. `resume-task.sh` and `board.sh` read `workspace_cwd` from `spec.md`. Only `launch-task.sh` builds the old path. (Claude's call.)
 - `docs/spec.md` and the comment at `launch-task.sh:7` name the new path.
+
+### H. Guards against three mistakes
+
+Each guard comes from a mistake that the controller of this build made or caught.
+
+#### H1. A stalled RD
+
+The mistake: a session waited for a subagent report that never came, because the subagent had already finished. Nothing showed the stall until the user asked.
+
+- `scripts/board.sh` `group_of` adds the group `stalled`. If `status` is `executing` or `verifying` and the herdr state is `idle` or `done`, the row is `stalled`. Today such a row falls into `other`.
+- A `stalled` row adds `idle_minutes`, the minutes since `last_tool.at`. If the row has no `last_tool`, the value is `-`.
+- `skills/board/SKILL.md` prints the groups in this order: `needs you`, `stalled`, `stopped`, `working`, `paused`, `finished`, `other`. A `stalled` row shows its idle minutes and the command `herdr workspace focus <id>`.
+- `scripts/board-watch.sh` shows the group name already. For a `stalled` row it adds `idle <n>m`.
+- `skills/start-task/SKILL.md` adds one rule for every stage: after you dispatch a subagent or start a background command, never end a turn to wait for it while it is not running. If a notice gives a result and says that the agent still waits on its own background work, find out whether the agent still runs. If it does not, that notice is its result. Go on.
+
+#### H2. A test run that skips cases silently
+
+The mistake: a test file printed `Passed: 3  Failed: 0` while every main case skipped, because the test hid the plugin it needed.
+
+- A new script `scripts/find-test-skips.sh <log file>` prints each line of a saved test output that reports a skip. It matches this case-insensitive extended regular expression: `(^|[^[:alnum:]_])(skip|skipped|skipping|xfail|xfailed)([^[:alnum:]_]|$)|no tests ran|collected 0 items`. Exit 0: no skip line. Exit 1: skip lines found. Exit 2: bad input.
+- `skills/start-task/references/verify.md` step 1: for each check that runs tests, save the output to a file and run the script on it. A skip line fails the check, unless `## Verification plan` in the spec names that skip with a reason. The skip lines go into the evidence line of the check.
+- `agents/reviewer.md` check 5 (Tests) adds: a test run with skipped cases is not a pass, unless the spec names the skip.
+
+#### H3. A stale reference after a rename
+
+The mistake: a change moved the spec page out of the task folder, and two eval graders still named the old place.
+
+- `templates/spec.md` adds the section `## Moves and renames`, with `None` as its default. At `Confirmation`, the RD lists there each path, file name, or name that the work moves or renames, one `- <old> -> <new>` line each.
+- A new script `scripts/find-stale-refs.sh --repo <dir> --base <ref> [--old <text>]...` lists the places that still name an old form. The old forms are every `--old` value plus the old path of each `R` and `D` entry of `git -C <dir> diff --name-status -M <base>...HEAD`. It searches the tracked files at HEAD with `git grep -n -F`, and it skips `CHANGELOG.md`, `docs/decisions.md`, and `docs/superpowers/`, because they hold history. It prints one `<file>:<line>: <old form>` line per hit. Exit 0: no hit. Exit 1: hits. Exit 2: bad input.
+- `verify.md` adds a check after step 1. If the spec lists a move or a rename, the RD runs the script. If the diff has an `R` or `D` entry, the RD also runs it. Each old form from the spec goes in as `--old`. It writes the hits into the evidence as the check `stale references`.
+- `agents/reviewer.md` adds a check: judge each stale-reference hit in the evidence. A real stale reference is a blocking finding.
 
 ## Tests
 

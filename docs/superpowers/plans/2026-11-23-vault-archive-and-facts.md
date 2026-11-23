@@ -329,3 +329,81 @@ The configuration lines are `directory = "<tmp>/wt"`, no `[worktrees]` section, 
 - [ ] **Step 5: Run** `bash tests/run-all.sh`. Expected: `Failed: 0`.
 
 - [ ] **Step 6: Commit** `feat: put outside-herdr worktrees under the herdr root`
+
+### Task 9: Stalled RD on the board and the wait rule
+
+**Files:**
+- Modify: `scripts/board.sh` (`group_of`, `row_json`), `scripts/board-watch.sh` (`print_frame`), `skills/board/SKILL.md` (group order), `skills/start-task/SKILL.md` (a new short section "Waiting for a subagent"), `docs/spec.md`
+- Test: `tests/test_board.sh`, `tests/test_board_watch.sh`, `tests/test_skills.sh`
+
+**Interfaces:**
+- Produces: the group value `"stalled"`. A `stalled` row adds `idle_minutes`, a number. If the row has no `last_tool`, the value is `"-"`. Other rows have no `idle_minutes`.
+
+- [ ] **Step 1: Write the failing tests** in `tests/test_board.sh`, with the fake herdr setup the file already has:
+```bash
+assert "executing and idle is stalled" '[ "$(jq -r "select(.task_id==\"$id_exec_idle\") | .group" <<<"$rows")" = stalled ]'
+assert "verifying and done is stalled" '[ "$(jq -r "select(.task_id==\"$id_verify_done\") | .group" <<<"$rows")" = stalled ]'
+assert "executing and working stays working" '[ "$(jq -r "select(.task_id==\"$id_exec_working\") | .group" <<<"$rows")" = working ]'
+assert "drafting and idle stays needs you" '[ "$(jq -r "select(.task_id==\"$id_draft_idle\") | .group" <<<"$rows")" = "needs you" ]'
+assert "stalled row has idle minutes from last_tool" 'm="$(jq -r "select(.task_id==\"$id_exec_idle\") | .idle_minutes" <<<"$rows")"; [ "$m" -ge 29 ] && [ "$m" -le 31 ]'
+```
+The `$id_exec_idle` transcript's last tool call is 30 minutes old. `tests/test_board_watch.sh`: a stalled RD line holds `idle 30m` (match `idle [0-9]+m`). `tests/test_skills.sh`: the board skill lists `needs you`, `stalled`, `stopped` in that order, and start-task holds `never end a turn to wait`.
+
+- [ ] **Step 2: Run** `bash tests/test_board.sh`. Expected: FAIL on the new rows.
+
+- [ ] **Step 3: Implement.**
+  - `group_of`: add `executing:idle|executing:done|verifying:idle|verifying:done) echo stalled ;;` after the `needs you` line.
+  - `row_json`: compute `idle_minutes` from `last_tool.at` only for the `stalled` group.
+  - `board-watch.sh`: append `  idle \(.idle_minutes)m` to the first line of a stalled RD.
+  - The board skill prints the groups in the order of design H1.
+  - start-task gets the rule of design H1 in one short section that applies to every stage.
+
+- [ ] **Step 4: Run** `bash tests/run-all.sh`. Expected: `Failed: 0`.
+
+- [ ] **Step 5: Commit** `feat: show stalled RDs on the board`
+
+### Task 10: Verify guards for skipped tests and stale references
+
+**Files:**
+- Create: `scripts/find-test-skips.sh`, `scripts/find-stale-refs.sh`, `tests/test_find_test_skips.sh`, `tests/test_find_stale_refs.sh`
+- Modify:
+  - `templates/spec.md` (the section `## Moves and renames`, default `None`, after `## Scope`)
+  - `skills/start-task/references/confirmation.md` ("Write the spec": fill that section)
+  - `skills/start-task/references/verify.md` (step 1 skip rule, and a new step after step 1)
+  - `agents/reviewer.md` (check 5, and a new check for stale references)
+  - `docs/spec.md`, including the section 4 layout for both scripts
+- Test: the two new test files, `tests/test_new_task_folder.sh`, `tests/test_skills.sh`, `tests/test_agents.sh`
+
+**Interfaces:**
+- Produces: `bash scripts/find-test-skips.sh <log file>` with the pattern, output, and exit codes of design H2.
+- Produces: `bash scripts/find-stale-refs.sh --repo <dir> --base <ref> [--old <text>]...` with the old forms, exclusions, output line `<file>:<line>: <old form>`, and exit codes of design H3.
+
+- [ ] **Step 1: Write the failing tests.**
+
+`tests/test_find_test_skips.sh`:
+```bash
+assert "a SKIP line is found" 'printf "PASS a\nSKIP page cases: x\n" >"$log"; ! bash "$script" "$log" >"$out" && grep -q "SKIP page cases" "$out"'
+assert "skipped tests are found" 'printf "3 passed, 2 skipped\n" >"$log"; ! bash "$script" "$log" >/dev/null'
+assert "collected 0 items is found" 'printf "collected 0 items\n" >"$log"; ! bash "$script" "$log" >/dev/null'
+assert "a clean log exits 0" 'printf "Passed: 3  Failed: 0\n" >"$log"; bash "$script" "$log" >/dev/null'
+assert "a word that only starts with skip is not a skip" 'printf "skipper ok\n" >"$log"; bash "$script" "$log" >/dev/null'
+assert "a missing file exits 2" 'bash "$script" "$work/none.log"; [ $? -eq 2 ]'
+```
+`tests/test_find_stale_refs.sh` builds a temp git repo. The base commit has `a/old.md`, plus `docs/x.md` and `CHANGELOG.md`, which both name `a/old.md`. HEAD renames `a/old.md` to `a/new.md` and leaves the other two files alone:
+```bash
+assert "a renamed path still named in docs is a hit" '[ "$(bash "$script" --repo "$repo" --base base)" = "docs/x.md:1: a/old.md" ]'
+assert "a hit exits 1" '! bash "$script" --repo "$repo" --base base >/dev/null'
+assert "CHANGELOG.md is skipped" '! bash "$script" --repo "$repo" --base base | grep -q CHANGELOG'
+assert "an --old text is searched too" 'bash "$script" --repo "$repo" --base base --old "spec.html" | grep -q "evals/g.md:2: spec.html"'
+assert "a clean repo exits 0" 'bash "$script" --repo "$clean" --base base >/dev/null'
+assert "a bad base exits 2" 'bash "$script" --repo "$repo" --base nope >/dev/null 2>&1; [ $? -eq 2 ]'
+```
+The base commit also holds `evals/g.md`, which names `spec.html` on line 2. `tests/test_new_task_folder.sh` asserts that the new `spec.md` has `## Moves and renames` with `None`. `tests/test_skills.sh` pins `find-test-skips.sh` and `find-stale-refs.sh` in `verify.md`, and `## Moves and renames` in `confirmation.md`. `tests/test_agents.sh` pins `skipped cases` and `stale reference` in reviewer.md.
+
+- [ ] **Step 2: Run** the two new test files. Expected: FAIL, because the scripts do not exist.
+
+- [ ] **Step 3: Implement** the two scripts and the text changes of design H2 and H3. `find-stale-refs.sh` uses `git -C "$repo" diff --name-status -M "$base"...HEAD` for the `R` and `D` old paths, and `git -C "$repo" grep -n -F -e "<old form>" -- . ':(exclude)CHANGELOG.md' ':(exclude)docs/decisions.md' ':(exclude)docs/superpowers'` for the hits. Sort the output and remove duplicate lines.
+
+- [ ] **Step 4: Run** `bash tests/run-all.sh`. Expected: `Failed: 0`.
+
+- [ ] **Step 5: Commit** `feat: catch skipped tests and stale references in Verify`
