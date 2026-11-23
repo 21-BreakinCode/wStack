@@ -24,6 +24,7 @@ assert "historian: a missing docs/adr/ goes on" 'grep -F "docs/adr/" "$historian
 assert "reviewer has contract-mismatch" 'grep -q "| \`contract-mismatch\` | yes |" "$repo_root/agents/reviewer.md"'
 analyst="$repo_root/agents/retro-analyst.md"
 assert "analyst reads retro-note.md and transcript_stats" 'grep -qF "retro-note.md" "$analyst" && grep -qF "transcript_stats" "$analyst"'
+assert "analyst reads state, age_days, facts_file and needs a finished task as evidence" 'grep -qF "\`age_days\`" "$analyst" && grep -qF "\`facts_file\`" "$analyst" && grep -qF "Open tasks are context only" "$analyst" && grep -qF "at least one finished task" "$analyst"'
 assert "analyst has a Questions block and no question without a session id" 'grep -qF "## Questions" "$analyst" && grep -qF "A task with an empty \`session_ids\` gets no question." "$analyst"'
 assert "analyst looks for the same top_bash command in two or more tasks" 'grep -qF "The same \`top_bash\` command in two or more tasks." "$analyst"'
 assert "analyst trusts the stats over a note, a log, or an answer" 'grep -qF "trust the stats and name the mismatch" "$analyst"'

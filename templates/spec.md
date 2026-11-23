@@ -7,6 +7,7 @@ status: drafting
 workspace_cwd:
 session_ids: []
 approved_at:
+retro_read:
 created_at: {{created_at}}
 ---
 

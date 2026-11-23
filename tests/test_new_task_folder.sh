@@ -18,6 +18,7 @@ for name in spec run-log review report; do
 done
 assert "no placeholder left" '! grep -rq "{{" "$folder"'
 assert "status drafting" '[ "$(fm_get "$folder/spec.md" status)" = "drafting" ]'
+assert "spec has the empty retro_read key" 'grep -qx "retro_read:" "$folder/spec.md"'
 assert "mobile false" '[ "$(fm_get "$folder/spec.md" mobile)" = "false" ]'
 assert "work_type default code" '[ "$(fm_get "$folder/spec.md" work_type)" = "code" ]'
 assert "created_at format" '[[ "$(fm_get "$folder/spec.md" created_at)" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}[+-][0-9]{2}:[0-9]{2}$ ]]'

@@ -579,7 +579,7 @@ If an upload fails, the agent keeps the R2 copy and writes the failure in `revie
 ## 13. /wstack:run-retro (confirmed)
 
 - The user runs it by hand, once a week.
-- The retro analyst agent reads every task folder from the past 7 days.
+- The retro analyst agent reads every finished task that has no `retro_read` mark, and open tasks as context. The retro sets the mark after it reads a task.
 - It looks for:
   - repeated agent steps that can become a tool or a script
   - tasks that the user started by hand several times and that can become a fixed workflow
