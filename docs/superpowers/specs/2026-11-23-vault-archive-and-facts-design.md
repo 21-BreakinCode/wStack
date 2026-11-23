@@ -206,7 +206,10 @@ The mistake: a session waited for a subagent report that never came, because the
 
 The mistake: a test file printed `Passed: 3  Failed: 0` while every main case skipped, because the test hid the plugin it needed.
 
-- A new script `scripts/find-test-skips.sh <log file>` prints each line of a saved test output that reports a skip. It matches this case-insensitive extended regular expression: `(^|[^[:alnum:]_])(skip|skipped|skipping|xfail|xfailed)([^[:alnum:]_]|$)|no tests ran|collected 0 items`. Exit 0: no skip line. Exit 1: skip lines found. Exit 2: bad input.
+- A new script `scripts/find-test-skips.sh <log file>` prints each line of a saved test output that reports a skip. It matches this case-insensitive extended regular expression: `(^|[^[:alnum:]_])(skip|skipped|skipping|xfail|xfailed)([^[:alnum:]_]|$)|no tests ran|collected 0 items`. Two filters come first (ruling P8):
+  - A passing test line is not a skip. Its first word is `PASS`, `ok`, or `✓`. A TAP line such as `ok 4 # SKIP <reason>` still counts as a skip.
+  - A zero count is not a skip. It is a skip word next to the number 0, such as `Skipped: 0`, `0 skipped`, or `skipped=0`. The script removes the zero count from the line and matches the rest, so `1 skipped, 0 xfailed` still counts.
+- Exit 0: no skip line. Exit 1: skip lines found. Exit 2: bad input, or a log that is missing or cannot be read.
 - `skills/start-task/references/verify.md` step 1: for each check that runs tests, save the output to a file and run the script on it. A skip line fails the check, unless `## Verification plan` in the spec names that skip with a reason. The skip lines go into the evidence line of the check.
 - `agents/reviewer.md` check 5 (Tests) adds: a test run with skipped cases is not a pass, unless the spec names the skip.
 
