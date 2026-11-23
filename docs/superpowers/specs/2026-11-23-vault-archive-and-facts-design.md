@@ -171,7 +171,7 @@ Reader: if `<app_name>.facts.md` exists next to the contract, `agents/contract-r
 
 The user's herdr configuration now sets `[worktrees] directory = "~/Projects/worktrees"`, so herdr puts each task worktree at `~/Projects/worktrees/<repo>/<branch-slug>`. The tasks of one project then sit in one folder, and herdr groups them under the project workspace. Herdr shows no diff, so the board adds one.
 
-- `scripts/board.sh` adds `changes` to each row. If `workspace_cwd` is a git folder, `changes` is the output of `git -C <workspace_cwd> diff --shortstat <merge base>`, in the short form `4 files +120 -30`. The merge base is `git merge-base HEAD <default branch>`. The default branch is `origin/HEAD`. If that ref is not set, it is `origin/main`.
+- `scripts/board.sh` adds `changes` to each row. If `workspace_cwd` is a git folder, `changes` is the output of `git -C <workspace_cwd> diff-index --shortstat <merge base>`, in the short form `4 files +120 -30`. The merge base is `git merge-base HEAD <default branch>`. The default branch is `origin/HEAD`. If that ref is not set, it is `origin/main`.
 - The diff compares the merge base with the working tree, so it counts commits and uncommitted changes to tracked files. It does not count untracked files.
 - If `workspace_cwd` is empty, is not a git folder, or has no merge base, `changes` is `-`. A git error never stops the board.
 - `skills/board/SKILL.md` adds the column `changes` after `last step`. `scripts/board-watch.sh` shows it in each RD line.
@@ -196,7 +196,7 @@ Each guard comes from a mistake that the controller of this build made or caught
 
 The mistake: a session waited for a subagent report that never came, because the subagent had already finished. Nothing showed the stall until the user asked.
 
-- `scripts/board.sh` `group_of` adds the group `stalled`. If `status` is `executing` or `verifying` and the herdr state is `idle` or `done`, the row is `stalled`. Today such a row falls into `other`.
+- `scripts/board.sh` `group_of` adds the group `stalled`. If `status` is `executing` or `verifying` and the herdr state is `idle` or `done`, the row is `stalled`. Today such a row falls into `other`. If the `subagents` list of the row is not empty, the row is `working` instead, because a background subagent still runs.
 - A `stalled` row adds `idle_minutes`, the minutes since `last_tool.at`. If the row has no `last_tool`, the value is `-`.
 - `skills/board/SKILL.md` prints the groups in this order: `needs you`, `stalled`, `stopped`, `working`, `paused`, `finished`, `other`. A `stalled` row shows its idle minutes and the command `herdr workspace focus <id>`.
 - `scripts/board-watch.sh` shows the group name already. For a `stalled` row it adds `idle <n>m`.

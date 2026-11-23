@@ -618,12 +618,12 @@ The name is `retro`, not `review`, because "review" already means the final revi
 ### 13.1 /wstack:board
 
 - The user runs it by hand. It shows every open RD and needs no argument.
-- `scripts/board.sh` prints one JSON row per open task: group, task id, status, herdr state, workspace id, goal, last `## Steps` line of `run-log.md`, age, and `changes`. The `changes` field has the form `<n> files +<ins> -<del>`. It comes from `git diff --shortstat` against the merge base with `origin/HEAD` (or `origin/main`). If `workspace_cwd` is empty, is no git folder, or has no merge base, the field is `-`. Outside herdr the herdr fields are `n/a` and no finished row shows.
+- `scripts/board.sh` prints one JSON row per open task: group, task id, status, herdr state, workspace id, goal, last `## Steps` line of `run-log.md`, age, and `changes`. The `changes` field has the form `<n> files +<ins> -<del>`. It comes from `git diff-index --shortstat` against the merge base with `origin/HEAD` (or `origin/main`). If `workspace_cwd` is empty, is no git folder, or has no merge base, the field is `-`. Outside herdr the herdr fields are `n/a` and no finished row shows.
 - The groups, in order. A row goes in the first group that matches.
   1. needs you: herdr `blocked`, a status of `awaiting-approval`, `waiting-user`, or `awaiting-deliver-approval`, or `drafting` with herdr `idle` or `done`.
-  2. stalled: status `executing` or `verifying` with herdr `idle` or `done`. The RD stopped mid-stage and waits for nothing. The row adds `idle_minutes`. It holds the whole minutes since `last_tool.at`. If `last_tool` is missing or has no readable time, it holds `-`.
+  2. stalled: status `executing` or `verifying` with herdr `idle` or `done`, and an empty `subagents` list. The RD stopped mid-stage and waits for nothing. The row adds `idle_minutes`. It holds the whole minutes since `last_tool.at`. If `last_tool` is missing or has no readable time, it holds `-`.
   3. stopped: herdr `none` and the status is not `paused`. The RD process is gone.
-  4. working: herdr `working` or `unknown`.
+  4. working: herdr `working` or `unknown`, or a row that matches stalled except that its `subagents` list is not empty. A background subagent still runs.
   5. paused: status `paused`.
   6. finished: a delivered or cancelled task whose slug is the label of a workspace that is still open.
   7. other: any row that matched no group.

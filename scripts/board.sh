@@ -109,7 +109,8 @@ changes_of() {  # <dir>: "<n> files +<ins> -<del>" against the merge base with o
   [ -d "$dir" ] || { echo -; return; }
   base_ref="$(git -C "$dir" rev-parse --abbrev-ref origin/HEAD 2>/dev/null)" || base_ref=origin/main
   merge_base="$(git -C "$dir" merge-base HEAD "$base_ref" 2>/dev/null)" || { echo -; return; }
-  stat="$(git -C "$dir" diff --shortstat "$merge_base" 2>/dev/null)" || { echo -; return; }
+  # diff-index gives the counts of git diff, but it never refreshes and rewrites the index of the worktree.
+  stat="$(git -C "$dir" diff-index --shortstat "$merge_base" 2>/dev/null)" || { echo -; return; }
   local files=0 inserted=0 deleted=0
   [[ "$stat" =~ ([0-9]+)\ file ]] && files="${BASH_REMATCH[1]}"
   [[ "$stat" =~ ([0-9]+)\ insertion ]] && inserted="${BASH_REMATCH[1]}"
@@ -127,7 +128,9 @@ row_json() {  # <group> <task_id> <slug> <status> <herdr> <workspace_id> <folder
     --argjson activity "$(activity_json "$spec")" \
     --argjson now "$board_now" \
     'def idle_minutes_of: try ((($now - (.at | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)) / 60) | floor) catch "-";
-     {group: $group, task_id: $task_id, slug: $slug, status: $status,
+     # A running background subagent means the RD is not stalled.
+     (if $group == "stalled" and ($activity.subagents | length) > 0 then "working" else $group end) as $group
+     | {group: $group, task_id: $task_id, slug: $slug, status: $status,
       herdr: $herdr, workspace_id: $workspace_id, goal: $goal, last_step: $last_step, age: $age, changes: $changes, folder: $folder} + $activity
     + (if $group == "stalled" then {idle_minutes: ($activity.last_tool | if . == null then "-" else idle_minutes_of end)} else {} end)'
 }
