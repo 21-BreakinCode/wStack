@@ -143,4 +143,6 @@ assert "run-retro A2 passes fact text and evidence through temp files written wi
 assert "run-retro A3 checks the task id pattern and quotes each id" 'grep -qF "^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+\$" "$retro_skill" && grep -qF "each id in its own double quotes" "$retro_skill"'
 assert "confirmation.md renders the spec page outside the vault" 'grep -qF "\$HOME/.wstack/pages/<task_id>/spec.html" "$repo_root/skills/start-task/references/confirmation.md" && ! grep -qF "\$task_dir/spec.html" "$repo_root/skills/start-task/references/confirmation.md"'
 assert "build-review-page skill passes --page under ~/.wstack/pages" 'grep -qF -- "--page \"\$HOME/.wstack/pages/<task_id>/review.html\"" "$repo_root/skills/build-review-page/SKILL.md" && ! grep -qF "\$task_dir/review.html" "$repo_root/skills/build-review-page/SKILL.md"'
+assert "verify.md names both guard scripts" 'grep -qF "find-test-skips.sh" "$repo_root/skills/start-task/references/verify.md" && grep -qF "find-stale-refs.sh" "$repo_root/skills/start-task/references/verify.md"'
+assert "confirmation.md fills Moves and renames" 'grep -qF "## Moves and renames" "$repo_root/skills/start-task/references/confirmation.md"'
 finish

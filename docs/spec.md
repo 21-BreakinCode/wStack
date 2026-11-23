@@ -148,6 +148,8 @@ wstack/
 │   ├── contract-path.sh           prints the contract path of a repository
 │   ├── contract-check.sh          drift check, no network call
 │   ├── contract-edit.sh           the only writer of contract files
+│   ├── find-test-skips.sh         prints the skip lines of a saved test output
+│   ├── find-stale-refs.sh         lists the files that still name an old path or name after a rename
 │   ├── facts-add.sh               adds one confirmed or rejected fact to the facts file, under the contract lock
 │   ├── contract-hook.sh           SessionStart and PostToolUse drift hook
 │   ├── board.sh                   one JSON row per open RD (a task session), for /wstack:board
@@ -327,6 +329,7 @@ Purpose: turn the rough idea into one clear spec that the user approves.
 2. The spec must hold these sections:
    - Goal: what the result must do.
    - Scope: what is in and what is out.
+   - Moves and renames: each path, file name, or name that the work moves or renames, one `<old> -> <new>` line each, or `None`.
    - Verification plan: how the work will be checked. Name each check, its pass rule, and the evidence it will produce.
    - Non-undoable steps: every step that will need the user's approval.
    - Deliver targets: where the result goes (section 11).
@@ -336,7 +339,7 @@ Purpose: turn the rough idea into one clear spec that the user approves.
 4. The agent sets `status: awaiting-approval` and waits. After the user approves, the agent sets `approved_at` and `status: executing`.
 5. Pages follow the layout rules in section 10.1. The default is a local HTML file on the Mac. In mobile mode, the agent also publishes the page as a Claude artifact.
 
-Done when: `spec.md` has all seven sections and `approved_at` is set.
+Done when: `spec.md` has all eight sections and `approved_at` is set.
 
 Contract gate. For a `code` or `ops` task, the gate runs before the spec is written:
 
@@ -368,10 +371,11 @@ Purpose: prove that the result works, prove that it can be undone, and review it
 
 Order:
 
-1. Behavior check: run each check from the spec's verification plan. Record evidence for each check (section 12).
-2. Rollback check: confirm that a working way to undo the result exists. Write the undo steps in `review.md`.
-3. Final review: start the reviewer agent (section 8.2). It writes findings into `review.md`.
-4. Build the review page (section 10).
+1. Behavior check: run each check from the spec's verification plan. Record evidence for each check (section 12). A test run that reports skipped cases fails its check, unless the spec names the skip.
+2. Stale references: if the spec lists a move or a rename, or the diff renames or deletes a file, run `find-stale-refs.sh`. It lists the files that still name the old form. The reviewer judges each hit.
+3. Rollback check: confirm that a working way to undo the result exists. Write the undo steps in `review.md`.
+4. Final review: start the reviewer agent (section 8.2). It writes findings into `review.md`.
+5. Build the review page (section 10).
 
 Findings:
 
@@ -659,7 +663,7 @@ Build in this order. Each step must pass its done check before the next step sta
 |---|---|---|
 | 1 | Plugin skeleton: `plugin.json` (name `wstack`, displayName `wStack`, userConfig), empty skills | `claude plugin validate ./wstack` passes. `/wstack:start-task` appears in Claude Code. |
 | 2 | Task folder and templates | `/wstack:start-task test idea` creates `<tasks_dir>/<date>-test-idea/` with the four `.md` files and frontmatter. |
-| 3 | Confirmation | For a rough idea, the agent asks questions one at a time, writes a `spec.md` with all seven sections, and stops at `awaiting-approval`. |
+| 3 | Confirmation | For a rough idea, the agent asks questions one at a time, writes a `spec.md` with all eight sections, and stops at `awaiting-approval`. |
 | 4 | Execute | After approval, the agent works on branch `wstack/<slug>`, logs steps in `run-log.md`, and stops before a non-undoable step. |
 | 5 | Verify checks and failure path | A failing check sends the task back to Execute. After `retry_limit` failures, the status is `waiting-user`. |
 | 6 | Reviewer agent | On a sample change with one planted bug, the reviewer agent reports it as a blocking finding. |

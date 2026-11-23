@@ -31,4 +31,5 @@ assert "analyst trusts the stats over a note, a log, or an answer" 'grep -qF "tr
 assert "analyst: no proposals can still come with questions" 'grep -qF "can still have a \`## Questions\` block" "$analyst"'
 assert "analyst proposes fact candidates with a facts file" 'grep -qF "## Fact candidates" "$analyst" && grep -qF "Facts file:" "$analyst"'
 assert "reader reads the facts file and replies with Project facts" 'grep -qF ".facts.md" "$reader" && grep -qF "### Project facts" "$reader"'
+assert "reviewer judges skipped cases and stale references" 'grep -qF "skipped cases" "$repo_root/agents/reviewer.md" && grep -qF "stale reference" "$repo_root/agents/reviewer.md"'
 finish

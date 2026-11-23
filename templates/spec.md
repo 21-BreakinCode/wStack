@@ -15,6 +15,10 @@ created_at: {{created_at}}
 
 ## Scope
 
+## Moves and renames
+
+None
+
 ## Verification plan
 
 ## Non-undoable steps

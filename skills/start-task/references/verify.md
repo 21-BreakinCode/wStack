@@ -6,23 +6,25 @@ Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontma
 
 ## Order
 
-Run the five steps in this order. If `result` in `review.md` is already `pass` when you start (a resumed task), skip to "Go on to Deliver".
+Run the six steps in this order. If `result` in `review.md` is already `pass` when you start (a resumed task), skip to "Go on to Deliver".
 
 1. Behavior check. First delete every line under `## Evidence` in `review.md`, so each check keeps one line. Run each check in the spec's `## Verification plan`. For each check, run the `capture-evidence` skill. It saves the evidence in `/tmp/wstack-evidence/<task_id>/` and writes one line per check under `## Evidence` in `review.md`: `- <check> → <file> → pass|fail`. A check whose only evidence is command output still gets a line. Save the output as a file in that folder. If a check fails, go to "A check fails".
-2. Rollback check. Find the undo method for the work type in the spec. Confirm that it works. Write the undo steps under `## Decisions` in `review.md`. If no working undo exists, treat it as a failed check.
-3. Final review. Dispatch the `wstack:reviewer` agent defined in `${CLAUDE_PLUGIN_ROOT}/agents/reviewer.md`. Give it the task folder and the change (a diff file or a git range). If `$task_dir/contract-brief.md` exists, read the contract path with `source "$scripts/lib/frontmatter.sh"; fm_get "$task_dir/contract-brief.md" contract_file` and also give it the contract path. If `contract-brief.md` does not exist, the task has no contract: give the reviewer no contract path. For a `contract` task, tell it to check each claim in `contract.draft.md` against the code at `origin/<base_branch>`. Each claim needs a `file:line` reference. For a new project, it checks that each section has content. It writes its findings into `review.md` and sets both finding counts. If `agents/reviewer.md` is not there, stop with the reason `missing agents/reviewer.md`, as in "Stop for the user".
-4. Upload the evidence. Run this after the last compression and before the page build. Run it for every task type that saved evidence.
+   For each check that runs tests, save the test output to a file under `$TMPDIR` and run `bash "$scripts/find-test-skips.sh" "<output file>"` on it. Exit 1 means the run skipped cases. A skip line fails the check, unless `## Verification plan` in the spec names that skip with a reason. Put the skip lines in the evidence line of the check.
+2. Stale references. If `## Moves and renames` in the spec lists a move or a rename, or if the diff has an `R` or `D` entry, run this step. Use the same base as step 3 uses for the diff: the merge base of `HEAD` and `origin/<base_branch>`, from `git -C "<repository folder>" merge-base HEAD "origin/<base_branch>"`. Run `bash "$scripts/find-stale-refs.sh" --repo "<repository folder>" --base "<merge base>"` and add one `--old "<old form>"` for each old form in the spec section. Exit 1 means hits. Write the hits as the evidence of the check `stale references`. Give each hit to the reviewer in step 4. Exit 2 means bad input: fix the call.
+3. Rollback check. Find the undo method for the work type in the spec. Confirm that it works. Write the undo steps under `## Decisions` in `review.md`. If no working undo exists, treat it as a failed check.
+4. Final review. Dispatch the `wstack:reviewer` agent defined in `${CLAUDE_PLUGIN_ROOT}/agents/reviewer.md`. Give it the task folder, the change (a diff file or a git range), and the stale-reference hits of step 2. If `$task_dir/contract-brief.md` exists, read the contract path with `source "$scripts/lib/frontmatter.sh"; fm_get "$task_dir/contract-brief.md" contract_file` and also give it the contract path. If `contract-brief.md` does not exist, the task has no contract: give the reviewer no contract path. For a `contract` task, tell it to check each claim in `contract.draft.md` against the code at `origin/<base_branch>`. Each claim needs a `file:line` reference. For a new project, it checks that each section has content. It writes its findings into `review.md` and sets both finding counts. If `agents/reviewer.md` is not there, stop with the reason `missing agents/reviewer.md`, as in "Stop for the user".
+5. Upload the evidence. Run this after the last compression and before the page build. Run it for every task type that saved evidence.
 
    ```bash
    bash "$scripts/evidence-upload.sh" --task-id <task_id> --dir "/tmp/wstack-evidence/<task_id>" --bucket "<r2_bucket>" --domain "<evidence_domain>" --repo "<repo>" --local-only-repos "<local_evidence_only_repos>"
    ```
 
    Take the values from the Config list in `SKILL.md`. For a task with no repository, pass an empty `--repo`. The script prints `local only: <dir>` or one `https://<domain>/evidence/<task_id>/<file>` line per file. If it exits non-zero, stop with the reason `evidence upload failed`, as in "Stop for the user". Then extend each evidence line under `## Evidence` in `review.md`: `- <check> → <file> → pass|fail → <link>`. Use the printed URL whose last part is the file name. Use `local only` when the script printed `local only` or printed no URL for that file. Set `evidence_location` in the `review.md` frontmatter to `r2` or `local only`.
-5. Review page. Run the `build-review-page` skill to build `review.html` in `$HOME/.wstack/pages/<task_id>/`. If the skill is not there, stop with the reason `missing build-review-page skill`, as in "Stop for the user".
+6. Review page. Run the `build-review-page` skill to build `review.html` in `$HOME/.wstack/pages/<task_id>/`. If the skill is not there, stop with the reason `missing build-review-page skill`, as in "Stop for the user".
 
-After step 3, set `blocking_findings` and `non_blocking_findings` in the `review.md` frontmatter to the counts. A blocking finding is a spec mismatch, a correctness bug, or a security problem. Go to "A check fails" for each open blocking finding. A non-blocking finding (design or test coverage) does not stop the task.
+After step 4, set `blocking_findings` and `non_blocking_findings` in the `review.md` frontmatter to the counts. A blocking finding is a spec mismatch, a correctness bug, or a security problem. Go to "A check fails" for each open blocking finding. A non-blocking finding (design or test coverage) does not stop the task.
 
-When all five steps pass, set `result` to `pass` in `review.md`. Write a `step` line in `run-log.md`.
+When all six steps pass, set `result` to `pass` in `review.md`. Write a `step` line in `run-log.md`.
 
 ## Go on to Deliver
 

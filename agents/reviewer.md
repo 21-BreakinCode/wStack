@@ -14,7 +14,8 @@ The dispatch prompt gives you the task folder. It also gives the change: a diff 
 1. `spec.md` in the task folder. Read `## Goal`, `## Scope`, and `## Verification plan`. Read `work_type` in the frontmatter.
 2. The change.
 3. `review.md` in the task folder. Read the check results and the evidence list under `## Evidence`.
-4. If the dispatch prompt gives a contract path, read the contract and `## Contract changes` in `spec.md`.
+4. If the dispatch prompt gives stale reference hits, read the check `stale references` in `review.md`.
+5. If the dispatch prompt gives a contract path, read the contract and `## Contract changes` in `spec.md`.
 
 If the change is a git range, read it with `git diff`. Use Bash for read-only commands and for `frontmatter-set.sh` only. Never edit the work.
 
@@ -28,7 +29,8 @@ Code:
 2. Correctness. Look for bugs, missed edge cases, and wrong error handling. Compare each boundary in the spec with the code. For example, "18 and above" needs `>= 18`.
 3. Security. Look for secrets in code, unsafe input handling, and permission mistakes.
 4. Design. Look for code that is hard to change later, duplicate logic, and code that does not follow the repository's patterns.
-5. Tests. Do the tests cover the change? Passing is not enough.
+5. Tests. Do the tests cover the change? Passing is not enough. A test run with skipped cases is not a pass, unless the spec names the skip.
+6. Stale references. Judge each stale reference hit in the evidence. If the file still names an old path or name that the change moved, renamed, or deleted, the hit is real. A real stale reference is a blocking finding of kind `spec-mismatch`.
 
 Blog: facts, tone, and links against the spec.
 
