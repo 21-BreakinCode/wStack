@@ -2,7 +2,7 @@
 """Move finished tasks into <tasks_dir>/_archive/<week>/ with the Obsidian CLI, so Obsidian updates links.
 
 Exit 0: every named task was handled. Exit 1: bad input. Exit 3: the pre-check failed, nothing moved.
-Exit 4: a move back failed, the run stopped.
+Exit 4: a task may sit in two folders, the run stopped.
 """
 import argparse
 import json
@@ -54,12 +54,34 @@ def precheck_failure(vault):
     return None
 
 
-def list_task_files(task_folder):
+def is_unindexed(parent, name):
+    return name.startswith(".") or os.path.islink(os.path.join(parent, name))
+
+
+def list_task_entries(task_folder):
+    """Return (notes, raw). Notes move with the CLI. Raw entries (dot names, symlinks) move with os.rename."""
+    notes, raw = [], []
+    for folder, dir_names, file_names in os.walk(task_folder):
+        for name in list(dir_names):
+            if is_unindexed(folder, name):
+                dir_names.remove(name)
+                raw.append(os.path.relpath(os.path.join(folder, name), task_folder))
+        for name in file_names:
+            target = raw if is_unindexed(folder, name) else notes
+            target.append(os.path.relpath(os.path.join(folder, name), task_folder))
+    return sorted(notes), sorted(raw)
+
+
+def left_entries(folder):
+    """Return every file and symlink under folder. Return the folder itself if only empty folders remain."""
     found = []
-    for folder, _, names in os.walk(task_folder):
-        for name in names:
-            found.append(os.path.relpath(os.path.join(folder, name), task_folder))
-    return sorted(found)
+    for current, dir_names, file_names in os.walk(folder):
+        for name in list(dir_names):
+            if os.path.islink(os.path.join(current, name)):
+                dir_names.remove(name)
+                found.append(os.path.join(current, name))
+        found.extend(os.path.join(current, name) for name in file_names)
+    return sorted(found) or [folder]
 
 
 def remove_empty_folders(root):
@@ -70,50 +92,71 @@ def remove_empty_folders(root):
             pass
 
 
+def move_entry(kind, vault, from_rel, to_rel):
+    if kind == "raw":
+        try:
+            os.rename(os.path.join(vault, from_rel), os.path.join(vault, to_rel))
+        except OSError as rename_error:
+            raise ObsidianCliError(str(rename_error))
+        return
+    cli_move(from_rel, to_rel)
+
+
+def split_report(vault, task_id, reason, old_folder, dest_folder):
+    lines = ["%s for %s, run stopped" % (reason, task_id), "left in old folder:"]
+    lines += ["  " + os.path.relpath(path, vault) for path in left_entries(old_folder)] if os.path.exists(old_folder) else []
+    lines.append("left in archive:")
+    lines += ["  " + os.path.relpath(path, vault) for path in left_entries(dest_folder)] if os.path.exists(dest_folder) else []
+    return "\n".join(lines)
+
+
 def archive_task(vault, tasks_dir, week, task_id):
-    """Return (message, back_failure_text). back_failure_text is not None only when a move back failed."""
+    """Return (message, split). split is True when the task may sit in two folders and the run must stop."""
     task_folder = os.path.join(vault, tasks_dir, task_id)
     spec_path = os.path.join(task_folder, "spec.md")
     if not os.path.isfile(spec_path):
-        return "not moved %s: no spec.md at the top level of %s" % (task_id, tasks_dir), None
+        return "not moved %s: no spec.md at the top level of %s" % (task_id, tasks_dir), False
     status = read_status(spec_path)
     if status not in FINISHED_STATUSES:
-        return "not moved %s: status %s" % (task_id, status or "missing"), None
+        return "not moved %s: status %s" % (task_id, status or "missing"), False
     dest_rel = "/".join([tasks_dir, "_archive", week, task_id])
     dest_folder = os.path.join(vault, dest_rel)
     if os.path.exists(dest_folder):
-        return "not moved %s: destination exists %s" % (task_id, dest_rel), None
+        return "not moved %s: destination exists %s" % (task_id, dest_rel), False
 
-    files = list_task_files(task_folder)
-    for inner in sorted({os.path.dirname(name) for name in files}):
+    notes, raw = list_task_entries(task_folder)
+    for inner in sorted({os.path.dirname(name) for name in notes + raw}):
         os.makedirs(os.path.join(dest_folder, inner), exist_ok=True)
     time.sleep(float(os.environ.get("WSTACK_ARCHIVE_WAIT", "2")))
 
     moved = []
-    for name in files:
-        try:
-            cli_move("/".join([tasks_dir, task_id, name]), "/".join([dest_rel, name]))
-        except ObsidianCliError as move_error:
-            failure = "%s: %s" % (name, move_error)
+    failure = None
+    for kind, names in (("note", notes), ("raw", raw)):
+        for name in names:
+            try:
+                move_entry(kind, vault, "/".join([tasks_dir, task_id, name]), "/".join([dest_rel, name]))
+            except ObsidianCliError as move_error:
+                failure = "%s: %s" % (name, move_error)
+                break
+            moved.append((kind, name))
+        if failure:
             break
-        moved.append(name)
-    else:
-        remove_empty_folders(task_folder)
-        return "moved %s -> %s" % (task_id, dest_rel), None
 
-    for name in reversed(moved):
+    if failure is None:
+        remove_empty_folders(task_folder)
+        if os.path.exists(task_folder):
+            return split_report(vault, task_id, "source folder not empty after the move", task_folder, dest_folder), True
+        return "moved %s -> %s" % (task_id, dest_rel), False
+
+    for kind, name in reversed(moved):
         try:
-            cli_move("/".join([dest_rel, name]), "/".join([tasks_dir, task_id, name]))
+            move_entry(kind, vault, "/".join([dest_rel, name]), "/".join([tasks_dir, task_id, name]))
         except ObsidianCliError:
-            in_old = [n for n in files if os.path.exists(os.path.join(task_folder, n))]
-            in_archive = [n for n in files if os.path.exists(os.path.join(dest_folder, n))]
-            lines = ["move back failed for %s, run stopped" % task_id, "left in old folder:"]
-            lines += ["  %s/%s/%s" % (tasks_dir, task_id, n) for n in in_old]
-            lines.append("left in archive:")
-            lines += ["  %s/%s" % (dest_rel, n) for n in in_archive]
-            return "\n".join(lines), True
+            return split_report(vault, task_id, "move back failed", task_folder, dest_folder), True
     remove_empty_folders(dest_folder)
-    return "not moved %s: %s" % (task_id, failure), None
+    if os.path.exists(dest_folder):
+        return split_report(vault, task_id, "archive folder not empty after the move back", task_folder, dest_folder), True
+    return "not moved %s: %s" % (task_id, failure), False
 
 
 def main():
@@ -140,9 +183,9 @@ def main():
         sys.exit(3)
 
     for task_id in args.task_ids:
-        message, back_failed = archive_task(args.vault, tasks_dir, args.week, task_id)
+        message, split = archive_task(args.vault, tasks_dir, args.week, task_id)
         print(message)
-        if back_failed:
+        if split:
             sys.exit(4)
 
 

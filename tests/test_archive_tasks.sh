@@ -47,6 +47,19 @@ rc_back=0; out_back="$(FAKE_VAULT="$vault_back" FAKE_FAIL_MATCH=zz-second FAKE_F
 assert "failed move back exits 4 and lists the files" '[ "$rc_back" = 4 ] && grep -q "left in old folder:" <<<"$out_back" && grep -q "left in archive:" <<<"$out_back"'
 assert "failed move back lists each file once on the right side" 'grep -q "Tasks/2026-11-20-d/zz-second.md" <<<"$out_back" && grep -q "_archive/2026-W48/2026-11-20-d/spec.md" <<<"$out_back"'
 
+vault_raw="$(make_vault v5 true)"
+make_task "$vault_raw" 2026-11-20-e delivered 2026-W48 docs/note.md .DS_Store
+ln -s docs "$vault_raw/Tasks/2026-11-20-e/linkdir"
+out_raw="$(FAKE_VAULT="$vault_raw" python3 "$archive" --vault "$vault_raw" --tasks-dir Tasks --week 2026-W48 2026-11-20-e 2>&1)"
+dest_raw="$vault_raw/Tasks/_archive/2026-W48/2026-11-20-e"
+assert "symlink and dot file: moved completely" 'grep -q "^moved 2026-11-20-e -> " <<<"$out_raw" && [ ! -e "$vault_raw/Tasks/2026-11-20-e" ] && [ -f "$dest_raw/docs/note.md" ] && [ -f "$dest_raw/.DS_Store" ]'
+assert "the symlink arrives as a symlink" '[ -L "$dest_raw/linkdir" ] && [ "$(readlink "$dest_raw/linkdir")" = docs ]'
+
+vault_ghost="$(make_vault v6 true)"
+make_task "$vault_ghost" 2026-11-20-f delivered 2026-W48 ghost.md
+rc_ghost=0; out_ghost="$(FAKE_VAULT="$vault_ghost" FAKE_MOVE_THEN_FAIL_MATCH=ghost python3 "$archive" --vault "$vault_ghost" --tasks-dir Tasks --week 2026-W48 2026-11-20-f 2>&1)" || rc_ghost=$?
+assert "a move that failed but really moved exits 4 and lists both sides" '[ "$rc_ghost" = 4 ] && grep -q "Tasks/2026-11-20-f/spec.md" <<<"$out_ghost" && grep -q "_archive/2026-W48/2026-11-20-f/ghost.md" <<<"$out_ghost" && ! grep -q "^not moved" <<<"$out_ghost"'
+
 vault2="$(make_vault v2 false)"
 make_task "$vault2" 2026-11-20-a delivered 2026-W48
 rc_links=0; FAKE_VAULT="$vault2" python3 "$archive" --vault "$vault2" --tasks-dir Tasks --week 2026-W48 2026-11-20-a >/dev/null 2>&1 || rc_links=$?
