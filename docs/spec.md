@@ -150,6 +150,8 @@ wstack/
 │   ├── contract-hook.sh           SessionStart and PostToolUse drift hook
 │   ├── board.sh                   one JSON row per open RD (a task session), for /wstack:board
 │   ├── board-watch.sh             live refresh loop on top of board.sh, for /wstack:board --watch
+│   ├── archive-tasks.py           moves finished tasks into Tasks/_archive/<week>/ with the Obsidian CLI
+│   ├── archive-candidates.sh      prints the delivered or cancelled tasks that a retro read, for the archive question
 │   ├── session-id-add.sh          adds a session id to session_ids in spec.md
 │   ├── transcript-stats.sh        tool use, errors and time range of the sessions of a task
 │   ├── lib/transcripts.sh         finds transcripts and subagent folders by session id
