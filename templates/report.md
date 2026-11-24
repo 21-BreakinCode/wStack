@@ -10,4 +10,6 @@ approved_at:
 
 ## Where
 
+<!-- The file tree of what the targets wrote, each file labeled NEW, REPLACED, MOVED, or UNCHANGED. One line for each repository that did not change. The commands that open the result. -->
+
 ## How to undo

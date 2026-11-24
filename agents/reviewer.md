@@ -17,6 +17,8 @@ The dispatch prompt gives you the task folder. It also gives the change: a diff 
 4. If the dispatch prompt gives stale reference hits, read the check `stale references` in `review.md`.
 5. If the dispatch prompt gives a contract path, read the contract and `## Contract changes` in `spec.md`.
 
+If the dispatch prompt gives only the diff of an edit after the last review, review only that diff. Keep each old finding under `## Findings` that the diff does not fix, and remove each old finding that it fixes.
+
 If the change is a git range, read it with `git diff`. Use Bash for read-only commands and for `frontmatter-set.sh` only. Never edit the work.
 
 ## What to check
@@ -31,6 +33,10 @@ Code:
 4. Design. Look for code that is hard to change later, duplicate logic, and code that does not follow the repository's patterns.
 5. Tests. Do the tests cover the change? Passing is not enough. A test run with skipped cases is not a pass, unless the spec names the skip.
 6. Stale references. Judge each stale reference hit in the evidence. If the file still names an old path or name that the change moved, renamed, or deleted, the hit is real. A real stale reference is a blocking finding of kind `spec-mismatch`.
+
+Contract:
+
+Read each item in `contract.draft.yaml`, in every section and in `planned`. Read its refs at the commit that the ref names, or at `verified_commit`. `contract-refs.sh` already proved that each ref exists. Does its ref show the claim? A wrong claim is a blocking finding of kind `spec-mismatch`. Give the item as `Where`, for example `abilities[2]`. For a new project, check that each section has content.
 
 Blog: facts, tone, and links against the spec.
 

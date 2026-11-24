@@ -96,7 +96,7 @@ assert "an archived folder takes the slug" '[[ "$archived_dup" = *-dup-2 ]]'
 headings="$(grep '^## ' "$folder/spec.md" | tr '\n' '|')"
 assert "spec Moves and renames defaults to None" '[ "$(awk "/^## Moves and renames\$/{getline; getline; print; exit}" "$folder/spec.md")" = "None" ]'
 assert "spec has eight sections in order" '[ "$headings" = "## Goal|## Scope|## Moves and renames|## Verification plan|## Non-undoable steps|## Deliver targets|## Contract changes|## Decisions|" ]'
-assert "contract template frontmatter" 'grep -qx "pending: \[\]" "$repo_root/templates/contract.md" && grep -qx "base_branch: {{base_branch}}" "$repo_root/templates/contract.md"'
-assert "plan template" '[ -f "$repo_root/templates/plan.md" ]'
+assert "contract template fields" 'grep -qx "pending: \[\]" "$repo_root/templates/contract.yaml" && grep -qx "base_branch: {{base_branch}}" "$repo_root/templates/contract.yaml"'
+assert "no plan template: plan items live in the contract" '[ ! -e "$repo_root/templates/plan.md" ]'
 assert "decision template" 'grep -qx "status: accepted" "$repo_root/templates/decision.md"'
 finish

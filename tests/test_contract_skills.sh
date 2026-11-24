@@ -12,7 +12,7 @@ launch="$repo_root/skills/start-task/SKILL.md"
 deliver="$repo_root/skills/deliver-task/SKILL.md"
 reader="$repo_root/agents/contract-reader.md"
 decision_template="$repo_root/templates/decision.md"
-contract_template="$repo_root/templates/contract.md"
+contract_template="$repo_root/templates/contract.yaml"
 
 # slice <file> <first line prefix> <end line prefix>: the lines from the first line with the first prefix, up to the next line with the end prefix
 slice() { awk -v from="$2" -v to="$3" 'on && index($0, to) == 1 { exit } !on && index($0, from) == 1 { on = 1 } on' "$1"; }
@@ -28,6 +28,8 @@ g1_line="$(printf '%s\n' "$gate_part" | grep '^G1\. ')"
 g3_line="$(printf '%s\n' "$gate_part" | grep '^G3\. ')"
 g5_part="$(slice "$confirmation" 'G5. ' 'G6. ')"
 verify_final_review="$(grep '^4\. Final review' "$verify")"
+verify_step1="$(slice "$verify" '1. Behavior check' '2. Stale references')"
+verify_edit_part="$(slice "$verify" '## An edit after the last review' '## Go on to Deliver')"
 files_part="$(slice "$deliver" '### Contract files' '## Contract write-back')"
 writeback_part="$(slice "$deliver" '## Contract write-back' '## Targets that need approval')"
 pending_part="$(sed -n '/^## Pending items/,$p' "$deliver")"
@@ -36,7 +38,7 @@ closed_part="$(slice "$deliver" '- `CLOSED`:' 'Exit 4 from `lock`')"
 contract_part="$(slice "$execute" '## Contract work' '## Learning tasks')"
 
 # Contract gate
-for needle in 'contract-path.sh' 'contract-check.sh' 'wstack:contract-reader' '=== PATCH ===' 'contract-brief.md' 'contract.gate-patch.md'; do
+for needle in 'contract-path.sh' 'contract-check.sh' 'wstack:contract-reader' '=== PATCH ===' 'contract-brief.md' 'contract.gate-patch.yaml'; do
   assert "gate names $needle" 'has "$gate_part" "$needle"'
 done
 assert "G1 skips the rest of the gate for other work types" 'has "$g1_line" "If \`work_type\` is not \`code\` or \`ops\`, skip the rest of the gate."'
@@ -44,7 +46,7 @@ assert "G2 exit 1 writes Contract: not mapped" 'printf "%s\n" "$gate_part" | gre
 assert "G3 fetches with git -C" 'has "$g3_line" "git -C \"<repository folder>\" fetch origin \"<base_branch>\""'
 assert "G3: a failed fetch is noted in the brief at G5" 'has "$g3_line" "G5 then adds a line about it to the brief." && has "$g5_part" "If the fetch in G3 failed, append the line"'
 assert "the gate text says where it changes the contract" 'has "$gate_part" "The contract file changes in two places only:"'
-assert "gate deletes old files in G1, before any exit" 'has "$g1_line" "If \`\$task_dir/contract-brief.md\` or \`\$task_dir/contract.gate-patch.md\` exists, delete it." && ! has "$g5_part" "delete it"'
+assert "gate deletes old files in G1, before any exit" 'has "$g1_line" "If \`\$task_dir/contract-brief.md\` or \`\$task_dir/contract.gate-patch.yaml\` exists, delete it." && ! has "$g5_part" "delete it"'
 gate_line="$(grep -nxF '## Contract gate' "$confirmation" | cut -d: -f1)"
 spec_line="$(grep -nxF '## Write the spec' "$confirmation" | cut -d: -f1)"
 assert "gate section before Write the spec" '[ -n "$gate_line" ] && [ "$gate_line" -lt "$spec_line" ]'
@@ -64,6 +66,7 @@ assert "contract task: existing project asks no section question and lists what 
 assert "existing contract project never writes None under Contract changes" 'has "$write_part" "For an existing \`contract\` project, list the team docs and the code areas to read. A \`contract\` task never writes \`None\` here."'
 assert "a work_type change runs the gate again, then step 1" 'printf "%s\n" "$write_part" | grep "^3\. " | grep -qF "run \"Contract gate\" again from G1, and go back to step 1."'
 assert "G5: set up the contract first is a gate stop" 'has "$g5_part" "the reason \`contract gate: set up the contract first\`"'
+assert "confirmation names contract-verify-draft.sh in a contract verification plan" 'printf "%s\n" "$write_part" | grep -F "## Verification plan" | grep -qF "For a \`contract\` task, write these two checks:" && has "$write_part" "contract-verify-draft.sh" && has "$write_part" "check-undo-rehearsal.txt" && has "$write_part" "claim review"'
 assert "spec page puts the gate patch right after the title line" 'has "$show_part" "right after the title line, under the heading \`# Contract changes from the gate\`"'
 
 # After approval, step 9
@@ -76,18 +79,20 @@ assert "step 9 says the trap already unlocked" 'has "$step9_part" "The trap alre
 assert "step 9 is not tied to check exit 1" '! grep -qF "If the check in G5 exited 1" "$confirmation"'
 assert "step 9: set-verified uses checked_commit" 'printf "%s\n" "$step9_part" | grep -F "set-verified" | grep -qF "checked_commit"'
 assert "step 9 reads stale_sections before set-verified" 'has "$step9_part" "fm_get \"\$task_dir/contract-brief.md\" stale_sections"'
-assert "step 9: gate snapshots are contract.before.md and plan.before.md" 'has "$step9_part" "cp \"\$contract_file\" \"\$task_dir/contract.before.md\"" && has "$step9_part" "\"\$task_dir/plan.before.md\""'
-assert "step 9: a missing plan.md skips the plan lines" 'has "$step9_part" "or \`plan.md\` is not in the contract folder, skip the plan lines"'
-assert "step 9: run-log gets the undo of the contract part" 'has "$step9_part" "The old-section command:" && has "$step9_part" "contract.before.md'"'"' --sections"'
-assert "step 9: the undo deletes new sections and restores verified_commit" 'has "$step9_part" "The new-section command, once for each new name:" && has "$step9_part" "add the commit command:" && has "$step9_part" "fm_get '"'"'<task folder>/contract.before.md'"'"' verified_commit"'
-assert "step 9: both undo lines say how to pass a name with a comma" '[ "$(printf "%s\n" "$step9_part" | grep -cF "If a name holds a comma, give every name as its own \`--section '"'"'<name>'"'"'\` flag in place of \`--sections\`.")" = 2 ]'
-assert "step 9: run-log gets the undo of the plan part" 'has "$step9_part" "with the undo of the plan part:"'
+assert "step 9: the gate snapshot is contract.before.yaml, with no plan snapshot" 'has "$step9_part" "cp \"\$contract_file\" \"\$task_dir/contract.before.yaml\"" && ! has "$step9_part" "plan.before.md" && ! has "$step9_part" "delete-section"'
+assert "step 9: a missing patch skips the snapshot and apply lines" 'has "$step9_part" "If \`contract.gate-patch.yaml\` does not exist, skip the \`contract.before.yaml\` line and the \`apply\` line."'
+assert "the gate patch is YAML with a sections map" 'has "$g5_part" "\$task_dir/contract.gate-patch.yaml" && has "$step9_part" "yq -p yaml -o json '"'"'.sections // {} | keys'"'"'" && grep -qF "a \`sections:\` map" "$reader"'
+assert "step 9 undo uses apply with --sections and --planned" 'has "$step9_part" "The undo command: \`bash '"'"'<scripts>/contract-edit.sh'"'"' apply '"'"'<contract_file>'"'"' '"'"'<task folder>/contract.before.yaml'"'"' --sections '"'"'<applied keys, joined by commas>'"'"' --planned '"'"'<removed ids, joined by commas>'"'"'\`"'
+assert "step 9: an undo with no applied key restores plan items alone" 'has "$step9_part" "contract.before-planned.yaml" && has "$step9_part" "applies every section of the snapshot"'
+assert "step 9: the undo restores verified_commit and has no new-section command" 'has "$step9_part" "add the commit command:" && has "$step9_part" "yq '"'"'.verified_commit'"'"' '"'"'<task folder>/contract.before.yaml'"'"'" && ! has "$step9_part" "new-section"'
 
 # Verify
 assert "verify final review passes the contract path to the reviewer" 'has "$verify_final_review" "also give it the contract path"'
 assert "verify final review reads the gate state with fm_get" 'has "$verify_final_review" "fm_get \"\$task_dir/contract-brief.md\" contract_file"'
 assert "verify final review names each file" 'has "$verify_final_review" "If \`contract-brief.md\` does not exist" && has "$verify_final_review" "If \`agents/reviewer.md\` is not there" && ! has "$verify_final_review" "If the file"'
-assert "verify final review names file:line for contract work" 'has "$verify_final_review" "file:line"'
+assert "verify tells the reviewer to judge whether each ref shows its claim" 'has "$verify_final_review" "\`contract-refs.sh\` in step 1 already proved that every ref exists" && has "$verify_final_review" "whether each ref shows its claim"'
+assert "verify runs contract-verify-draft.sh for a contract task" 'has "$verify_step1" "For a \`contract\` task" && has "$verify_step1" "contract-verify-draft.sh\" \"<repository folder>\" \"\$task_dir\" \"<contract path>\" \"<task_id>\" \"/tmp/wstack-evidence/<task_id>\""'
+assert "verify re-reviews an edit after the last review with the diff only" 'has "$verify_edit_part" "a fix for a non-blocking finding" && has "$verify_edit_part" "diff -u \"\$task_dir/contract.draft.reviewed.yaml\" \"\$task_dir/contract.draft.yaml\"" && has "$verify_edit_part" "only the diff of the edit" && has "$verify_final_review" "An edit after the last review"'
 
 # Deliver: Contract write-back
 assert "deliver has Contract write-back heading" 'grep -qxF "## Contract write-back" "$deliver"'
@@ -135,11 +140,11 @@ for lock_file in "$confirmation" "$deliver"; do
   assert "$(basename "$lock_file"): every lock block has set -e" '[ "$set_e_lines" -ge "$lock_blocks" ]'
   assert "$(basename "$lock_file"): no bare unlock line" '! grep -qE "^[[:space:]]*bash .*contract-edit.sh\" unlock" "$lock_file"'
 done
-assert "plan headings sit in single quotes" '[ "$(grep -cF "for heading in '"'"'<heading>'"'"'; do" "$confirmation")" -eq 1 ] && [ "$(grep -cF "for heading in '"'"'<heading>'"'"'; do" "$deliver")" -eq 1 ] && ! grep -qF "\"<heading>\"" "$confirmation" "$deliver"'
+assert "plan headings sit in single quotes" '! grep -qF "for heading in" "$confirmation" && [ "$(grep -cF "for heading in '"'"'<heading>'"'"'; do" "$deliver")" -eq 1 ] && ! grep -qF "\"<heading>\"" "$confirmation" "$deliver"'
 
 # Execute: Contract work
 assert "execute.md: Contract work after Thinking and ops work" '[ -n "$(grep -nxF "## Contract work" "$execute" | head -1)" ] && [ "$(grep -nxF "## Thinking and ops work" "$execute" | head -1 | cut -d: -f1)" -lt "$(grep -nxF "## Contract work" "$execute" | head -1 | cut -d: -f1)" ]'
-for needle in 'contract.draft.md' 'plan.draft.md' 'decisions.draft/' 'templates/contract.md' 'Open questions' \
+for needle in 'contract.draft.yaml' 'decisions.draft/' 'templates/contract.yaml' 'disagreements.md' \
   'fetch origin' 'rev-parse' 'verified_commit' 'next-decision-id' 'contract-path.sh' 'repository not mapped: run /wstack:init-service'; do
   assert "execute.md Contract work names $needle" 'has "$contract_part" "$needle"'
 done
@@ -147,16 +152,20 @@ assert "SKILL.md launch names contract work type" 'grep -qF "\`contract\`" "$lau
 step6_line="$(printf '%s\n' "$contract_part" | grep -E '^6\. ')"
 step3_line="$(printf '%s\n' "$contract_part" | grep -E '^3\. ')"
 step7_line="$(printf '%s\n' "$contract_part" | grep -E '^7\. ')"
-assert "execute: step 6 sets verified_commit when it fills the template" 'has "$step6_line" "verified_commit" && has "$step6_line" "templates/contract.md"'
+assert "execute writes contract.draft.yaml from templates/contract.yaml" 'has "$step6_line" "verified_commit" && has "$step6_line" "Write \`contract.draft.yaml\` from \`\${CLAUDE_PLUGIN_ROOT}/templates/contract.yaml\`"'
+assert "execute links repo ADRs as a team_docs glob and makes no decision file for them" 'has "$contract_part" "add the glob \`docs/adr/**\` to the \`sources\` of \`team_docs\`. Make no decision file for it."'
+assert "execute puts wStack settings in YAML fields, not decision files" 'has "$contract_part" "The spec choices that set how wStack works, such as \`base_branch\` and the \`ignore\` list, are YAML fields, not decision files."'
+assert "execute writes disagreements.md" 'has "$step7_line" "Write \`\$task_dir/disagreements.md\`" && ! has "$contract_part" "open_questions\` in the contract"'
+assert "execute fetches another repo before it cites it" 'has "$contract_part" "git -C \"<clone>\" fetch origin \"<default branch>\"" && has "$contract_part" "\`<owner>/<repo>@<commit>:path:lines\`" && has "$contract_part" "If the fetch fails, cite the local commit"'
+assert "execute quotes a ref that holds a comma" 'has "$step6_line" "put a ref that holds a comma in double quotes"'
 assert "execute: step 3 keeps the SHA for step 6" 'has "$step3_line" "step 6"'
 assert "execute: new-project questions are not in Execute" '! has "$contract_part" "Ask the user one question"'
 assert "execute: existing project reads the list from the spec" 'has "$contract_part" "code areas that the spec lists"'
-for placeholder in $(grep -ho '{{[a-z_]*}}' "$contract_template" "$repo_root/templates/plan.md" | tr -d '{}' | sort -u); do
+for placeholder in $(grep -ho '{{[a-z_]*}}' "$contract_template" | tr -d '{}' | sort -u); do
   assert "execute: step 6 says how to fill $placeholder" 'has "$step6_line" "$placeholder"'
 done
 assert "execute: org_kebab uses the handover kebab rule" 'has "$step6_line" "insert \`-\` before each uppercase letter except the first, lowercase the result, and collapse repeated \`-\`" && has "$step6_line" "\`BreakinCode\` gives \`breakin-code\`" && has "$(grep -F "Algorithm:" "$repo_root/skills/create-handover/SKILL.md")" "insert \`-\` before each uppercase letter (except position 0), lowercase the result, collapse repeated \`-\`"'
 assert "execute: org_kebab is defined" 'has "$step6_line" "\`{{org_kebab}}\` is the \`<ORG>\` folder of the contract path"'
-assert "execute: step 7 fills the plan template" 'has "$step7_line" "Fill \`app_name\` and \`tags\` as in step 6."'
 
 # Deliver: Contract files
 assert "deliver has Contract files heading" 'grep -qxF "### Contract files" "$deliver"'
@@ -179,16 +188,16 @@ assert "reader writes no code fence in the reply" 'sed -n "/^## Reply/,\$p" "$re
 assert "reader writes stale sections from the code" 'grep -qF "If the code does not show a fact, leave the fact out." "$reader"'
 assert "reference bash blocks use no CLAUDE_PLUGIN_ROOT" '! awk "/^[[:space:]]*\`\`\`bash/{b=1;next} /^[[:space:]]*\`\`\`/{b=0} b" "$confirmation" "$execute" "$verify" | grep -qF "CLAUDE_PLUGIN_ROOT"'
 for key in app_name repo base_branch verified_commit verified_at pending ignore tags; do
-  assert "contract template frontmatter has $key" 'sed -n "2,/^---\$/p" "$contract_template" | grep -q "^$key:"'
+  assert "contract template has $key" 'grep -q "^$key:" "$contract_template"'
   assert "README names the contract key $key" 'grep -F "the contract. Its sections are" "$repo_root/README.md" | grep -qF "\`$key\`"'
 done
-section_body() { awk -v heading="## $2" '/^## / { on = ($0 == heading); next } on' "$1"; }
-for section in Abilities Interfaces 'Depends on'; do
-  assert "contract template: $section has a sources comment" '[ "$(section_body "$contract_template" "$section" | head -1)" = "<!-- sources: -->" ]'
+for section in team_docs abilities interfaces depends_on; do
+  assert "contract template: $section has sources" '[ "$(yq ".sections.$section | has(\"sources\")" "$contract_template")" = true ]'
 done
-for section in 'Team docs' Consumers Gotchas 'Open questions'; do
-  assert "contract template: $section has no sources comment (Ruling 4)" 'grep -qxF "## $section" "$contract_template" && ! section_body "$contract_template" "$section" | grep -qF "sources:"'
+for section in consumers gotchas open_questions; do
+  assert "contract template: $section has no sources" '[ "$(yq ".sections.$section | has(\"sources\")" "$contract_template")" = false ]'
 done
+assert "templates/contract.md and templates/plan.md are gone" '[ ! -e "$repo_root/templates/contract.md" ] && [ ! -e "$repo_root/templates/plan.md" ]'
 assert "README states the sources rule of Ruling 4" 'grep -qF "Abilities, Interfaces, and Depends on each have a \`<!-- sources: -->\` comment" "$repo_root/README.md"'
 assert "design doc states the sources rule of Ruling 4" 'grep -qF "Every section except \`Team docs\`, \`Consumers\`, \`Gotchas\`, and \`Open questions\` has a \`sources\` comment." "$repo_root/docs/superpowers/specs/2026-11-21-contract-gate-design.md"'
 assert "spec.md layout lists the lib scripts" 'grep -qF "lib/frontmatter.sh         fm_get, fm_set, fm_append, fm_to_json:" "$repo_root/docs/spec.md" && grep -qF "lib/herdr.sh" "$repo_root/docs/spec.md"'

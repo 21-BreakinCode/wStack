@@ -14,7 +14,7 @@ This agent is read only. It never writes a file, and it never reads `decisions/`
 The dispatch prompt gives you:
 
 1. The repository folder.
-2. The contract path. It is `<vault>/01Project/<ORG>/<lifeos_subpath>/<app_name>.md`.
+2. The contract path. It is `<vault>/01Project/<ORG>/<lifeos_subpath>/<app_name>.contract.yaml`.
 3. The input text: a task spec or a question.
 4. The check output. This is optional.
 
@@ -28,31 +28,32 @@ The output has `status:`, `base:`, `behind:`, `stale_sections:`, `stale_dependen
 
 ## Read the contract
 
-1. Read the contract file. The frontmatter has `base_branch`, `verified_commit`, `verified_at`, `pending`, and `ignore`.
-2. Under `## Team docs`, each `- @<path>` line is a path relative to the repository root, not to the contract file. Read each path with Read. If a path does not exist, say so in `Freshness`.
-3. Each of the sections `Abilities`, `Interfaces`, and `Depends on` has a `<!-- sources: a, b -->` comment on the line after its heading. The sources are the files and globs that the section describes.
-4. `Consumers` and `Gotchas` carry no sources comment, because they describe things outside the code. When the facts of the task change them, update them in the patch too.
+1. Read the contract file. It is YAML. The top keys include `base_branch`, `verified_commit`, `verified_at`, `pending`, `ignore`, `summary`, `sections`, and `planned`. Read a key with `yq`, for example `yq '.sections.abilities' "<contract path>"`.
+2. Read the files that the `sources` globs of `team_docs` match. The globs are relative to the repository root, not to the contract file. List the files with `git -C "<repository folder>" ls-tree -r --name-only "origin/<base_branch>"`. If a glob matches no file, say so in `Freshness`.
+3. Each of the sections `abilities`, `interfaces`, and `depends_on` has a `sources` list. The sources are the files and globs that the section describes. Each item has `text`, one claim, and `refs`, the lines that show it.
+4. `consumers` and `gotchas` have no `sources`, because they describe things outside the code. When the facts of the task change them, update them in the patch too.
 5. Read the facts file next to the contract. It is `<app_name>.facts.md` in the contract folder. If it does not exist, write `None` under `Project facts`.
-6. Read `plan.md` in the contract folder. It has one `##` heading for each planned item that is not built yet. If `plan.md` does not exist, the service has no planned item. Write `None` under `Plan items`, and write no `## Remove from plan` block.
+6. Read the `planned` list. Each item is a planned item that is not built yet, with `id`, `title`, and `why`. If `planned` is empty, the service has no planned item. Write `None` under `Plan items`, and write no `remove_planned` list.
 
 ## Find the facts
 
 1. Read the code that bears on the input. For a stale section, list the changed files with `git -C "<repository folder>" diff --name-only <verified_commit> origin/<base_branch>`, and read the changes in the files that match its sources.
 2. The contract describes `origin/<base_branch>`, never the local `HEAD`. Read code from that ref with `git show origin/<base_branch>:<path>`.
-3. Each fact in your reply names its source: a contract section, a team doc path, or `file:line`.
+3. Each fact in your reply names its source: a section key, a team doc path, or `path:lines`.
 
 ## Write the patch
 
-The patch covers every stale section from the check, and each unclaimed file. When the facts of the task change them, it also covers `Consumers` and `Gotchas`.
+The patch covers every stale section from the check, and each unclaimed file. When the facts of the task change them, it also covers `consumers` and `gotchas`.
 
-- Each patch block holds the complete new text of one section. It starts with its `## <Section>` heading and keeps its `<!-- sources: ... -->` comment. The apply script replaces the whole block by name.
-- Write each stale section in full from the code at `origin/<base_branch>`. If the code does not show a fact, leave the fact out.
-- Never copy text from a team doc into the patch. Point at the doc with `@<path>` instead.
-- Give each unclaimed file an owner. Add a glob for it to the `sources` comment of the section that describes it. If no section fits, list the file under `Open questions`.
-- If a plan item is now built, add a `## Remove from plan` block after the section blocks. It has one `- <heading>` line for each built plan item. If no plan item is built, omit that block.
-- If `stale_dependencies` lists a dependency, find that dependency's contract in the same ORG folder. Find it through the Service Mapping in `handover_handler__initiation.md`, the same way the check does. Read its `verified_commit`. In the `## Depends on` block, write that commit into the entry for the dependency, with any changed facts. Without this, `Depends on` stays stale on every check.
+- The patch is YAML with a `sections:` map. Its keys are section keys of the contract. The apply script replaces each named section as a whole.
+- Each section in the map is the whole new section, with its `sources` list for `team_docs`, `abilities`, `interfaces`, and `depends_on`. The apply script refuses a section that lost its required `sources`.
+- Write each stale section in full from the code at `origin/<base_branch>`. If the code does not show a fact, leave the fact out. Each item has `text`, one claim in at most 25 words, and `refs`, at least one `path:lines` ref at `origin/<base_branch>`. In a flow list, put a ref that holds a comma in double quotes, for example `refs: ["app/main.py:10,40-42"]`, or write `refs` as a block list.
+- Never copy text from a team doc into the patch. Add a glob for the doc to the `sources` of `team_docs` instead.
+- Give each unclaimed file an owner. Add a glob for it to the `sources` of the section that describes it. If no section fits, add an item for it to `open_questions`.
+- If a plan item is now built, add `remove_planned: [<id>, ...]` after the `sections:` map, with the id of each built plan item. If no plan item is built, omit that list.
+- If `stale_dependencies` lists a dependency, find that dependency's contract in the same ORG folder. Find it through the Service Mapping in `handover_handler__initiation.md`, the same way the check does. Read its `verified_commit`. In the `depends_on` section, set `mapped_commit` of the item for that dependency to that commit, as a quoted string, and update any changed facts. Without this, `depends_on` stays stale on every check.
 - If nothing is stale, no file is unclaimed, and no plan item is built, the patch is the word `None`.
-- If nothing is stale but the task built a plan item, the patch is not `None`. It can hold only the `## Remove from plan` block.
+- If nothing is stale but the task built a plan item, the patch is not `None`. It can hold only `remove_planned`.
 
 ## Reply
 
@@ -60,13 +61,13 @@ Reply in this exact form. The line `=== PATCH ===` stands alone. Write no code f
 
 ```
 ### Brief
-<facts that bear on the input, each with its source: a contract section, a team doc path, or file:line>
+<facts that bear on the input, each with its source: a section key, a team doc path, or path:lines>
 ### Freshness
 <status, behind, base, and stale sections from the check>
 ### Plan items
-<items from plan.md that bear on the input, marked "planned, not built", or None>
+<items from planned that bear on the input, marked "planned, not built", or None>
 ### Project facts
 <every line under "## Facts" of the facts file, or None>
 === PATCH ===
-<## <Section> blocks with the full new text of each stale section, then an optional ## Remove from plan block with one "- <heading>" line for each built plan item, or the word None>
+<the YAML patch: a sections: map with each stale section in full, then an optional remove_planned: list of built plan item ids, or the word None>
 ```

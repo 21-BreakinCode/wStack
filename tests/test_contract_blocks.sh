@@ -67,13 +67,22 @@ setup_world() {  # <name>: a fresh world in $work_dir/<name>, with a plan and a 
 }
 write_brief() {  # <task folder> <stale_sections JSON>
   mkdir -p "$1"
-  printf -- '---\ncontract_file: %s\nbase_branch: main\nchecked_commit: checked123\nstale_sections: %s\n---\n\nBrief\n' "$CONTRACT" "$2" >"$1/contract-brief.md"
+  printf -- '---\ncontract_file: %s\nbase_branch: main\nchecked_commit: 12e4567\nstale_sections: %s\n---\n\nBrief\n' "$CONTRACT" "$2" >"$1/contract-brief.md"
 }
+write_gate_patch() {  # <task folder> <interfaces item text, or empty for no section> [plan id to remove]
+  local patch="$1/contract.gate-patch.yaml"
+  : >"$patch"
+  [ -z "$2" ] || ITEM_TEXT="$2" yq -n '.sections.interfaces = {"sources": ["api/**"], "items": [{"text": strenv(ITEM_TEXT), "refs": ["api/routes.go:1"]}]}' >"$patch"
+  [ -z "${3:-}" ] || PLAN_ID="$3" yq -i -p yaml -o yaml '.remove_planned = [strenv(PLAN_ID)]' "$patch"
+}
+add_plan_items() { yq -i '.planned = [{"id": "gate-item", "title": "Gate item", "why": "x"}, {"id": "keep-me", "title": "Keep me", "why": "w"}]' "$CONTRACT"; }
+plan_ids() { yq '[.planned[].id] | sort | join(",")' "$CONTRACT"; }
+same_contract() { [ "$(yq -o json '.planned |= sort_by(.id)' "$1")" = "$(yq -o json '.planned |= sort_by(.id)' "$2")" ]; }
 prepare_inputs() {  # <task folder>: every input file that the blocks read
   local task="$1"
   write_brief "$task" '["Interfaces"]'
   mkdir -p "$task/decisions.draft" "$task/decisions.writeback"
-  printf '## Interfaces\n<!-- sources: api/** -->\nA gate text.\n\n## Remove from plan\n- Gate item\n' >"$task/contract.gate-patch.md"
+  write_gate_patch "$task" "A gate text."
   printf '## Interfaces\n<!-- sources: api/** -->\nA write-back text.\n\n## Remove from plan\n- %s\n' "$weird_heading" >"$task/contract.patch.md"
   printf -- '---\napp_name: svc\nbase_branch: main\nverified_commit: %s\n---\n\n# svc contract\n\n## Abilities\nNew text.\n' "$FIRST_COMMIT" >"$task/contract.draft.md"
   printf '# svc plan\n' >"$task/plan.draft.md"
@@ -135,52 +144,72 @@ for shell in $test_shells; do
 done
 
 for shell in $test_shells; do
-  echo "$shell: gate step 9 (I4, M1, I3)"
-  setup_world "gate-$shell"
+  echo "$shell: gate step 9 (I4, M1)"
+  setup_world "gate-$shell"; add_plan_items
   task="$VAULT/Tasks/task-a"
-  write_brief "$task" '["Abilities","Interfaces"]'
-  printf '## Interfaces\n<!-- sources: api/** -->\nGET /health answers 200.\n\n## Remove from plan\n- %s\n' "$weird_heading" >"$task/contract.gate-patch.md"
+  write_brief "$task" '["abilities","interfaces"]'
+  write_gate_patch "$task" "GET /health answers 200." gate-item
   cp "$CONTRACT" "$world_dir/contract.orig"
-  run_block "$(filled_block step9 "$task" "$weird_heading" 0)" "$shell"
+  run_block "$(filled_block step9 "$task" "" 0)" "$shell"
   assert "$shell step 9: exit 0 ($out)" '[ "$rc" = 0 ]'
-  assert "$shell step 9: patch applied" 'section_of "$CONTRACT" Interfaces | grep -qF "GET /health answers 200."'
-  assert "$shell step 9: contract.before.md is the original" 'cmp -s "$task/contract.before.md" "$world_dir/contract.orig"'
-  assert "$shell step 9 I4: verified_commit stays while Abilities has no patch block" '[ "$(fm_get "$CONTRACT" verified_commit)" = "$FIRST_COMMIT" ]'
-  assert "$shell step 9 I4: the output names the section that stays stale" 'printf "%s\n" "$out" | grep -qxF "Abilities"'
-  assert "$shell step 9 M1: the plan item is removed" '! grep -qxF "## $weird_heading" "$contract_folder/plan.md" && grep -qxF "## Keep me" "$contract_folder/plan.md"'
-  assert "$shell step 9 M1: plan.before.md keeps the plan item" 'grep -qxF "## $weird_heading" "$task/plan.before.md"'
-  assert "$shell step 9 M1: the output names the removed item" 'printf "%s\n" "$out" | grep -qF "plan item removed: $weird_heading"'
-  assert "$shell step 9 I3: the heading text did not run" '[ -d "$world_dir/canary" ]'
-  gate_undo="$(fill "$(code_after "$confirmation" 'The old-section command:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
-    '<task folder>' "$task" '<applied names, joined by commas>' Interfaces)"
-  cp "$CONTRACT" "$world_dir/contract.gated"
+  assert "$shell step 9: patch applied" '[ "$(yq ".sections.interfaces.items[0].text" "$CONTRACT")" = "GET /health answers 200." ]'
+  assert "$shell step 9: contract.before.yaml is the original" 'cmp -s "$task/contract.before.yaml" "$world_dir/contract.orig"'
+  assert "$shell step 9 I4: verified_commit stays while abilities has no patch section" '[ "$(yq .verified_commit "$CONTRACT")" = "$FIRST_COMMIT" ]'
+  assert "$shell step 9 I4: the output names the section that stays stale" 'printf "%s\n" "$out" | grep -qxF "abilities"'
+  assert "$shell step 9 M1: the plan item is removed" '[ "$(plan_ids)" = keep-me ]'
+  assert "$shell step 9 M1: the output names the removed item" 'printf "%s\n" "$out" | grep -qxF "planned removed: gate-item"'
+  gate_undo="$(fill "$(code_after "$confirmation" 'The undo command:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
+    '<task folder>' "$task" '<applied keys, joined by commas>' interfaces '<removed ids, joined by commas>' gate-item)"
   run_block "$gate_undo" "$shell"
-  assert "$shell step 9 A2-28: the logged contract undo restores Interfaces ($out)" '[ "$rc" = 0 ] && ! grep -qF "GET /health answers 200." "$CONTRACT" && section_of "$CONTRACT" Interfaces | grep -qxF "<!-- sources: api/** -->"'
-  cp "$world_dir/contract.gated" "$CONTRACT"
+  assert "$shell step 9: the logged undo restores interfaces and the plan item ($out)" '[ "$rc" = 0 ] && same_contract "$CONTRACT" "$world_dir/contract.orig"'
 
+  echo "$shell: gate step 9 with every stale section patched, run twice"
+  setup_world "gate2-$shell"
   task="$VAULT/Tasks/task-a2"
-  write_brief "$task" '["Interfaces"]'
-  printf '## Interfaces\n<!-- sources: api/** -->\nGET /health answers 204.\n\n## Health checks\nGET /health is the probe.\n\n## Remove from plan\n- Gate item\n' >"$task/contract.gate-patch.md"
-  run_block "$(filled_block step9 "$task" "Gate item" 0)" "$shell"
-  assert "$shell step 9 I4: verified_commit moves when every stale section has a block" '[ "$rc" = 0 ] && [ "$(fm_get "$CONTRACT" verified_commit)" = checked123 ]'
-  run_block "$(filled_block step9 "$task" "Gate item" 0)" "$shell"
-  assert "$shell step 9 second run: exit 0, and the snapshot still lacks the new section" '[ "$rc" = 0 ] && ! grep -qxF "## Health checks" "$task/contract.before.md"'
-  undo_old="$(fill "$(code_after "$confirmation" 'The old-section command:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
-    '<task folder>' "$task" '<applied names, joined by commas>' Interfaces)"
-  undo_new="$(fill "$(code_after "$confirmation" 'once for each new name:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" '<name>' 'Health checks')"
+  write_brief "$task" '["interfaces"]'
+  write_gate_patch "$task" "GET /health answers 204."
+  cp "$CONTRACT" "$world_dir/contract.orig"
+  run_block "$(filled_block step9 "$task" "" 0)" "$shell"
+  assert "$shell step 9 I4: verified_commit moves to checked_commit, as a string" '[ "$rc" = 0 ] && [ "$(yq .verified_commit "$CONTRACT")" = 12e4567 ] && [ "$(yq ".verified_commit | tag" "$CONTRACT")" = "!!str" ]'
+  run_block "$(filled_block step9 "$task" "" 0)" "$shell"
+  assert "$shell step 9 second run: exit 0, and the snapshot keeps the text from before the gate" '[ "$rc" = 0 ] && cmp -s "$task/contract.before.yaml" "$world_dir/contract.orig"'
+  undo_keys="$(fill "$(code_after "$confirmation" 'The undo command:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
+    '<task folder>' "$task" '<applied keys, joined by commas>' interfaces " --planned '<removed ids, joined by commas>'" '')"
   undo_commit="$(fill "$(code_after "$confirmation" 'add the commit command:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
-    '<verified_commit>' "$(fm_get "$task/contract.before.md" verified_commit)")"
-  run_block "$undo_old && $undo_new && $undo_commit" "$shell"
+    '<verified_commit>' "$(yq .verified_commit "$task/contract.before.yaml")")"
+  run_block "$undo_keys && $undo_commit" "$shell"
   assert "$shell step 9 undo: exit 0 ($out)" '[ "$rc" = 0 ]'
-  assert "$shell step 9 undo: verified_commit is back, so the drift shows again" '[ "$(fm_get "$CONTRACT" verified_commit)" = "$FIRST_COMMIT" ]'
-  assert "$shell step 9 undo: the new section is gone and Interfaces is back" '! grep -qxF "## Health checks" "$CONTRACT" && section_of "$CONTRACT" Interfaces | grep -qF "GET /health answers 200." && ! grep -qF "answers 204" "$CONTRACT"'
+  assert "$shell step 9 undo: verified_commit is back, so the drift shows again" '[ "$(yq .verified_commit "$CONTRACT")" = "$FIRST_COMMIT" ]'
+  assert "$shell step 9 undo: interfaces is back" '[ "$(yq ".sections.interfaces.items | length" "$CONTRACT")" = 0 ] && ! grep -qF "answers 204" "$CONTRACT"'
+
+  echo "$shell: gate step 9 with a plan-only patch"
+  setup_world "gate-plan-$shell"; add_plan_items
+  task="$VAULT/Tasks/task-a3"
+  write_brief "$task" '[]'
+  write_gate_patch "$task" "" gate-item
+  run_block "$(filled_block step9 "$task" "" 0)" "$shell"
+  assert "$shell step 9 plan-only: exit 0, the item is removed, verified_commit moves ($out)" '[ "$rc" = 0 ] && [ "$(plan_ids)" = keep-me ] && [ "$(yq .verified_commit "$CONTRACT")" = 12e4567 ]'
+  printf 'sections:\n  abilities:\n    sources: [cmd/**]\n    items:\n      - text: A later edit.\n        refs: [cmd/main.go:1]\n' >"$world_dir/later.yaml"
+  bash "$repo_root/scripts/contract-edit.sh" apply "$CONTRACT" "$world_dir/later.yaml" >/dev/null
+  undo_plan="$(fill "$(code_after "$confirmation" 'restores the plan items alone:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
+    '<task folder>' "$task" '<removed ids, joined by commas>' gate-item)"
+  run_block "$undo_plan" "$shell"
+  assert "$shell step 9 plan-only undo: the plan item is back and a later edit stays ($out)" '[ "$rc" = 0 ] && [ "$(plan_ids)" = gate-item,keep-me ] && grep -qF "A later edit." "$CONTRACT"'
+
+  echo "$shell: gate step 9 with no patch file"
+  setup_world "gate-none-$shell"
+  task="$VAULT/Tasks/task-a4"
+  write_brief "$task" '["interfaces"]'
+  no_patch_block="$(raw_block step9 | grep -vF 'contract.before.yaml' | grep -vF 'contract-edit.sh" apply')"
+  run_block "$(fill "$no_patch_block" '<scripts folder>' "$repo_root/scripts" '<task folder>' "$(quote "$task")")" "$shell"
+  assert "$shell step 9 no patch: exit 0, still stale, verified_commit stays ($out)" '[ "$rc" = 0 ] && printf "%s\n" "$out" | grep -qxF "interfaces" && printf "%s\n" "$out" | grep -qxF "still stale:" && [ "$(yq .verified_commit "$CONTRACT")" = "$FIRST_COMMIT" ]'
 
   echo "$shell: MERGED and its undo (I2, I3)"
   setup_world "merge-$shell"
   fm_set "$CONTRACT" pending '[{"pr":7,"task":"task-a"},{"pr":8,"task":"task-b"}]'
   task_a="$VAULT/Tasks/task-a"; task_b="$VAULT/Tasks/task-b"; mkdir -p "$task_b"
   write_brief "$task_a" '["Interfaces"]'
-  printf '## Interfaces\n<!-- sources: api/** -->\nA gate text.\n\n## Remove from plan\n- Gate item\n' >"$task_a/contract.gate-patch.md"
+  write_gate_patch "$task_a" "A gate text."
   run_block "$(filled_block step9 "$task_a" "Gate item" 0)" "$shell"
   assert "$shell task A gate: exit 0" '[ "$rc" = 0 ]'
   printf '## Interfaces\n<!-- sources: api/** -->\nB edit text.\n\n## Remove from plan\n- B item\n' >"$task_b/contract.patch.md"
