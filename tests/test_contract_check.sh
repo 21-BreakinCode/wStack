@@ -205,4 +205,18 @@ assert "--coverage with a stale dependency marks nothing and exits 0" '[ $rc = 0
 new_world; run --other
 assert "a third argument other than --coverage exits 2" '[ $rc = 2 ] && grep -q "usage: contract-check.sh" "$work_dir/err"'
 
+new_world; map_dependency
+printf 'app_name: dep\nverified_commit: "bbb2222"\n' > "$dep_dir/dep.contract.yaml"
+add_dependency aaa1111
+mkdir -p "$VAULT/wStack/Tasks/t1"; cp "$CONTRACT" "$VAULT/wStack/Tasks/t1/contract.draft.yaml"
+mapped_contract="$CONTRACT"; CONTRACT="$VAULT/wStack/Tasks/t1/contract.draft.yaml"
+run; no_flag_deps="$(field stale_dependencies)"
+run --mapping-from "$ORG_DIR/Services/new-svc/new-svc.contract.yaml"
+assert "--mapping-from finds the mapping for a draft, from a folder that does not exist yet" '[ "$no_flag_deps" = "[]" ] && [ $rc = 1 ] && [ "$(field stale_dependencies)" = "[\"dep\"]" ]'
+run --mapping-from "$mapped_contract" --coverage; flag_first_rc=$rc
+run --coverage --mapping-from "$mapped_contract"
+assert "--mapping-from works with --coverage in either order" '[ $flag_first_rc = 0 ] && [ $rc = 0 ] && [ "$(field stale_dependencies)" = "[]" ]'
+run --mapping-from
+assert "--mapping-from with no path exits 2" '[ $rc = 2 ] && grep -q "usage: contract-check.sh" "$work_dir/err"'
+
 finish

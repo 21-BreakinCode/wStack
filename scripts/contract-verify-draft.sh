@@ -31,8 +31,8 @@ report() {  # <name> <passed 0|1>
 failed=0
 check_file="$evidence_dir/check-contract-check.txt"; : >"$check_file"
 check_rc=0
-run_logged "$check_file" bash "$scripts/contract-check.sh" "$repo_dir" "$draft_file" || check_rc=1
-run_logged "$check_file" bash "$scripts/contract-check.sh" "$repo_dir" "$draft_file" --coverage || check_rc=1
+run_logged "$check_file" bash "$scripts/contract-check.sh" "$repo_dir" "$draft_file" --mapping-from "$contract_file" || check_rc=1
+run_logged "$check_file" bash "$scripts/contract-check.sh" "$repo_dir" "$draft_file" --coverage --mapping-from "$contract_file" || check_rc=1
 [ "$(grep -c '^unclaimed_count: 0$' "$check_file")" = 2 ] || check_rc=1
 report contract-check "$check_rc"
 
@@ -44,6 +44,6 @@ single_check() {  # <name> <command>...: pass on exit 0
   report "$name" "$check_rc"
 }
 single_check contract-validate bash "$scripts/contract-validate.sh" "$draft_file"
-single_check contract-refs bash "$scripts/contract-refs.sh" "$repo_dir" "$draft_file"
+single_check contract-refs bash "$scripts/contract-refs.sh" "$repo_dir" "$draft_file" --mapping-from "$contract_file"
 single_check undo-rehearsal bash "$scripts/contract-deliver.sh" rehearse "$task_dir" "$contract_file" "$task_id"
 exit "$failed"

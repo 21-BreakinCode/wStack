@@ -86,6 +86,12 @@ case "$action" in
   undo)
     # Without the marker, the old contract may still sit in the folder with no copy in the archive.
     [ -e "$archive_dir/.archived" ] || fail "nothing to undo: $archive_dir/.archived is missing"
+    # Check every name before any change, so undo changes nothing or completes.
+    for archived in "$archive_dir"/*; do
+      [ -e "$archived" ] || continue
+      case "$(basename "$archived")" in "$contract_name"|"$note_name") continue ;; esac  # undo deletes these first
+      [ ! -e "$contract_folder/$(basename "$archived")" ] || fail "will not move over $contract_folder/$(basename "$archived"), so nothing changed"
+    done
     rm -f "$contract_file" "$contract_folder/$note_name" "$HOME/.wstack/pages/contracts/$app_name.html"
     if [ -f "$copied_list" ]; then
       while IFS= read -r copied_name; do
@@ -95,7 +101,6 @@ case "$action" in
     fi
     for archived in "$archive_dir"/*; do
       [ -e "$archived" ] || continue
-      [ ! -e "$contract_folder/$(basename "$archived")" ] || fail "will not move over $contract_folder/$(basename "$archived")"
       mv "$archived" "$contract_folder/"
     done
     rm -f "$archive_dir/.archived"

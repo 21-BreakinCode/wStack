@@ -71,6 +71,17 @@ new_world; keep_copy
 run "$deliver" undo "$task" "$CONTRACT" "$task_id"
 assert "undo without a write exits 1 and deletes nothing ($out)" '[ $rc = 1 ] && printf "%s\n" "$out" | grep -qF "nothing to undo" && same_as_copy'
 
+new_world; echo '# old notes' >"$folder/zz-notes.md"; keep_copy
+run "$deliver" write "$task" "$CONTRACT" "$task_id"; write_rc=$rc
+echo '# user notes' >"$folder/zz-notes.md"
+rm -rf "$work_dir/after-write"; cp -R "$folder" "$work_dir/after-write"
+run "$deliver" undo "$task" "$CONTRACT" "$task_id"; clash_rc=$rc; clash_out="$out"
+clash_unchanged=no; diff -r "$folder" "$work_dir/after-write" >/dev/null && clash_unchanged=yes
+rm "$folder/zz-notes.md"
+run "$deliver" undo "$task" "$CONTRACT" "$task_id"
+assert "undo with a name clash changes nothing, and a second undo restores the folder ($clash_out | $out)" '[ $write_rc = 0 ] && [ $clash_rc = 1 ] &&
+  printf "%s\n" "$clash_out" | grep -qF "will not move over $folder/zz-notes.md" && [ $clash_unchanged = yes ] && [ $rc = 0 ] && same_as_copy'
+
 new_world; echo '# old plan' >"$folder/plan.md"; keep_copy
 run "$deliver" rehearse "$task" "$CONTRACT" "$task_id"
 assert "rehearse exits 0 and leaves the real folders unchanged ($out)" '[ $rc = 0 ] && same_as_copy && [ ! -e "$page" ]'
@@ -88,5 +99,16 @@ yq -i '.sections.abilities.items = [{"text": "Claim.", "refs": ["cmd/gone.go:1"]
 run "$verify_draft" "$REPO" "$task" "$CONTRACT" "$task_id" "$evidence"
 assert "verify-draft fails the refs check on a bad ref ($out)" '[ $rc = 1 ] && has_line "FAIL contract-refs" && has_line "PASS contract-validate" &&
   grep -q "^bad: cmd/gone.go:1: " "$evidence/check-contract-refs.txt"'
+
+new_world; evidence="$work_dir/evidence $case_count"
+other="$(dirname "$REPO")/other"   # found through workspace_root in the initiation file
+git init -q -b main "$other"; printf 'a\nb\nc\n' >"$other/x.txt"
+git -C "$other" add -A; git -C "$other" commit -q -m x; git -C "$other" remote add origin git@github.com:acme-org/other.git
+other_commit="$(git -C "$other" rev-parse HEAD)"
+OTHER_REF="acme-org/other@$other_commit:x.txt:9" yq -i '.sections.abilities.items = [{"text": "Claim.", "refs": [strenv(OTHER_REF)]}]' "$task/contract.draft.yaml"
+rm -rf "$folder"   # a new service: the contract folder does not exist yet
+run "$verify_draft" "$REPO" "$task" "$CONTRACT" "$task_id" "$evidence"
+assert "verify-draft fails the refs check on a bad cross-repo ref ($out)" '[ $rc = 1 ] && has_line "FAIL contract-refs" &&
+  grep -q "^bad: acme-org/other@$other_commit:x.txt:9: " "$evidence/check-contract-refs.txt"'
 
 finish

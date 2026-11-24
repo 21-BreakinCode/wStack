@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# contract-refs.sh <repo_dir> <contract.yaml>
+# contract-refs.sh <repo_dir> <contract.yaml> [--mapping-from <path>]
 # Prove that every ref in the contract (all sections and planned) exists at its commit.
 # Local ref `path:lines` is read at verified_commit in repo_dir.
 # Cross-repo ref `<owner>/<repo>@<commit>:path:lines` is read in the local clone of that repo.
 # Output: `bad: <ref>: <reason>` and `unchecked: <ref>: <reason>` lines, then a `refs:` count line.
+# --mapping-from <path> finds the initiation file up from the nearest existing folder of <path>,
+# not from the contract's folder. A draft in a task folder needs it to find the other clones.
 # Exit: 0 no bad ref, 1 a bad ref, 2 error.
 set -euo pipefail
 
-usage_line="usage: contract-refs.sh <repo_dir> <contract.yaml>"
-[ $# -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] || { echo "$usage_line" >&2; exit 2; }
+usage_line="usage: contract-refs.sh <repo_dir> <contract.yaml> [--mapping-from <path>]"
+{ [ $# -eq 2 ] || { [ $# -eq 4 ] && [ "$3" = --mapping-from ] && [ -n "$4" ]; }; } && [ -n "$1" ] && [ -n "$2" ] \
+  || { echo "$usage_line" >&2; exit 2; }
 repo_dir="$1"
 contract_file="$2"
+mapping_from="${4:-$contract_file}"
 plugin_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$plugin_root/scripts/lib/frontmatter.sh"
 
@@ -26,7 +30,9 @@ verified_commit="$(jq -r '.verified_commit // "" | tostring' <<<"$contract_json"
 [ -n "$verified_commit" ] || fail "contract has no verified_commit: $contract_file"
 
 # Find the initiation file up the folder tree; it holds workspace_root and the Service Mapping.
-org_dir="$(cd "$(dirname "$contract_file")" && pwd -P)"
+org_dir="$(dirname "$mapping_from")"
+while [ ! -d "$org_dir" ]; do org_dir="$(dirname "$org_dir")"; done  # a new service's folder may not exist yet
+org_dir="$(cd "$org_dir" && pwd -P)"
 initiation_file=""
 while [ "$org_dir" != "/" ]; do
   if [ -f "$org_dir/handover_handler__initiation.md" ]; then initiation_file="$org_dir/handover_handler__initiation.md"; break; fi

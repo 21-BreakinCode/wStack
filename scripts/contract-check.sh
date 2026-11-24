@@ -1,18 +1,29 @@
 #!/usr/bin/env bash
-# contract-check.sh <repo_dir> <contract.yaml> [--coverage]
+# contract-check.sh <repo_dir> <contract.yaml> [--coverage] [--mapping-from <path>]
 # Compare a contract's verified_commit with the local ref origin/<base_branch>. No network call.
 # --coverage diffs the empty tree against origin/<base_branch>, so every tracked file counts as changed.
 # It proves the sources globs claim every file. In this mode no section and no dependency is marked stale,
 # and the exit is 0 when every file is claimed or ignored. The behind count stays.
+# --mapping-from <path> finds the initiation file (Service Mapping) up from the nearest existing folder of <path>,
+# not from the contract's folder. A draft in a task folder needs it to read its dependencies.
 # Exit: 0 fresh, 1 stale, 2 error (stderr names the cause), 3 contract file missing.
 set -euo pipefail
 
-usage_line="usage: contract-check.sh <repo_dir> <contract.yaml> [--coverage]"
-[ "${1:-}" ] && [ "${2:-}" ] || { echo "$usage_line" >&2; exit 2; }
-[ $# -le 2 ] || { [ $# -eq 3 ] && [ "$3" = --coverage ]; } || { echo "$usage_line" >&2; exit 2; }
+usage_line="usage: contract-check.sh <repo_dir> <contract.yaml> [--coverage] [--mapping-from <path>]"
+usage() { echo "$usage_line" >&2; exit 2; }
+[ "${1:-}" ] && [ "${2:-}" ] || usage
 repo_dir="$1"
 contract_file="$2"
-coverage_mode=0; [ "${3:-}" != --coverage ] || coverage_mode=1
+shift 2
+coverage_mode=0
+mapping_from="$contract_file"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --coverage) coverage_mode=1; shift ;;
+    --mapping-from) [ -n "${2:-}" ] || usage; mapping_from="$2"; shift 2 ;;
+    *) usage ;;
+  esac
+done
 plugin_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$plugin_root/scripts/lib/frontmatter.sh"
 max_listed_files=10
@@ -131,7 +142,9 @@ fi
 # The contract is <app>.contract.yaml, or <app>.md from before the YAML format. No contract means unknown, not stale.
 # --coverage reports only unclaimed files, so it skips the dependencies.
 [ "$coverage_mode" = 0 ] || dependency_lines=""
-org_dir="$(cd "$(dirname "$contract_file")" && pwd -P)"
+org_dir="$(dirname "$mapping_from")"
+while [ ! -d "$org_dir" ]; do org_dir="$(dirname "$org_dir")"; done  # a new service's folder may not exist yet
+org_dir="$(cd "$org_dir" && pwd -P)"
 initiation_file=""
 while [ "$org_dir" != "/" ]; do
   if [ -f "$org_dir/handover_handler__initiation.md" ]; then initiation_file="$org_dir/handover_handler__initiation.md"; break; fi
