@@ -189,7 +189,7 @@ assert "reader writes stale sections from the code" 'grep -qF "If the code does 
 assert "reference bash blocks use no CLAUDE_PLUGIN_ROOT" '! awk "/^[[:space:]]*\`\`\`bash/{b=1;next} /^[[:space:]]*\`\`\`/{b=0} b" "$confirmation" "$execute" "$verify" | grep -qF "CLAUDE_PLUGIN_ROOT"'
 for key in app_name repo base_branch verified_commit verified_at pending ignore tags; do
   assert "contract template has $key" 'grep -q "^$key:" "$contract_template"'
-  assert "README names the contract key $key" 'grep -F "the contract. Its sections are" "$repo_root/README.md" | grep -qF "\`$key\`"'
+  assert "README names the contract key $key" 'grep -F "The top keys are" "$repo_root/README.md" | grep -qF "\`$key\`"'
 done
 for section in team_docs abilities interfaces depends_on; do
   assert "contract template: $section has sources" '[ "$(yq ".sections.$section | has(\"sources\")" "$contract_template")" = true ]'
@@ -198,7 +198,7 @@ for section in consumers gotchas open_questions; do
   assert "contract template: $section has no sources" '[ "$(yq ".sections.$section | has(\"sources\")" "$contract_template")" = false ]'
 done
 assert "templates/contract.md and templates/plan.md are gone" '[ ! -e "$repo_root/templates/contract.md" ] && [ ! -e "$repo_root/templates/plan.md" ]'
-assert "README states the sources rule of Ruling 4" 'grep -qF "Abilities, Interfaces, and Depends on each have a \`<!-- sources: -->\` comment" "$repo_root/README.md"'
+assert "README states the sources rule of Ruling 4" 'grep -qF "\`team_docs\`, \`abilities\`, \`interfaces\`, and \`depends_on\` list their \`sources\` globs" "$repo_root/README.md"'
 assert "design doc states the sources rule of Ruling 4" 'grep -qF "Every section except \`Team docs\`, \`Consumers\`, \`Gotchas\`, and \`Open questions\` has a \`sources\` comment." "$repo_root/docs/superpowers/specs/2026-11-21-contract-gate-design.md"'
 assert "spec.md layout lists the lib scripts" 'grep -qF "lib/frontmatter.sh         fm_get, fm_set, fm_append, fm_to_json:" "$repo_root/docs/spec.md" && grep -qF "lib/herdr.sh" "$repo_root/docs/spec.md"'
 assert "design doc names the withdrawn edit of a decision file" 'grep -qF "the gate sets the file'"'"'s \`status\` to \`withdrawn\`." "$repo_root/docs/superpowers/specs/2026-11-21-contract-gate-design.md" && grep -qF "Closed without a merge: drop the patch, set the \`status\` of the task'"'"'s decision files to \`withdrawn\`" "$repo_root/docs/superpowers/specs/2026-11-21-contract-gate-design.md"'

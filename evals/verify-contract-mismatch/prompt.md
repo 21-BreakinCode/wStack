@@ -12,7 +12,7 @@ Do these steps in order.
 
 1. Run this command: bash "__FIXTURES__/contract/setup.sh" "$PWD/world"
    It prints the path of a shell file that sets REPO, VAULT, and CONTRACT. Read that file.
-2. In CONTRACT, add the line `- Every route checks a bearer token.` right after the sources comment of `## Interfaces`.
+2. In CONTRACT (a YAML file), add one item to `sections.interfaces.items`: a claim `Every route checks a bearer token.` with the ref `api/routes.go:1`. Use yq.
 3. In REPO, create the branch wstack/open-route from main. Add the line `// GET /open answers without a token.` to api/routes.go, and commit. Do not push.
 4. Make the task folder VAULT/Tasks/2026-11-22-open-route. Put these files in it:
    - spec.md: frontmatter with `task_id: 2026-11-22-open-route`, `work_type: code`, `status: verifying`, and `workspace_cwd` set to REPO. The body has `## Goal` with the line `Add GET /open, which answers without a token.`, `## Verification plan` with the line `route check: api/routes.go names GET /open`, and `## Contract changes` with the line `None`.

@@ -58,7 +58,7 @@ wStack is a Claude Code plugin. It runs one fixed pipeline for most of the user'
 | Evidence | Proof that a check passed or failed: API logs, screenshots, videos, terminal recordings. |
 | Review page | The HTML page that shows findings, decisions, evidence, a diagram, and a guided diff. |
 | Guided diff | Code changes grouped by purpose. Each group has a one-line reason. |
-| Contract | One Markdown file in the vault for each mapped service. It states what the service does now: abilities, interfaces, dependencies, consumers, and gotchas. It describes `origin/<base_branch>`. |
+| Contract | One YAML file in the vault for each mapped service (`<app_name>.contract.yaml`). A script renders a vault note and an HTML page from it. It states what the service does now: abilities, interfaces, dependencies, consumers, and gotchas. It describes `origin/<base_branch>`. |
 | Drift | The contract no longer matches the code. The check finds it by comparing `verified_commit` with `origin/<base_branch>`. |
 | Base branch | The branch that the contract describes, for example `main`. The contract frontmatter holds it as `base_branch`. |
 | Mobile mode | The user asks for mobile access. Pages are then also published as Claude artifacts. |
@@ -99,6 +99,8 @@ Plugin facts from the Claude Code plugin reference:
 - Prefer `skills/` over `commands/` for new plugins.
 - `${CLAUDE_PLUGIN_ROOT}` is the plugin's install path. Each plugin update changes this path. Do not write state there.
 
+The contract scripts need `yq` version 4 from mikefarah (`brew install yq`). `scripts/preflight.sh` checks for it.
+
 So the plugin `name` is `wstack` and the `displayName` is `wStack`. The commands appear as `/wstack:start-task` and `/wstack:run-retro`.
 
 ```
@@ -130,8 +132,7 @@ wstack/
 ├── templates/
 │   ├── retro-note.md              exit note of a task session (RD)
 │   ├── facts.md                   project facts file next to the contract
-│   ├── contract.md                service contract
-│   ├── plan.md                    planned items that are not built yet
+│   ├── contract.yaml              service contract (YAML)
 │   ├── decision.md                one decision file
 │   ├── spec.md
 │   ├── run-log.md
@@ -147,7 +148,13 @@ wstack/
 │   ├── pr-attach.sh               makes GitHub copies and calls gh --attach
 │   ├── contract-path.sh           prints the contract path of a repository
 │   ├── contract-check.sh          drift check, no network call
-│   ├── contract-edit.sh           the only writer of contract files
+│   ├── contract-edit.sh           the only editor of the contract YAML; renders after every write
+│   ├── contract-validate.sh       checks the contract YAML against the schema
+│   ├── contract-refs.sh           proves that every ref of the contract exists at its commit
+│   ├── contract-render.sh         writes the vault note and the HTML page from the contract YAML
+│   ├── contract_render.py         the renderer that contract-render.sh calls
+│   ├── contract-deliver.sh        write, undo, and rehearse the Deliver step of a contract task
+│   ├── contract-verify-draft.sh   runs the four scripted checks on contract.draft.yaml
 │   ├── find-test-skips.sh         prints the skip lines of a saved test output
 │   ├── find-stale-refs.sh         lists the files that still name an old path or name after a rename
 │   ├── facts-add.sh               adds one confirmed or rejected fact to the facts file, under the contract lock
@@ -218,17 +225,15 @@ A task with a contract adds these files. Section 7.2 describes the gate.
 
 ```
   contract-brief.md             Confirmation: gate state in frontmatter (contract_file, base_branch, checked_commit, stale_sections), then the reader's brief. No file means the task has no contract
-  contract.gate-patch.md        Confirmation: the reader's patch for stale sections and built plan items
-  contract.before.md            Confirmation: copy of the contract before the gate patch, for undo. A contract task writes it in Deliver
-  plan.before.md                Confirmation: copy of plan.md before the gate removes built items, for undo
-  contract.patch.md             Deliver: the reader's patch for the pull request, applied after the merge
-  contract.writeback.before.md  After the merge: copy of the contract before the write-back, for undo
-  plan.writeback.before.md      After the merge: copy of plan.md before the write-back removes built items, for undo
+  contract.gate-patch.yaml      Confirmation: the reader's YAML patch (a `sections:` map and an optional `remove_planned:` list) for stale sections and built plan items
+  contract.before.yaml          Confirmation: copy of the contract before the gate patch, for undo. A contract task writes it in Deliver
+  contract.patch.yaml           Deliver: the reader's YAML patch for the pull request, applied after the merge
+  contract.writeback.before.yaml  After the merge: copy of the contract before the write-back, for undo
 ```
 
 Each copy is written once. The write-back has its own copies, so its undo keeps the gate change.
 
-A `contract` task adds `contract.draft.md`, `plan.draft.md`, and `decisions.draft/`. Execute writes them. Deliver copies them into the vault. Deliver also writes `decisions.copied.txt`, the names of the decision files that it copied, so the undo deletes only those.
+A `contract` task adds `contract.draft.yaml` (plan items sit in its `planned` list), `disagreements.md`, and `decisions.draft/`. Execute writes them. `disagreements.md` lists each place where a doc and the code disagree, and Deliver copies it into the report. Deliver copies the draft and the decision files into the vault with `contract-deliver.sh`. The script writes `contract-files.txt`, one line for each file, so Finish builds the file tree from it.
 
 Each agent reads the files from the steps before it. `/wstack:run-retro` reads every finished task folder that no retro read yet.
 
@@ -236,7 +241,7 @@ Each agent reads the files from the steps before it. `/wstack:run-retro` reads e
 
 ASSUME: every file starts with YAML frontmatter, so that `/wstack:run-retro` can read fields without parsing prose.
 
-A list value in frontmatter is one-line JSON, like `ignore: ["tests/**"]`. Block-style YAML lists (`- item` lines) are an error: `contract-check.sh` and `contract-edit.sh` exit 2.
+A list value in frontmatter is one-line JSON, like `ignore: ["tests/**"]`. Block-style YAML lists (`- item` lines) are an error. This rule covers the Markdown task files. The contract is a plain YAML file with no frontmatter, so it uses normal YAML lists.
 
 `spec.md`:
 
@@ -346,9 +351,9 @@ Contract gate. For a `code` or `ops` task, the gate runs before the spec is writ
 1. Find the contract of the repository. If the repository has no service mapping, write `Contract: not mapped` to `run-log.md` and go on. The task has no contract. If the contract file does not exist, go to step 4.
 2. Fetch `origin/<base_branch>`. If the fetch fails, go on with the local ref and say so.
 3. Resolve the pending items, as "Pending items" in the `deliver-task` skill says. A merged pull request moves its patch into the contract. A closed one drops its item and its patch, and sets the decision files of its task to `status: withdrawn`.
-4. Run the drift check. If the contract file is missing or the check fails, ask the user to set up a contract first or to go on without one. To go on without one, the agent writes the spec with no `contract-brief.md`. Otherwise dispatch the `contract-reader` agent. The gate writes `contract-brief.md`. If sections are stale, it also writes `contract.gate-patch.md`.
+4. Run the drift check. If the contract file is missing or the check fails, ask the user to set up a contract first or to go on without one. To go on without one, the agent writes the spec with no `contract-brief.md`. Otherwise dispatch the `contract-reader` agent. The gate writes `contract-brief.md`. If sections are stale, it also writes `contract.gate-patch.yaml`.
 5. When the agent writes the spec, it reads the brief with the vault notes. The spec adds a `## Contract changes` section.
-6. If the check exited 0 or 1, the agent applies the gate patch after approval and removes the built plan items from `plan.md`. If the patch has a block for each stale section, it sets `verified_commit` to `checked_commit`. This is the commit that the gate checked. Otherwise `verified_commit` stays, and the agent names the sections that stay stale. Every contract write takes the lock folder `<contract>.lock`. If the lock is busy, the task stops.
+6. If the check exited 0 or 1, the agent applies the gate patch after approval and removes the built plan items from `planned` in the contract. If the patch has a key under `sections:` for each stale section, it sets `verified_commit` to `checked_commit`. This is the commit that the gate checked. Otherwise `verified_commit` stays, and the agent names the sections that stay stale. Every contract write takes the lock folder `<contract>.lock`. If the lock is busy, the task stops.
 7. A gate stop starts its reason with `contract gate:`. When the user answers, the gate runs again from step 1.
 
 For a `contract` task, a new project gets one question for each contract section before approval. Inside herdr, the task runs in a workspace in the repository folder, with no worktree, because it reads only `origin/<base_branch>`. For an existing project, the spec lists the team docs and the code areas to read. A repository with no service mapping stops the task. The message says to run `/wstack:init-service`.
@@ -443,11 +448,11 @@ File: `agents/retro-analyst.md`. Used by `/wstack:run-retro` (section 13).
 
 ### 8.4 Contract reader agent
 
-File: `agents/contract-reader.md`. Dispatched by the gate (section 7.2) and by the write-back in Deliver. It reads one contract, the team docs it lists, and the code at `origin/<base_branch>`. It returns a brief, the freshness, the plan items that bear on the input, and a patch for the stale sections. It is read only. If the work contradicts the contract, and the spec's `## Contract changes` does not list the change, the reviewer reports a `contract-mismatch` finding.
+File: `agents/contract-reader.md`. Dispatched by the gate (section 7.2) and by the write-back in Deliver. It reads one contract, the team docs it lists, and the code at `origin/<base_branch>`. It returns a brief, the freshness, the plan items that bear on the input, and a YAML patch for the stale sections. It is read only. If the work contradicts the contract, and the spec's `## Contract changes` does not list the change, the reviewer reports a `contract-mismatch` finding.
 
 ### 8.5 Contract historian agent
 
-File: `agents/contract-historian.md`. It answers "why is X like this?" from `decisions/`, `docs/adr/`, the git log, and the linked task folders. It is read only. If no record gives the reason, it says so.
+File: `agents/contract-historian.md`. It answers "why is X like this?" from `decisions/`, the team ADRs that the contract lists in `team_docs`, the git log, and the linked task folders. It is read only. If no record gives the reason, it says so.
 
 ## 9. Work types (confirmed)
 
@@ -460,7 +465,7 @@ The list is not complete. The worker agent picks the closest type. If no type fi
 | thinking | research, analysis, learning input and output | answers the spec question, every claim has a source, guesses are marked | delete the new note |
 | blog | blog posts | facts, tone, and links checked | delete the draft |
 | video | video editing | cuts, audio, length, plays correctly | delete the rendered file |
-| contract | set up or rebuild the service contract of a mapped repository | each claim in `contract.draft.md` has a `file:line` at `origin/<base_branch>`, and each section of a new project has content | delete the new contract file, `plan.md`, and the copied decision files, then restore the files from `_archive/<task_id>/` and `contract.before.md` |
+| contract | set up or rebuild the service contract of a mapped repository | each ref in `contract.draft.yaml` exists at `origin/<base_branch>`, the validator and the coverage check pass, and each section of a new project has content | `contract-deliver.sh undo`: delete the new contract, its note and page, and the copied decision files, then restore the files from `_archive/<task_id>/` |
 
 ### 9.1 Thinking work (confirmed)
 
@@ -605,8 +610,8 @@ If an upload fails, the agent keeps the R2 copy and writes the failure in `revie
 - The user chooses which proposals to apply. The agent applies only the chosen ones.
 - ASSUME: the agent saves the retro to `<vault_path>/<tasks_dir>/../Retros/<YYYY-Www>.md`.
 - Drift walk: the retro also checks the service contract of the current repository. It fetches `origin/<base_branch>`, resolves the pending items of the contract as the gate does, and runs `contract-check.sh`. A repository with no mapping or no contract gets a `Contract:` status line, and the retro goes on.
-- If sections are stale, the `contract-reader` agent writes a patch to `<retro>.contract-patch.md` in the Retros folder. The user picks the sections to update in the same question as the proposals.
-- Contract write: the retro applies the chosen sections under the contract lock. It first copies the contract once to `<retro>.contract-before.md` for undo. If every stale section was applied, `verified_commit` moves to the checked commit. The retro file gets a `## Contract` section with the status, the applied and still stale sections, and the undo.
+- If sections are stale, the `contract-reader` agent writes a YAML patch to `<retro>.contract-patch.yaml` in the Retros folder. The user picks the sections to update in the same question as the proposals.
+- Contract write: the retro applies the chosen sections under the contract lock. It first copies the contract once to `<retro>.contract-before.yaml` for undo. If every stale section was applied, `verified_commit` moves to the checked commit. The retro file gets a `## Contract` section with the status, the applied and still stale sections, and the undo.
 - After the user answers, the retro runs three steps. It sets `retro_read` on each finished task it read. It writes the facts the user accepted (`facts-add.sh`). It archives the tasks the user named (`archive-tasks.py`). It records the last two under `## Facts` and `## Archived` in the retro file. All three run before the proposals apply.
 - Exit notes: each RD writes `retro-note.md` in its task folder at exit. The analyst reads it.
 - Project facts: `<app_name>.facts.md` sits next to the contract. It has `## Facts` and `## Not facts`. The analyst proposes fact candidates from `## Fact candidates` of the notes. The user answers each one, and `scripts/facts-add.sh` writes the answer under the contract lock. The `contract-reader` agent returns the `## Facts` lines as `### Project facts`. Confirmation copies them into `contract-brief.md`, and the spec follows them.
