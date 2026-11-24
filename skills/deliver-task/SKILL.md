@@ -67,56 +67,14 @@ Make the draft or the file. Record its URL or path and the undo, which is to del
 
 ### Contract files
 
-Use this for the `write the contract files` target of a `contract` task. The drafts are in `$task_dir`: `contract.draft.md`, `plan.draft.md`, and `decisions.draft/`.
+Use this for the `write the contract files` target of a `contract` task. The drafts are in `$task_dir`: `contract.draft.yaml` and `decisions.draft/`.
 
-1. Find the contract path: `bash "$scripts/contract-path.sh" --vault "$vault" "<workspace_cwd>"`. `<workspace_cwd>` is the `workspace_cwd` value in the spec frontmatter. If it exits 1, stop as in "Stop" with the reason `repository not mapped: run /wstack:init-service`. If it exits 2, stop as in "Stop" with the stderr text. Otherwise `<contract_file>` is the path. `<contract folder>` is its folder.
-2. Write the files in one Bash call. Write the real values for the placeholders:
+1. Find the contract path: `bash "$scripts/contract-path.sh" --vault "$vault" "<workspace_cwd>"`. `<workspace_cwd>` is the `workspace_cwd` value in the spec frontmatter. If it exits 1, stop as in "Stop" with the reason `repository not mapped: run /wstack:init-service`. If it exits 2, stop as in "Stop" with the stderr text. Otherwise `<contract_file>` is the path.
+2. Run `bash "$scripts/contract-deliver.sh" write '<task folder>' '<contract_file>' <task_id> >'<task folder>/contract-files.txt'`. The script takes the lock and checks the draft and the decision ids before it changes anything. Then it moves the old files of the contract folder to `_archive/<task_id>/` and copies the drafts. Last, it runs `set-verified`, which renders the vault note and the HTML page. It keeps `handover/`, `decisions/`, `_archive/`, and `<app_name>.facts.md` in place. It is safe to run again after a failure. It writes one line for each file to `contract-files.txt`: `new:`, `replaced:`, `moved:`, or `unchanged:`. "Finish" builds the file tree from these lines.
 
-   ```bash
-   set -e
-   setopt NULL_GLOB 2>/dev/null || true
-   scripts="${CLAUDE_PLUGIN_ROOT}/scripts"
-   task_dir='<task folder>'
-   contract_file='<contract_file>'
-   source "$scripts/lib/frontmatter.sh"
-   contract_folder="$(dirname "$contract_file")"
-   archive_dir="$contract_folder/_archive/<task_id>"
-   bash "$scripts/contract-edit.sh" lock "$contract_file"
-   trap 'bash "$scripts/contract-edit.sh" unlock "$contract_file"' EXIT
-   verified_commit="$(fm_get "$task_dir/contract.draft.md" verified_commit)"
-   [ -n "$verified_commit" ] || { echo "contract.draft.md has no verified_commit" >&2; exit 1; }
-   for draft_decision in "$task_dir/decisions.draft"/*; do
-     [ -e "$draft_decision" ] || continue
-     draft_name="$(basename "$draft_decision")"
-     for same_id in "$contract_folder/decisions/${draft_name%%-*}"-*; do
-       [ -e "$same_id" ] || continue
-       if [ "$(basename "$same_id")" = "$draft_name" ] && grep -qsxF "$draft_name" "$task_dir/decisions.copied.txt"; then continue; fi
-       echo "decision id ${draft_name%%-*} already exists in decisions/: $(basename "$same_id")" >&2; exit 1
-     done
-   done
-   [ ! -f "$contract_file" ] || [ -f "$task_dir/contract.before.md" ] || cp "$contract_file" "$task_dir/contract.before.md"
-   mkdir -p "$archive_dir" "$contract_folder/decisions"
-   if [ ! -e "$archive_dir/.archived" ]; then
-     for old_file in "$contract_folder"/*; do
-       case "$(basename "$old_file")" in handover|decisions|_archive|*.lock) continue ;; esac
-       [ ! -e "$archive_dir/$(basename "$old_file")" ] || continue
-       mv "$old_file" "$archive_dir/"
-     done
-     touch "$archive_dir/.archived"
-   fi
-   cp "$task_dir/contract.draft.md" "$contract_file"
-   cp "$task_dir/plan.draft.md" "$contract_folder/plan.md"
-   for draft_decision in "$task_dir/decisions.draft"/*; do
-     [ -e "$draft_decision" ] || continue
-     grep -qsxF "$(basename "$draft_decision")" "$task_dir/decisions.copied.txt" || basename "$draft_decision" >>"$task_dir/decisions.copied.txt"
-     cp "$draft_decision" "$contract_folder/decisions/"
-   done
-   bash "$scripts/contract-edit.sh" set-verified "$contract_file" "$verified_commit"
-   ```
-
-   Exit 4 means the lock is busy. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"deliver"`, `"target":"write the contract files"`, and the stderr text as the reason. Set `status` to `waiting-user` and stop. Any other non-zero exit means a command failed after the lock. The trap already ran `unlock`. Write the same `stop` line and stop item with the stderr text, and stop.
-3. The block is safe to run again after a failure. It checks the decision ids before it changes anything. It writes the name of each decision file that it copies to `decisions.copied.txt` in the task folder. A file in that list is a copy from an earlier run. Any other file in `decisions/` with the same id is a clash. `contract.before.md` is written once. A file that is already in `_archive/<task_id>/` is never moved over. The `.archived` marker there says that the move is done. The block leaves `handover/`, `decisions/`, and `_archive/` in place. The `*` glob skips dot files, for example `.DS_Store`, so they stay in the contract folder. It adds files to `decisions/`, and it adds `_archive/<task_id>/`. `verified_commit` is the code that Execute read, never a fresh `rev-parse`.
-4. Record the target: `{"target":"write the contract files","url":"<contract_file>","undo":"Delete <contract_file>, <contract folder>/plan.md, and the files in <contract folder>/decisions/ that <task folder>/decisions.copied.txt names. Move the files (not `.archived`) in <contract folder>/_archive/<task_id>/ back to <contract folder>. Delete the folder <contract folder>/_archive/<task_id>/. Remove <contract folder>/_archive/ and <contract folder>/decisions/ by running rmdir <folder> 2>/dev/null || true for each. Then restore <contract_file> from <task folder>/contract.before.md."}`. If `contract.before.md` does not exist, leave out its part.
+   Exit 4 means the lock is busy. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"deliver"`, `"target":"write the contract files"`, and the stderr text as the reason. Set `status` to `waiting-user` and stop. Exit 1 means a check or a step failed, and the stderr text names it. Write the same `stop` line and stop item with the stderr text, and stop.
+3. If `$task_dir/disagreements.md` exists and `report.md` has no `## Doc and code disagree` heading, add that heading at the end of `report.md`. Copy the lines of `disagreements.md` under it.
+4. Record the target: `{"target":"write the contract files","url":"<contract_file>","undo":"bash <scripts>/contract-deliver.sh undo '<task folder>' '<contract_file>' <task_id>"}`. Write the real values for `<scripts>`, `<task folder>`, `<contract_file>`, and `<task_id>`. The undo deletes the new files and moves the archived files back, all or nothing.
 
 ## Contract write-back
 
@@ -124,7 +82,7 @@ Run this once, right after the `open a pull request` target is recorded, for a `
 
 Read the values in the same Bash call as the commands that use them: `source "$scripts/lib/frontmatter.sh"; contract_file="$(fm_get "$task_dir/contract-brief.md" contract_file)"`, and the same for `base_branch`. The contract folder is the folder that holds `$contract_file`. `<pr>` is the number at the end of the pull request URL.
 
-1. Dispatch the `wstack:contract-reader` agent. Give it the repository folder, the contract path, and this input: "propose contract edits for the diff `origin/<base_branch>...wstack/<slug>` and the spec's `## Contract changes`". Write the part of the reply after the line `=== PATCH ===` to `$task_dir/contract.patch.md`. If that part is `None`, write no patch file and skip step 2. Decisions do not depend on the patch, so step 3 still runs.
+1. Dispatch the `wstack:contract-reader` agent. Give it the repository folder, the contract path, and this input: "propose contract edits for the diff `origin/<base_branch>...wstack/<slug>` and the spec's `## Contract changes`". Write the part of the reply after the line `=== PATCH ===` to `$task_dir/contract.patch.yaml`. It is YAML with a `sections:` map and an optional `remove_planned:` list of plan ids. If that part is `None`, write no patch file and skip step 2. Decisions do not depend on the patch, so step 3 still runs.
 2. Add the pending item. Run this in one Bash call. Write the real values for `<task folder>`, `<pr>`, and `<task_id>`:
 
    ```bash
@@ -213,7 +171,11 @@ After each target, look for a remaining target. Ship a remaining target that nee
 
 ## Finish
 
-1. Fill `## What shipped`, `## Where`, and `## How to undo` in `report.md`. List each target with its URL, and each undo step.
+1. Fill `## What shipped`, `## Where`, and `## How to undo` in `report.md`. List each target with its URL, and each undo step. Write `## Where` in this order:
+   - The file tree: a code block with one line for each file that the targets wrote, labeled `NEW`, `REPLACED`, `MOVED`, or `UNCHANGED`. For a `contract` task, build it from the `new:`, `replaced:`, `moved:`, and `unchanged:` lines in `$task_dir/contract-files.txt`. Next to the label, write the old copy of a `replaced:` line and the new path of a `moved:` line. For another work type, build it from the `targets` list. A file path is `NEW`. If the file was there before the task, it is `REPLACED`. A URL, such as a pull request, gets one line with the URL.
+   - One line for each repository of the task that the targets did not change: `<repository folder>: no change`. A `contract` task never changes its repository. Its result is in the vault, which is not a git repository, so `git diff` shows nothing.
+   - The open commands, each in a code span: `open '<review.html>'`, where `<review.html>` is `$HOME/.wstack/pages/<task_id>/review.html`. For a `contract` task, also give `open '<contract page>'`, where `<contract page>` is `$HOME/.wstack/pages/contracts/<app_name>.html`. Also give the vault note name `<app_name>`, to open in Obsidian with Cmd+O. `<app_name>` is the output of `yq '.app_name' "$task_dir/contract.draft.yaml"`.
+   - The reading order: the files in the order of `## Guided diff` in `review.md`. For a blog or video task, use `## Before and after`.
 2. If `HERDR_ENV` is `1` and the task has a worktree or a workspace, add the cleanup command under `## How to undo`. Run `herdr workspace list` to find the workspace whose label is the task slug. Write `herdr worktree remove --workspace <id>` for a code task with a worktree. Write `herdr workspace close <id>` for any other task. Write the command only. Never run it. If `HERDR_ENV` is not `1` and the task is a code task, write `git -C "<repository folder>" worktree remove "<workspace_cwd>"` instead.
 3. Set `delivered_at` and `approval_needed` in `report.md`. Set `delivered_at` to `date -u +%Y-%m-%dT%H:%M:%SZ`. Keep `approval_needed` as `true` only if a target waited for the user.
 4. Set `ended_at` in `run-log.md` to the same kind of time.
@@ -226,7 +188,7 @@ After each target, look for a remaining target. Ship a remaining target that nee
    - `## Surprises`: anything else the next task needs to know.
    - `## Fact candidates`: a habit or rule of the user on this project that you learned in this task, with the reason. The weekly retro asks the user about each one.
 7. Set `status` to `delivered` in `spec.md`.
-8. Tell the user what shipped, where, and how to undo it. Ask nothing.
+8. Tell the user what shipped and how to undo it. Then give the parts of `## Where` in `report.md`: the file tree, the line for each repository that did not change, the open commands, and the reading order. Ask nothing.
 
 ## Stop
 
@@ -239,7 +201,7 @@ Use this stop when a target fails. Never retry the target before the user says y
 
 ## Pending items
 
-The contract gate runs this (step G4 of Confirmation). At G4 the brief does not exist yet. `$contract_file` comes from `contract-path.sh`, and `<base_branch>` from the contract frontmatter. `<contract folder>` is the folder that holds `$contract_file`. Read `pending` with `fm_get "$contract_file" pending`. It is a list of `{"pr":<n>,"task":"<id>"}` items. If it is empty, do nothing.
+The contract gate runs this (step G4 of Confirmation). At G4 the brief does not exist yet. `$contract_file` comes from `contract-path.sh`, and `<base_branch>` from `yq '.base_branch' "$contract_file"`. Read `pending` with `yq -o json -I0 '.pending' "$contract_file"`. It is a list of `{"pr":<n>,"task":"<id>"}` items. If it is empty, do nothing.
 
 For each item, run `gh pr view <pr> --json state -q .state` in the repository folder. The task folder of the item is the output of `(source "$scripts/lib/task-dir.sh" && task_dir_of "$vault" "$tasks_dir" <task>)`. It finds the task in the archive too. If it prints nothing, the folder does not exist.
 
@@ -252,26 +214,17 @@ For each item, run `gh pr view <pr> --json state -q .state` in the repository fo
   scripts="${CLAUDE_PLUGIN_ROOT}/scripts"
   contract_file='<contract_file>'
   task_folder='<task folder>'
-  contract_folder="$(dirname "$contract_file")"
   bash "$scripts/contract-edit.sh" lock "$contract_file"
   trap 'bash "$scripts/contract-edit.sh" unlock "$contract_file"' EXIT
-  [ -f "$task_folder/contract.writeback.before.md" ] || cp "$contract_file" "$task_folder/contract.writeback.before.md"
-  bash "$scripts/contract-edit.sh" apply "$contract_file" "$task_folder/contract.patch.md"
-  [ -f "$task_folder/plan.writeback.before.md" ] || cp "$contract_folder/plan.md" "$task_folder/plan.writeback.before.md"
-  for heading in '<heading>'; do
-    rc=0; bash "$scripts/contract-edit.sh" delete-section "$contract_folder/plan.md" "$heading" || rc=$?
-    [ "$rc" -le 1 ] || exit "$rc"
-    [ "$rc" = 1 ] || printf 'plan item removed: %s\n' "$heading"
-  done
+  [ -f "$task_folder/contract.writeback.before.yaml" ] || cp "$contract_file" "$task_folder/contract.writeback.before.yaml"
+  bash "$scripts/contract-edit.sh" apply "$contract_file" "$task_folder/contract.patch.yaml"
   bash "$scripts/contract-edit.sh" pending-remove "$contract_file" <pr>
   ```
 
-  - If `<task folder>/contract.patch.md` does not exist, or holds no `## ` section other than `## Remove from plan`, skip the `contract.writeback.before.md` line and the `apply` line.
-  - If the patch has no `- <heading>` line under `## Remove from plan`, or `plan.md` is not in the contract folder, skip the plan lines: the `plan.writeback.before.md` line and the `for` loop. Otherwise write each such heading in place of `'<heading>'` in the `for` line, one after another, each in single quotes. A `delete-section` exit of 1 means that plan item is already gone: go on. Exit 2 means a write failed, and the loop stops.
-  - The write-back has its own snapshot files, and each one is written once. The gate's step 9 writes `contract.before.md` and `plan.before.md`. An undo of the write-back keeps the gate's change and the changes of other tasks before the write-back.
-  - `apply` prints one applied section name per line. The loop prints `plan item removed: <heading>` for each plan item that it removed. Read both from the output of the call. A shell variable does not outlive the call.
-  - In `report.md` of that task, set the undo of the `contract write-back` target. Join the parts that have names with ", and ". The contract part is `bash '<scripts>/contract-edit.sh' apply '<contract_file>' '<task folder>/contract.writeback.before.md' --sections '<applied names, joined by commas>'`. The plan part is `bash '<scripts>/contract-edit.sh' apply '<contract folder>/plan.md' '<task folder>/plan.writeback.before.md' --sections '<removed headings, joined by commas>'`. Put each value in single quotes, as in the block. When a name holds a comma, give every name as its own `--section '<name>'` flag instead of one `--sections` value. When `apply` ran no section, leave out the contract part. When no plan item was removed, leave out the plan part.
-  - `apply` adds a section that the contract did not have at the end. If `<task folder>/contract.writeback.before.md` has no `## <name>` line, call the name new. Compare each snapshot heading after you remove a trailing space and a trailing carriage return (`\r`). Do not rely on the warning, because a second run prints none for a section that the first run added. Leave each new name out of `<applied names>`. For each new name, add the new-section part `bash '<scripts>/contract-edit.sh' delete-section '<contract_file>' '<name>'`. When every applied name is new, leave out the contract part.
+  - If `<task folder>/contract.patch.yaml` does not exist, skip the `contract.writeback.before.yaml` line and the `apply` line.
+  - The write-back has its own snapshot, `contract.writeback.before.yaml`, and it is written once. The gate's step 9 writes `contract.before.yaml`. An undo of the write-back keeps the gate's change and the changes of other tasks before the write-back.
+  - `apply` prints the applied section keys, then one `planned removed: <id>` line for each plan item that the patch's `remove_planned` list removed. Read them from the output of the call. A shell variable does not outlive the call.
+  - If `apply` printed a section key or a `planned removed:` line, set the undo of the `contract write-back` target to the undo command: `bash '<scripts>/contract-edit.sh' apply '<contract_file>' '<task folder>/contract.writeback.before.yaml' --sections '<applied keys, joined by commas>' --planned '<removed ids, joined by commas>'`. Do this in `report.md` of that task. Put each value in single quotes, as in the block. If `apply` printed no `planned removed:` line, leave out the `--planned` flag and its value. If `apply` printed no section key, leave out the `--sections` flag and its value. With `--planned` alone, `apply` restores only those plan items from the snapshot and changes no section.
 - `CLOSED`: the pull request did not merge. The contract text must not change. The decision files of the item's task get `status: withdrawn`. Run this in one Bash call. `<task>` is the `task` value of the item:
 
   ```bash
@@ -294,8 +247,6 @@ For each item, run `gh pr view <pr> --json state -q .state` in the repository fo
 
 Exit 4 from `lock` means the lock is busy. Write a `stop` line in `run-log.md`. Append a stop item with the stage of the caller (`confirmation` at G4) and the reason `contract gate: <stderr text>`. Set `status` to `waiting-user` and stop. Any other non-zero exit means a command failed after the lock. The trap already ran `unlock`. Write the same `stop` line and stop item, with the reason `contract gate: <stderr text>`. Set `status` to `waiting-user` and stop. "After a stop" in Confirmation then runs the gate again from G1.
 
-A `MERGED` item can stay stuck: its task folder is missing, or its call fails each time. Then every later gate stops at it or keeps it. If the user says to drop the item, run `pending-remove` for its pull request, with the same lock and trap lines as the `MERGED` call. Do not withdraw its decisions.
-
-A patch section can have a name that the contract does not have. Then `apply` adds the section at the end of the contract, and it prints a warning on stderr that names the section. If the output of the call holds such a warning, tell the user the section name. A misspelled name adds a near-duplicate section. The undo of a plan item also prints this warning, and there it is expected. If the user asks to remove it, run `delete-section` for that name, with the same lock and trap lines as the `MERGED` call.
+A `MERGED` item can stay stuck: its task folder is missing, or its call fails each time. For example, the patch can name a section key that the contract does not have. Then every later gate stops at it or keeps it. If the user says to drop the item, run `pending-remove` for its pull request, with the same lock and trap lines as the `MERGED` call. Do not withdraw its decisions.
 
 `verified_commit` does not move here. The gate's own check finds what the merged change touched, and the reader compares those sections with the code.

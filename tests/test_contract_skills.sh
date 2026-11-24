@@ -102,7 +102,7 @@ assert "verify re-reviews an edit after the last review with the diff only" 'has
 # Deliver: Contract write-back
 assert "deliver has Contract write-back heading" 'grep -qxF "## Contract write-back" "$deliver"'
 assert "deliver has Pending items heading" 'grep -qxF "## Pending items" "$deliver"'
-for needle in 'contract-brief.md' 'contract.patch.md' '=== PATCH ===' 'pending-add' 'next-decision-id' \
+for needle in 'contract-brief.md' 'contract.patch.yaml' 'remove_planned:' '=== PATCH ===' 'pending-add' 'next-decision-id' \
   'templates/decision.md' 'docs/adr/' 'contract write-back' '{{tasks_dir}}'; do
   assert "Contract write-back names $needle" 'has "$writeback_part" "$needle"'
 done
@@ -113,28 +113,22 @@ assert "write-back: a retry reuses the decision file of the same slug and task" 
 assert "decision template links the tasks folder" 'grep -qF "task: \"[[{{tasks_dir}}/{{task_id}}/spec]]\"" "$decision_template"'
 
 # Deliver: Pending items
-for needle in 'gh pr view' 'MERGED' 'CLOSED' 'OPEN' 'delete-section' 'pending-remove'; do
+for needle in 'gh pr view' 'MERGED' 'CLOSED' 'OPEN' 'remove_planned' 'pending-remove'; do
   assert "Pending items names $needle" 'has "$pending_part" "$needle"'
 done
 p_lock="$(line_in "$pending_part" 'contract-edit.sh" lock')"
 p_apply="$(line_in "$pending_part" 'contract-edit.sh" apply')"
 assert "pending: lock before apply" '[ -n "$p_lock" ] && [ -n "$p_apply" ] && [ "$p_lock" -lt "$p_apply" ]'
 assert "pending: trap unlock comes right after lock" 'printf "%s\n" "$pending_part" | grep -A1 -F "contract-edit.sh\" lock" | grep -qF "trap"'
-assert "pending: <contract folder> is defined" 'has "$pending_part" "\`<contract folder>\` is the folder that holds \`\$contract_file\`."'
 assert "MERGED: a missing task folder keeps the item" 'has "$merged_part" "if the task folder of the item does not exist, keep the item"'
-assert "MERGED: the heading placeholder is named" 'has "$merged_part" "in place of \`'"'"'<heading>'"'"'\` in the \`for\` line"'
-assert "MERGED: a missing plan.md skips the plan lines" 'has "$merged_part" "or \`plan.md\` is not in the contract folder, skip the plan lines"'
-assert "MERGED: a removed heading prints only on delete-section exit 0" 'has "$merged_part" "[ \"\$rc\" -le 1 ] || exit \"\$rc\"" && has "$merged_part" "[ \"\$rc\" = 1 ] || printf '"'"'plan item removed: %s\n'"'"' \"\$heading\""'
-assert "MERGED: apply output is read from the call" 'has "$merged_part" "Read both from the output of the call"'
-assert "MERGED: plan.writeback.before.md saved before delete-section" '[ "$(line_in "$merged_part" "plan.writeback.before.md\" ] ||")" -lt "$(line_in "$merged_part" "contract-edit.sh\" delete-section")" ]'
-assert "MERGED: undo restores plan items from plan.writeback.before.md" 'has "$merged_part" "<task folder>/plan.writeback.before.md'"'"' --sections"'
-assert "MERGED: undo leaves out a part without names" 'has "$merged_part" "leave out the plan part" && has "$merged_part" "leave out the contract part"'
-assert "MERGED: write-back snapshots have their own names" 'has "$merged_part" "\"\$task_folder/contract.writeback.before.md\"" && has "$merged_part" "\"\$task_folder/plan.writeback.before.md\"" && ! has "$pending_part" "task_folder/contract.before.md"'
-assert "MERGED: write-back undo names its own snapshot" 'has "$merged_part" "<task folder>/contract.writeback.before.md'"'"' --sections"'
+assert "pending: the list and base_branch come from the YAML" 'has "$pending_part" "yq -o json -I0 '"'"'.pending'"'"' \"\$contract_file\"" && has "$pending_part" "yq '"'"'.base_branch'"'"' \"\$contract_file\"" && ! has "$pending_part" "fm_get \"\$contract_file\""'
+assert "MERGED: a missing patch skips the snapshot and apply lines" 'has "$merged_part" "If \`<task folder>/contract.patch.yaml\` does not exist, skip the \`contract.writeback.before.yaml\` line and the \`apply\` line."'
+assert "MERGED: apply output is read from the call" 'has "$merged_part" "Read them from the output of the call"'
+assert "MERGED: the write-back snapshot is contract.writeback.before.yaml, with no plan snapshot" 'has "$merged_part" "[ -f \"\$task_folder/contract.writeback.before.yaml\" ] || cp \"\$contract_file\" \"\$task_folder/contract.writeback.before.yaml\"" && ! has "$pending_part" "plan.writeback.before" && ! has "$pending_part" "delete-section" && ! has "$pending_part" "task_folder/contract.before"'
+assert "MERGED undo uses apply with --sections and --planned" 'has "$merged_part" "set the undo of the \`contract write-back\` target to the undo command: \`bash '"'"'<scripts>/contract-edit.sh'"'"' apply '"'"'<contract_file>'"'"' '"'"'<task folder>/contract.writeback.before.yaml'"'"' --sections '"'"'<applied keys, joined by commas>'"'"' --planned '"'"'<removed ids, joined by commas>'"'"'\`" && has "$merged_part" "leave out the \`--planned\` flag and its value" && has "$merged_part" "leave out the \`--sections\` flag and its value"'
 assert "CLOSED: decision files of the task are withdrawn and logged" 'has "$closed_part" "fm_set \"\$decision_file\" status withdrawn" && has "$closed_part" "For each \`decision withdrawn:\` line, write a \`step\` line in \`run-log.md\`"'
 assert "pending: a stuck item can be dropped without withdrawing decisions" 'has "$pending_part" "If the user says to drop the item, run \`pending-remove\` for its pull request" && has "$pending_part" "Do not withdraw its decisions."'
-assert "MERGED: the undo deletes a section that apply added as new" 'has "$merged_part" "add the new-section part \`bash '"'"'<scripts>/contract-edit.sh'"'"' delete-section"'
-assert "pending: a new section has a warning, not an impossible exit 2" 'has "$pending_part" "prints a warning on stderr that names the section" && ! has "$pending_part" "If \`apply\` exits 2"'
+assert "pending: no new-section text is left, because the section keys are fixed" '! has "$pending_part" "new-section" && ! has "$pending_part" "adds the section at the end"'
 
 # Each lock block runs in one shell: it needs set -e and a trap that unlocks.
 for lock_file in "$confirmation" "$deliver"; do
@@ -145,7 +139,7 @@ for lock_file in "$confirmation" "$deliver"; do
   assert "$(basename "$lock_file"): every lock block has set -e" '[ "$set_e_lines" -ge "$lock_blocks" ]'
   assert "$(basename "$lock_file"): no bare unlock line" '! grep -qE "^[[:space:]]*bash .*contract-edit.sh\" unlock" "$lock_file"'
 done
-assert "plan headings sit in single quotes" '! grep -qF "for heading in" "$confirmation" && [ "$(grep -cF "for heading in '"'"'<heading>'"'"'; do" "$deliver")" -eq 1 ] && ! grep -qF "\"<heading>\"" "$confirmation" "$deliver"'
+assert "no plan heading loop is left" '! grep -qF "for heading in" "$confirmation" "$deliver" && ! grep -qF "<heading>" "$confirmation" "$deliver"'
 
 # Execute: Contract work
 assert "execute.md: Contract work after Thinking and ops work" '[ -n "$(grep -nxF "## Contract work" "$execute" | head -1)" ] && [ "$(grep -nxF "## Thinking and ops work" "$execute" | head -1 | cut -d: -f1)" -lt "$(grep -nxF "## Contract work" "$execute" | head -1 | cut -d: -f1)" ]'
@@ -174,19 +168,20 @@ assert "execute: org_kebab is defined" 'has "$step6_line" "\`{{org_kebab}}\` is 
 
 # Deliver: Contract files
 assert "deliver has Contract files heading" 'grep -qxF "### Contract files" "$deliver"'
-for needle in 'contract.before.md' '_archive/' 'handover/' 'decisions/' 'set-verified' 'contract.draft.md' 'set -e' "trap 'bash" 'unlock' 'fm_get' 'contract-path.sh'; do
+for needle in 'contract-path.sh' 'contract-deliver.sh" write' 'contract-files.txt' 'contract.draft.yaml' 'decisions.draft/' 'disagreements.md' '## Doc and code disagree' 'Exit 4'; do
   assert "deliver Contract files names $needle" 'has "$files_part" "$needle"'
 done
 assert "Contract files: <workspace_cwd> has a source" 'has "$files_part" "\`<workspace_cwd>\` is the \`workspace_cwd\` value in the spec frontmatter."'
-assert "Contract files: decisions are checked before the first change" '[ "$(line_in "$files_part" "already exists in decisions/")" -lt "$(line_in "$files_part" "cp \"\$contract_file\" \"\$task_dir/contract.before.md")" ]'
-assert "Contract files: the clash check compares ids" 'has "$files_part" "for same_id in \"\$contract_folder/decisions/\${draft_name%%-*}\"-*; do"'
-assert "Contract files: copied decisions are listed and the undo deletes only those" 'has "$files_part" ">>\"\$task_dir/decisions.copied.txt\"" && has "$files_part" "the files in <contract folder>/decisions/ that <task folder>/decisions.copied.txt names"'
-assert "Contract files: the undo deletes the archive folder" 'has "$files_part" "Delete the folder <contract folder>/_archive/<task_id>/."'
-assert "Contract files: the undo removes the empty _archive and decisions folders" 'has "$files_part" "<contract folder>/_archive/ and <contract folder>/decisions/ by running rmdir <folder> 2>/dev/null || true for each"'
-assert "Contract files: the text says the glob skips dot files" 'has "$files_part" "The \`*\` glob skips dot files"'
-assert "Contract files: contract.before.md is write-once" 'has "$files_part" "[ -f \"\$task_dir/contract.before.md\" ] || cp"'
-assert "Contract files: archive never moves over a file" 'has "$files_part" "[ ! -e \"\$archive_dir/\$(basename \"\$old_file\")\" ] || continue" && has "$files_part" ".archived"'
-assert "Contract files: empty decisions.draft does not fail" '! has "$files_part" "decisions.draft\"/* \"\$contract_folder"'
+assert "Contract files: no Markdown draft and no inline block is left" '! has "$files_part" "contract.draft.md" && ! has "$files_part" "plan.draft.md" && ! has "$files_part" "contract-edit.sh\" lock"'
+assert "Contract files records the contract-deliver.sh undo" 'has "$files_part" "{\"target\":\"write the contract files\",\"url\":\"<contract_file>\",\"undo\":\"bash <scripts>/contract-deliver.sh undo '"'"'<task folder>'"'"' '"'"'<contract_file>'"'"' <task_id>\"}"'
+
+# Deliver: Finish
+finish_part="$(slice "$deliver" '## Finish' '## Stop')"
+finish_where_part="$(slice "$deliver" '1. Fill `## What shipped`' '2. If `HERDR_ENV`')"
+finish_step8="$(printf '%s\n' "$finish_part" | grep '^8\. ')"
+assert "report Where holds the tree" 'has "$finish_where_part" "Write \`## Where\` in this order" && has "$finish_where_part" "\`NEW\`, \`REPLACED\`, \`MOVED\`, or \`UNCHANGED\`" && has "$finish_where_part" "the \`new:\`, \`replaced:\`, \`moved:\`, and \`unchanged:\` lines in \`\$task_dir/contract-files.txt\`" && has "$finish_where_part" "build it from the \`targets\` list"'
+assert "report Where names each unchanged repository, the open commands, and the reading order" 'has "$finish_where_part" "\`<repository folder>: no change\`" && has "$finish_where_part" "\`open '"'"'<review.html>'"'"'\`" && has "$finish_where_part" "\$HOME/.wstack/pages/<task_id>/review.html" && has "$finish_where_part" "\`open '"'"'<contract page>'"'"'\`" && has "$finish_where_part" "\$HOME/.wstack/pages/contracts/<app_name>.html" && has "$finish_where_part" "Cmd+O" && has "$finish_where_part" "\`## Guided diff\` in \`review.md\`"'
+assert "Finish step 8 gives the file tree, unchanged repos, and open commands" 'has "$finish_step8" "the file tree" && has "$finish_step8" "each repository that did not change" && has "$finish_step8" "the open commands" && has "$finish_step8" "the reading order" && has "$finish_step8" "Ask nothing."'
 
 # Agents, templates, and docs
 assert "reader writes no code fence in the reply" 'sed -n "/^## Reply/,\$p" "$reader" | grep -qF "Write no code fence in the reply."'
@@ -233,6 +228,7 @@ assert "init-service maps the launch exit codes" 'has "$init_contract_part" "exi
 assert "init-service checks the file explicitly and runs gh from the repo" 'has "$init_contract_part" "file=yes" && has "$init_contract_part" "from \`\$REPO_ROOT\`"'
 assert "init-service reads contract-check status for exit 0 or 1" 'has "$init_contract_part" "Exit 0 or 1 prints a \`status:\` line." && has "$init_contract_part" "Exit 2 or 3 is an error"'
 assert "Contract: line appears only in Phase 8 text and the Phase 9 report block" '[ "$(grep -c "^    Contract: " "$init_skill")" = 1 ] && has "$init_report_part" "    Contract: "'
+assert "init-service names the contract.yaml path" 'has "$init_contract_part" "\`<app_name>.contract.yaml\`" && has "$init_contract_part" "An old \`<app_name>.md\` contract does not count"'
 assert "init-service report has a Contract: line" 'has "$init_report_part" "Contract:"'
 
 # glob_blocks_without_null_glob <file>...: counts bash blocks that loop over a glob and lack the setopt line

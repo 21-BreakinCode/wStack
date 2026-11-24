@@ -160,6 +160,8 @@ echo "path_exit=$path_exit contract_file=$contract_file"
 [ -f "$contract_file" ] && echo file=yes || echo file=no
 ```
 
+`contract-path.sh` prints the path of `<app_name>.contract.yaml` in the contract folder. An old `<app_name>.md` contract does not count, so this phase offers a contract task. That task moves the old file to `_archive/`.
+
 - **Exit 1:** set the `Contract:` line to `not mapped`. Go to Phase 9.
 - **Exit 2:** set the `Contract:` line to the stderr text. Go to Phase 9.
 - **Exit 0 and the file exists:** run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/contract-check.sh" "$REPO_ROOT" "$contract_file"`. Exit 0 or 1 prints a `status:` line. Set the `Contract:` line to `present (<status>)`, with that value. Exit 2 or 3 is an error: set the line to its stderr text. Change nothing. Go to Phase 9.

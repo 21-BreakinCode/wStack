@@ -11,7 +11,6 @@ work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 export HOME="$work_dir/home"; mkdir -p "$HOME"
 task_id=2026-11-22-add-health
-weird_heading="Drop the \`rm -rf canary\` cleanup and \$(rm -rf canary) for O'Brien"
 test_shells=bash
 if command -v zsh >/dev/null 2>&1; then test_shells="bash zsh"; fi
 
@@ -46,7 +45,6 @@ fill() {  # <text> then <placeholder> <value> pairs
 raw_block() {  # <block name>: the block text as the skill shows it
   case "$1" in
     step9) block_after "$confirmation" '9. If `$task_dir/contract-brief.md`' ;;
-    files) block_after "$deliver" '### Contract files' ;;
     pending-add) block_after "$deliver" '2. Add the pending item.' ;;
     decisions) block_after "$deliver" '3. Write the decision files.' ;;
     merged) block_after "$deliver" '- `MERGED`:' ;;
@@ -58,12 +56,10 @@ filled_block() {  # <block name> <task folder> <plan heading> <pr> [plugin root]
   fill "$(raw_block "$1")" '${CLAUDE_PLUGIN_ROOT}' "$root" '<scripts folder>' "$root/scripts" '<task folder>' "$(quote "$2")" \
     '<contract_file>' "$(quote "$CONTRACT")" '<task_id>' "$task_id" '<pr>' "$4" '<heading>' "$(quote "$3")" '<task>' "$(basename "$2")"
 }
-setup_world() {  # <name>: a fresh world in $work_dir/<name>, with a plan and a canary folder
+setup_world() {  # <name>: a fresh world in $work_dir/<name>
   world_dir="$work_dir/$1"
   source "$(bash "$repo_root/tests/fixtures/contract/setup.sh" "$world_dir")"
   contract_folder="$(dirname "$CONTRACT")"
-  printf '# svc plan\n\n## Gate item\n\nx\n\n## B item\n\ny\n\n## %s\n\nz\n\n## Keep me\n\nw\n' "$weird_heading" >"$contract_folder/plan.md"
-  mkdir -p "$world_dir/canary"
 }
 write_brief() {  # <task folder> <stale_sections JSON>
   mkdir -p "$1"
@@ -75,6 +71,11 @@ write_gate_patch() {  # <task folder> <interfaces item text, or empty for no sec
   [ -z "$2" ] || ITEM_TEXT="$2" yq -n '.sections.interfaces = {"sources": ["api/**"], "items": [{"text": strenv(ITEM_TEXT), "refs": ["api/routes.go:1"]}]}' >"$patch"
   [ -z "${3:-}" ] || PLAN_ID="$3" yq -i -p yaml -o yaml '.remove_planned = [strenv(PLAN_ID)]' "$patch"
 }
+write_writeback_patch() {  # <task folder> <interfaces item text> <plan id to remove>
+  ITEM_TEXT="$2" PLAN_ID="$3" yq -n '.sections.interfaces = {"sources": ["api/**"], "items": [{"text": strenv(ITEM_TEXT), "refs": ["api/routes.go:1"]}]} | .remove_planned = [strenv(PLAN_ID)]' >"$1/contract.patch.yaml"
+}
+set_pending() { PENDING="$1" yq -i '.pending = env(PENDING)' "$CONTRACT"; }  # <JSON list>
+pending_of() { yq -o json -I0 '.pending' "$CONTRACT"; }
 add_plan_items() { yq -i '.planned = [{"id": "gate-item", "title": "Gate item", "why": "x"}, {"id": "keep-me", "title": "Keep me", "why": "w"}]' "$CONTRACT"; }
 plan_ids() { yq '[.planned[].id] | sort | join(",")' "$CONTRACT"; }
 same_contract() { [ "$(yq -o json '.planned |= sort_by(.id)' "$1")" = "$(yq -o json '.planned |= sort_by(.id)' "$2")" ]; }
@@ -83,21 +84,17 @@ prepare_inputs() {  # <task folder>: every input file that the blocks read
   write_brief "$task" '["Interfaces"]'
   mkdir -p "$task/decisions.draft" "$task/decisions.writeback"
   write_gate_patch "$task" "A gate text."
-  printf '## Interfaces\n<!-- sources: api/** -->\nA write-back text.\n\n## Remove from plan\n- %s\n' "$weird_heading" >"$task/contract.patch.md"
-  printf -- '---\napp_name: svc\nbase_branch: main\nverified_commit: %s\n---\n\n# svc contract\n\n## Abilities\nNew text.\n' "$FIRST_COMMIT" >"$task/contract.draft.md"
-  printf '# svc plan\n' >"$task/plan.draft.md"
+  write_writeback_patch "$task" "A write-back text." keep-me
   printf -- '---\nid: "0001"\n---\n\n# 0001 Baseline\n' >"$task/decisions.draft/0001-baseline.md"
   printf -- '---\nid: "{{id}}"\ntask: "[[Tasks/%s/spec]]"\n---\n\n# {{id}} Serve health without auth\n' "$(basename "$task")" >"$task/decisions.writeback/serve-health.md"
-  fm_set "$CONTRACT" pending '[{"pr":7,"task":"task-a"}]'
+  set_pending '[{"pr":7,"task":"task-a"}]'
 }
 run_block() {  # <filled block> <shell>: runs it in the world folder, sets rc and out
   rc=0; out="$(cd "$world_dir" && "$2" -c "$1" 2>&1)" || rc=$?
 }
-section_of() { awk -v name="$2" '/^## /{ inside = (substr($0, 4) == name); next } inside' "$1"; }
-body_of() { awk 'n >= 2 { print } /^---$/ { n++ }' "$1"; }
 snapshot() { find "$VAULT" -print | LC_ALL=C sort; find "$VAULT" -type f -exec shasum {} + | LC_ALL=C sort; }
 
-all_blocks="step9 files pending-add decisions merged closed"
+all_blocks="step9 pending-add decisions merged closed"
 for block in $all_blocks; do
   assert "block $block is in the skill text" 'raw_block "$block" | grep -qF "contract-edit.sh\" lock"'
 done
@@ -110,7 +107,7 @@ for shell in $test_shells; do
       task="$VAULT/Tasks/task-a"; prepare_inputs "$task"
       mkdir "$CONTRACT.lock"
       before="$(snapshot)"
-      run_block "$(filled_block "$block" "$task" "$weird_heading" 7)" "$shell"
+      run_block "$(filled_block "$block" "$task" "" 7)" "$shell"
       same=no; [ "$(snapshot)" != "$before" ] || same=yes
       echo "$rc $same" >"$work_dir/busy-$shell-$block.result"
     ) &
@@ -137,7 +134,7 @@ for shell in $test_shells; do
   for block in $all_blocks; do
     setup_world "broken-$shell-$block"
     task="$VAULT/Tasks/task-a"; prepare_inputs "$task"
-    run_block "$(filled_block "$block" "$task" "$weird_heading" 7 "$broken_root")" "$shell"
+    run_block "$(filled_block "$block" "$task" "" 7 "$broken_root")" "$shell"
     assert "$shell $block: a failure after the lock exits non-zero, not 4 (rc $rc)" '[ "$rc" -ne 0 ] && [ "$rc" -ne 4 ]'
     assert "$shell $block: the lock is gone after the failure" '[ ! -e "$CONTRACT.lock" ]'
   done
@@ -204,49 +201,44 @@ for shell in $test_shells; do
   run_block "$(fill "$no_patch_block" '<scripts folder>' "$repo_root/scripts" '<task folder>' "$(quote "$task")")" "$shell"
   assert "$shell step 9 no patch: exit 0, still stale, verified_commit stays ($out)" '[ "$rc" = 0 ] && printf "%s\n" "$out" | grep -qxF "interfaces" && printf "%s\n" "$out" | grep -qxF "still stale:" && [ "$(yq .verified_commit "$CONTRACT")" = "$FIRST_COMMIT" ]'
 
-  echo "$shell: MERGED and its undo (I2, I3)"
+  echo "$shell: MERGED and its undo (I2)"
   setup_world "merge-$shell"
-  fm_set "$CONTRACT" pending '[{"pr":7,"task":"task-a"},{"pr":8,"task":"task-b"}]'
+  yq -i '.planned = [{"id": "gate-item", "title": "Gate item", "why": "x"}, {"id": "b-item", "title": "B item", "why": "y"}, {"id": "a-item", "title": "A item", "why": "z"}, {"id": "keep-me", "title": "Keep me", "why": "w"}]' "$CONTRACT"
+  set_pending '[{"pr":7,"task":"task-a"},{"pr":8,"task":"task-b"}]'
   task_a="$VAULT/Tasks/task-a"; task_b="$VAULT/Tasks/task-b"; mkdir -p "$task_b"
-  write_brief "$task_a" '["Interfaces"]'
-  write_gate_patch "$task_a" "A gate text."
-  run_block "$(filled_block step9 "$task_a" "Gate item" 0)" "$shell"
-  assert "$shell task A gate: exit 0" '[ "$rc" = 0 ]'
-  printf '## Interfaces\n<!-- sources: api/** -->\nB edit text.\n\n## Remove from plan\n- B item\n' >"$task_b/contract.patch.md"
-  run_block "$(filled_block merged "$task_b" "B item" 8)" "$shell"
-  assert "$shell task B MERGED: exit 0" '[ "$rc" = 0 ]'
-  printf '## Interfaces\n<!-- sources: api/** -->\nA write-back text.\n\n## Health checks\nA new section.\n\n## Remove from plan\n- %s\n' "$weird_heading" >"$task_a/contract.patch.md"
-  run_block "$(filled_block merged "$task_a" "$weird_heading" 7)" "$shell"
+  write_brief "$task_a" '["interfaces"]'
+  write_gate_patch "$task_a" "A gate text." gate-item
+  run_block "$(filled_block step9 "$task_a" "" 0)" "$shell"
+  assert "$shell task A gate: exit 0 ($out)" '[ "$rc" = 0 ]'
+  write_writeback_patch "$task_b" "B edit text." b-item
+  run_block "$(filled_block merged "$task_b" "" 8)" "$shell"
+  assert "$shell task B MERGED: exit 0 ($out)" '[ "$rc" = 0 ]'
+  write_writeback_patch "$task_a" "A write-back text." a-item
+  run_block "$(filled_block merged "$task_a" "" 7)" "$shell"
   assert "$shell task A MERGED: exit 0 ($out)" '[ "$rc" = 0 ]'
-  assert "$shell task A MERGED I3: the heading text did not run" '[ -d "$world_dir/canary" ]'
-  assert "$shell task A MERGED I3: the plan item is removed" '! grep -qxF "## $weird_heading" "$contract_folder/plan.md"'
-  assert "$shell task A MERGED: the pending item is gone" '[ "$(fm_get "$CONTRACT" pending)" = "[]" ]'
-  assert "$shell task A MERGED: the write-back text is in" 'section_of "$CONTRACT" Interfaces | grep -qF "A write-back text."'
-  undo_contract="$(fill "$(code_after "$deliver" 'The contract part is')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
-    '<task folder>' "$task_a" '<applied names, joined by commas>' Interfaces)"
-  undo_plan="$(fill "$(code_after "$deliver" 'The plan part is')" '<scripts>' "$repo_root/scripts" '<contract folder>' "$contract_folder" \
-    '<task folder>' "$task_a" '<removed headings, joined by commas>' "$(quote "$weird_heading")")"
-  undo_new="$(fill "$(code_after "$deliver" 'add the new-section part')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" '<name>' 'Health checks')"
-  run_block "$undo_contract" "$shell"; undo_contract_rc="$rc"
-  run_block "$undo_plan" "$shell"; undo_plan_rc="$rc"
-  run_block "$undo_new" "$shell"; undo_new_rc="$rc"
-  assert "$shell undo: all parts exit 0" '[ "$undo_contract_rc" = 0 ] && [ "$undo_plan_rc" = 0 ] && [ "$undo_new_rc" = 0 ]'
-  assert "$shell undo: the new section of the write-back is gone" '! grep -qxF "## Health checks" "$CONTRACT"'
-  assert "$shell undo I2: the edit of task B stays" 'section_of "$CONTRACT" Interfaces | grep -qF "B edit text."'
-  assert "$shell undo I2: the write-back text of task A is gone" '! grep -qF "A write-back text." "$CONTRACT"'
-  assert "$shell undo: the plan item is back" 'grep -qxF "## $weird_heading" "$contract_folder/plan.md"'
-  assert "$shell undo: the plan removals of the gate and of task B stay" '! grep -qxF "## B item" "$contract_folder/plan.md" && ! grep -qxF "## Gate item" "$contract_folder/plan.md"'
-  assert "$shell undo I3: the heading text did not run" '[ -d "$world_dir/canary" ]'
+  assert "$shell task A MERGED: the output names the applied key and the removed plan item" 'printf "%s\n" "$out" | grep -qxF interfaces && printf "%s\n" "$out" | grep -qxF "planned removed: a-item"'
+  assert "$shell task A MERGED: the plan item is removed" '[ "$(plan_ids)" = keep-me ]'
+  assert "$shell task A MERGED: the pending item is gone" '[ "$(pending_of)" = "[]" ]'
+  assert "$shell task A MERGED: the write-back text is in" '[ "$(yq ".sections.interfaces.items[0].text" "$CONTRACT")" = "A write-back text." ]'
+  cp "$task_a/contract.writeback.before.yaml" "$world_dir/writeback.before" || true
+  run_block "$(filled_block merged "$task_a" "" 7)" "$shell"
+  assert "$shell task A MERGED second run: exit 0, and the snapshot keeps the text from before the write-back ($out)" '[ "$rc" = 0 ] && cmp -s "$task_a/contract.writeback.before.yaml" "$world_dir/writeback.before"'
+  merged_undo="$(fill "$(code_after "$deliver" 'set the undo of the `contract write-back` target to')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
+    '<task folder>' "$task_a" '<applied keys, joined by commas>' interfaces '<removed ids, joined by commas>' a-item)"
+  run_block "$merged_undo" "$shell"
+  assert "$shell MERGED undo: exit 0 ($out)" '[ "$rc" = 0 ]'
+  assert "$shell MERGED undo I2: the edit of task B stays and the write-back text of task A is gone" '[ "$(yq ".sections.interfaces.items[0].text" "$CONTRACT")" = "B edit text." ] && ! grep -qF "A write-back text." "$CONTRACT"'
+  assert "$shell MERGED undo: the plan item is back, and the removals of the gate and of task B stay" '[ "$(plan_ids)" = a-item,keep-me ]'
 
   echo "$shell: CLOSED"
   setup_world "closed-$shell"
-  fm_set "$CONTRACT" pending '[{"pr":9,"task":"task-c"}]'
+  set_pending '[{"pr":9,"task":"task-c"}]'
   cp "$CONTRACT" "$world_dir/contract.orig"
   mkdir -p "$contract_folder/decisions"
   printf -- '---\nid: "0001"\nstatus: accepted\ntask: "[[Tasks/task-c/spec]]"\n---\n\n# 0001 C choice\n' >"$contract_folder/decisions/0001-c-choice.md"
   printf -- '---\nid: "0002"\nstatus: accepted\ntask: "[[Tasks/task-d/spec]]"\n---\n\nSee [[Tasks/task-c/spec]].\n' >"$contract_folder/decisions/0002-d-choice.md"
   run_block "$(filled_block closed "$VAULT/Tasks/task-c" "" 9)" "$shell"
-  assert "$shell CLOSED: exit 0, pending empty, body unchanged" '[ "$rc" = 0 ] && [ "$(fm_get "$CONTRACT" pending)" = "[]" ] && [ "$(body_of "$CONTRACT")" = "$(body_of "$world_dir/contract.orig")" ]'
+  assert "$shell CLOSED: exit 0, pending empty, body unchanged" '[ "$rc" = 0 ] && [ "$(pending_of)" = "[]" ] && [ "$(yq -o json "del(.pending)" "$CONTRACT")" = "$(yq -o json "del(.pending)" "$world_dir/contract.orig")" ]'
   assert "$shell CLOSED A2-24: the decision of the closed task is withdrawn" '[ "$(fm_get "$contract_folder/decisions/0001-c-choice.md" status)" = withdrawn ] && printf "%s\n" "$out" | grep -qxF "decision withdrawn: $contract_folder/decisions/0001-c-choice.md"'
   assert "$shell CLOSED A2-24: a decision of another task stays accepted" '[ "$(fm_get "$contract_folder/decisions/0002-d-choice.md" status)" = accepted ]'
 
@@ -271,81 +263,58 @@ for shell in $test_shells; do
   assert "$shell decisions: auth-token and token each get a file ($out)" '[ "$rc" = 0 ] && [ -f "$contract_folder/decisions/0001-auth-token.md" ] && [ -f "$contract_folder/decisions/0002-token.md" ]'
   assert "$shell decisions: each file is printed once" '[ "$(printf "%s\n" "$out" | grep -c "^decision file: ")" = 2 ] && printf "%s\n" "$out" | grep -qxF "decision file: $contract_folder/decisions/0002-token.md"'
 
-  echo "$shell: Contract files twice"
-  setup_world "files-$shell"
-  task="$VAULT/Tasks/$task_id"; prepare_inputs "$task"
-  echo '# Old PRD' >"$contract_folder/PRD.md"
-  cp "$CONTRACT" "$world_dir/contract.orig"
-  files_block="$(filled_block files "$task" "" 0)"
-  run_block "$files_block" "$shell"; first_rc="$rc"
-  run_block "$files_block" "$shell"; second_rc="$rc"
-  assert "$shell Contract files: both runs exit 0 ($out)" '[ "$first_rc" = 0 ] && [ "$second_rc" = 0 ]'
-  assert "$shell Contract files: contract.before.md keeps the original" 'cmp -s "$task/contract.before.md" "$world_dir/contract.orig"'
-  assert "$shell Contract files: the archive keeps the original" 'cmp -s "$contract_folder/_archive/$task_id/svc.md" "$world_dir/contract.orig" && [ -f "$contract_folder/_archive/$task_id/PRD.md" ]'
-  assert "$shell Contract files: the new contract and decision are in" 'grep -qxF "New text." "$CONTRACT" && [ -f "$contract_folder/decisions/0001-baseline.md" ]'
-  assert "$shell Contract files A2-19: the copied decision is listed once" '[ "$(cat "$task/decisions.copied.txt")" = 0001-baseline.md ]'
-  # the recorded undo, step by step
-  rm -f "$CONTRACT" "$contract_folder/plan.md"
-  while IFS= read -r copied_name; do rm -f "$contract_folder/decisions/$copied_name"; done <"$task/decisions.copied.txt"
-  for archived in "$contract_folder/_archive/$task_id"/*; do mv "$archived" "$contract_folder/"; done
-  rm -rf "$contract_folder/_archive/$task_id"
-  for empty_folder in "$contract_folder/_archive" "$contract_folder/decisions"; do rmdir "$empty_folder" 2>/dev/null || true; done
-  cp "$task/contract.before.md" "$CONTRACT"
-  assert "$shell Contract files undo: no empty decisions/ or _archive/ is left" '[ ! -e "$contract_folder/decisions" ] && [ ! -e "$contract_folder/_archive" ] && [ -f "$contract_folder/PRD.md" ]'
-
-  for clash in other-name same-text; do
-    echo "$shell: Contract files with a decision id clash ($clash)"
-    setup_world "files-clash-$clash-$shell"
-    task="$VAULT/Tasks/$task_id"; prepare_inputs "$task"
-    mkdir -p "$contract_folder/decisions"
-    if [ "$clash" = other-name ]; then echo other >"$contract_folder/decisions/0001-other.md"
-    else cp "$task/decisions.draft/0001-baseline.md" "$contract_folder/decisions/"; fi
-    before="$(snapshot)"
-    run_block "$(filled_block files "$task" "" 0)" "$shell"
-    assert "$shell Contract files A2-19 ($clash): exit 1 with the clash and no vault change ($out)" '[ "$rc" = 1 ] && printf "%s\n" "$out" | grep -qF "decision id 0001 already exists in decisions/" && [ "$(snapshot)" = "$before" ]'
-  done
-
-  for draft_state in missing empty; do
-    echo "$shell: Contract files with $draft_state decisions.draft"
-    setup_world "files-$draft_state-$shell"
-    task="$VAULT/Tasks/$task_id"; prepare_inputs "$task"
-    rm -rf "$task/decisions.draft"
-    if [ "$draft_state" = empty ]; then mkdir "$task/decisions.draft"; fi
-    run_block "$(filled_block files "$task" "" 0)" "$shell"
-    assert "$shell Contract files, $draft_state decisions.draft: exit 0 ($out)" '[ "$rc" = 0 ]'
-    assert "$shell Contract files, $draft_state decisions.draft: the contract is delivered" 'grep -qxF "New text." "$CONTRACT"'
-    assert "$shell Contract files, $draft_state decisions.draft: no lock is left" '[ ! -e "$CONTRACT.lock" ]'
-  done
 done
+
+echo "bash: Contract files runs contract-deliver.sh and records its undo"
+files_part="$(awk 'index($0, "### Contract files") == 1 { on = 1 } on && index($0, "## Contract write-back") == 1 { exit } on' "$deliver")"
+files_record="$(printf '%s\n' "$files_part" | grep -o '{"target":"write the contract files"[^`]*}' || true)"
+assert "Contract files calls contract-deliver.sh write" 'printf "%s\n" "$files_part" | grep -qF "contract-deliver.sh\" write '"'"'<task folder>'"'"' '"'"'<contract_file>'"'"' <task_id>"'
+assert "Contract files records contract-deliver.sh undo as the undo" '[ "$(jq -r .undo <<<"$files_record")" = "bash <scripts>/contract-deliver.sh undo '"'"'<task folder>'"'"' '"'"'<contract_file>'"'"' <task_id>" ]'
+assert "Contract files copies disagreements.md into report.md" 'printf "%s\n" "$files_part" | grep -qF "disagreements.md" && printf "%s\n" "$files_part" | grep -qF "## Doc and code disagree"'
+setup_world "files-run"
+task="$VAULT/Tasks/$task_id"; prepare_inputs "$task"
+yq '.sections.abilities.items = [{"text": "New text.", "refs": ["cmd/main.go:1"]}]' "$CONTRACT" >"$task/contract.draft.yaml"
+cp "$CONTRACT" "$world_dir/contract.orig"
+run_block "scripts='$repo_root/scripts'; $(fill "$(code_after "$deliver" '2. Run')" '<task folder>' "$(quote "$task")" '<contract_file>' "$(quote "$CONTRACT")" '<task_id>' "$task_id")" bash
+assert "Contract files: the write command exits 0 and saves the file lines ($out)" '[ "$rc" = 0 ] && grep -qxF "replaced: $CONTRACT (old copy: $contract_folder/_archive/$task_id/svc.contract.yaml)" "$task/contract-files.txt" && grep -qxF "new: $contract_folder/decisions/0001-baseline.md" "$task/contract-files.txt"'
+run_block "$(fill "$(jq -r .undo <<<"$files_record")" '<scripts>' "$repo_root/scripts" '<task folder>' "$task" '<contract_file>' "$CONTRACT" '<task_id>' "$task_id")" bash
+assert "Contract files: the recorded undo restores the contract ($out)" '[ "$rc" = 0 ] && cmp -s "$CONTRACT" "$world_dir/contract.orig" && [ ! -e "$contract_folder/decisions" ]'
 
 retro_skill="$repo_root/skills/run-retro/SKILL.md"
 retro_block() {  # <retro folder> <stale JSON> <chosen names, one per line>
   fill "$(block_after "$retro_skill" 'D6. After the answer')" '<scripts folder>' "$repo_root/scripts" '<retro folder>' "$1" '<retro name>' 2026-W47 \
-    '<contract file>' "$(quote "$CONTRACT")" '<checked commit>' checked123 '<stale_sections JSON>' "$2" '<chosen section names, one per line>' "$3"
+    '<contract file>' "$(quote "$CONTRACT")" '<checked commit>' c4ec123 '<stale_sections JSON>' "$2" '<chosen section names, one per line>' "$3"
+}
+write_retro_patch() {  # <patch file> <section key>...: one item per key, with the text "Retro <key> text."
+  local patch="$1"; shift
+  printf 'sections: {}\n' >"$patch"
+  for key in "$@"; do
+    KEY="$key" yq -i '.sections[strenv(KEY)] = {"sources": ["any/**"], "items": [{"text": "Retro " + strenv(KEY) + " text.", "refs": ["cmd/main.go:1"]}]}' "$patch"
+  done
 }
 for shell in $test_shells; do
   echo "$shell: run-retro contract drift block"
   setup_world "retro-$shell"
   retro_dir="$VAULT/Retros"; mkdir -p "$retro_dir"
-  printf '## Interfaces\n<!-- sources: api/** -->\nRetro interfaces text.\n\n## Abilities\n<!-- sources: cmd/** -->\nRetro abilities text.\n' >"$retro_dir/2026-W47.contract-patch.md"
+  write_retro_patch "$retro_dir/2026-W47.contract-patch.yaml" interfaces abilities
   cp "$CONTRACT" "$world_dir/contract.orig"
-  run_block "$(retro_block "$retro_dir" '["Abilities","Interfaces"]' 'Interfaces')" "$shell"
+  run_block "$(retro_block "$retro_dir" '["abilities","interfaces"]' 'interfaces')" "$shell"
   assert "$shell retro: only some sections chosen, exit 0 ($out)" '[ "$rc" = 0 ]'
-  assert "$shell retro: the chosen section is applied, the other is not" 'section_of "$CONTRACT" Interfaces | grep -qF "Retro interfaces text." && ! grep -qF "Retro abilities text." "$CONTRACT"'
-  assert "$shell retro: verified_commit does not move" '[ "$(fm_get "$CONTRACT" verified_commit)" = "$FIRST_COMMIT" ] && printf "%s\n" "$out" | grep -qxF "Abilities"'
-  assert "$shell retro: the before copy is the original and no lock is left" 'cmp -s "$retro_dir/2026-W47.contract-before.md" "$world_dir/contract.orig" && [ ! -e "$CONTRACT.lock" ]'
-  run_block "$(retro_block "$retro_dir" '["Abilities","Interfaces"]' $'Abilities\nInterfaces')" "$shell"
-  assert "$shell retro: all stale sections chosen, verified_commit moves ($out)" '[ "$rc" = 0 ] && [ "$(fm_get "$CONTRACT" verified_commit)" = checked123 ] && grep -qF "Retro abilities text." "$CONTRACT"'
-  assert "$shell retro: the second run keeps the first before copy" 'cmp -s "$retro_dir/2026-W47.contract-before.md" "$world_dir/contract.orig"'
-  echo "$shell: run-retro all with a stale section that has no patch block"
+  assert "$shell retro: the chosen section is applied, the other is not" '[ "$(yq ".sections.interfaces.items[0].text" "$CONTRACT")" = "Retro interfaces text." ] && ! grep -qF "Retro abilities text." "$CONTRACT"'
+  assert "$shell retro: verified_commit does not move" '[ "$(yq .verified_commit "$CONTRACT")" = "$FIRST_COMMIT" ] && printf "%s\n" "$out" | grep -qxF "abilities"'
+  assert "$shell retro: the before copy is the original and no lock is left" 'cmp -s "$retro_dir/2026-W47.contract-before.yaml" "$world_dir/contract.orig" && [ ! -e "$CONTRACT.lock" ]'
+  run_block "$(retro_block "$retro_dir" '["abilities","interfaces"]' $'abilities\ninterfaces')" "$shell"
+  assert "$shell retro: all stale sections chosen, verified_commit moves ($out)" '[ "$rc" = 0 ] && [ "$(yq .verified_commit "$CONTRACT")" = c4ec123 ] && grep -qF "Retro abilities text." "$CONTRACT"'
+  assert "$shell retro: the second run keeps the first before copy" 'cmp -s "$retro_dir/2026-W47.contract-before.yaml" "$world_dir/contract.orig"'
+  echo "$shell: run-retro all with a stale section that has no patch section"
   setup_world "retro-all-$shell"
   retro_dir="$VAULT/Retros"; mkdir -p "$retro_dir"
-  printf '## Interfaces\n<!-- sources: api/** -->\nOnly interfaces.\n' >"$retro_dir/2026-W47.contract-patch.md"
-  run_block "$(retro_block "$retro_dir" '["Abilities","Interfaces"]' 'Interfaces')" "$shell"
-  assert "$shell retro all: applies the block it has, verified_commit stays, names the section left ($out)" '[ "$rc" = 0 ] && section_of "$CONTRACT" Interfaces | grep -qF "Only interfaces." && [ "$(fm_get "$CONTRACT" verified_commit)" = "$FIRST_COMMIT" ] && printf "%s\n" "$out" | grep -qxF "Abilities"'
+  write_retro_patch "$retro_dir/2026-W47.contract-patch.yaml" interfaces
+  run_block "$(retro_block "$retro_dir" '["abilities","interfaces"]' 'interfaces')" "$shell"
+  assert "$shell retro all: applies the section it has, verified_commit stays, names the section left ($out)" '[ "$rc" = 0 ] && [ "$(yq ".sections.interfaces.items[0].text" "$CONTRACT")" = "Retro interfaces text." ] && [ "$(yq .verified_commit "$CONTRACT")" = "$FIRST_COMMIT" ] && printf "%s\n" "$out" | grep -qxF "abilities"'
   setup_world "retro-lock-$shell"
   mkdir "$CONTRACT.lock"
-  run_block "$(retro_block "$retro_dir" '[]' 'Interfaces')" "$shell"
+  run_block "$(retro_block "$retro_dir" '[]' 'interfaces')" "$shell"
   assert "$shell retro: a busy lock exits 4" '[ "$rc" = 4 ]'
   rmdir "$CONTRACT.lock"
 done
