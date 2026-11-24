@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.0 - unreleased
+## 0.8.0 - 2026-11-24
 
 - **feat:** The service contract is a YAML file, `<app_name>.contract.yaml`, with seven fixed sections. Scripts generate two views from it: a vault note, `<app_name>.md`, and an HTML page in `~/.wstack/pages/contracts/`. Every write through `contract-edit.sh` renders both views.
 - **feat:** New scripts: `contract-validate.sh` checks the schema. `contract-refs.sh` proves that every ref exists at its commit. `contract-render.sh` writes the views. `contract-deliver.sh write|undo|rehearse` delivers a `contract` task, undoes it all or nothing, and rehearses both on copies. `contract-verify-draft.sh` runs the four draft checks.

@@ -4,7 +4,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$repo_root/tests/_assert.sh"
 changelog="$repo_root/CHANGELOG.md"
 
-bad_headings="$(grep '^## ' "$changelog" | grep -Ev '^## [0-9]+\.[0-9]+\.[0-9]+ - ([0-9]{4}-[0-9]{2}-[0-9]{2}|unreleased)$' || true)"
+bad_headings="$(grep '^## ' "$changelog" | grep -Ev '^## [0-9]+\.[0-9]+\.[0-9]+ - [0-9]{4}-[0-9]{2}-[0-9]{2}$' || true)"
 assert "every version heading reads '## <x.y.z> - <date>'" '[ -z "$bad_headings" ]'
 
 bad_bullets="$(awk '/^## /{in_versions=1} in_versions && /^- /' "$changelog" | grep -Ev '^- \*\*(feat|fix|docs|change|breaking):\*\* ' || true)"
