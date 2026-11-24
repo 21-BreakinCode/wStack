@@ -196,6 +196,12 @@ new_world; set_key "$CONTRACT" ignore '[]'; push_file README.md; run --coverage
 assert "--coverage counts every tracked file" '[ $rc = 1 ] && [ "$(field unclaimed_count)" = 2 ] && [ "$(field unclaimed_files)" = "[\"README.md\",\"tests/a_test.go\"]" ] && [ "$(field stale_sections)" = "[]" ]'
 new_world; run --coverage
 assert "--coverage with every file claimed or ignored exits 0" '[ $rc = 0 ] && [ "$(field status)" = fresh ] && [ "$(field unclaimed_count)" = 0 ]'
+new_world; set_key "$CONTRACT" verified_commit 0123456789abcdef0123456789abcdef01234567; run --coverage
+assert "--coverage with a non-ancestor verified_commit marks no section and exits 0" '[ $rc = 0 ] && [ "$(field stale_sections)" = "[]" ] && [ "$(field unclaimed_count)" = 0 ] && [ "$(field behind)" = 1 ]'
+new_world; map_dependency
+printf 'app_name: dep\nverified_commit: "bbb2222"\n' > "$dep_dir/dep.contract.yaml"
+add_dependency aaa1111; run --coverage
+assert "--coverage with a stale dependency marks nothing and exits 0" '[ $rc = 0 ] && [ "$(field stale_sections)" = "[]" ] && [ "$(field stale_dependencies)" = "[]" ]'
 new_world; run --other
 assert "a third argument other than --coverage exits 2" '[ $rc = 2 ] && grep -q "usage: contract-check.sh" "$work_dir/err"'
 

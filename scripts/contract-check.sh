@@ -2,7 +2,8 @@
 # contract-check.sh <repo_dir> <contract.yaml> [--coverage]
 # Compare a contract's verified_commit with the local ref origin/<base_branch>. No network call.
 # --coverage diffs the empty tree against origin/<base_branch>, so every tracked file counts as changed.
-# It proves the sources globs claim every file; claimed files do not mark sections stale in this mode.
+# It proves the sources globs claim every file. In this mode no section and no dependency is marked stale,
+# and the exit is 0 when every file is claimed or ignored. The behind count stays.
 # Exit: 0 fresh, 1 stale, 2 error (stderr names the cause), 3 contract file missing.
 set -euo pipefail
 
@@ -91,10 +92,12 @@ mark_section_index_stale() {  # <index>
 diff_from="$verified_commit"
 if ! git -C "$repo_dir" merge-base --is-ancestor "$verified_commit" "$base_ref" 2>/dev/null; then
   behind="$(git -C "$repo_dir" rev-list --count "$base_ref")"
-  is_stale=1
-  for ((section_index = 0; section_index < section_count; section_index++)); do
-    [ "${section_has_globs[section_index]}" = 0 ] || mark_section_index_stale "$section_index"
-  done
+  if [ "$coverage_mode" = 0 ]; then
+    is_stale=1
+    for ((section_index = 0; section_index < section_count; section_index++)); do
+      [ "${section_has_globs[section_index]}" = 0 ] || mark_section_index_stale "$section_index"
+    done
+  fi
   diff_from=""
 else
   behind="$(git -C "$repo_dir" rev-list --count "$verified_commit..$base_ref")"
@@ -126,6 +129,8 @@ fi
 
 # A depends_on item with app and mapped_commit compares with the verified_commit of that app's contract.
 # The contract is <app>.contract.yaml, or <app>.md from before the YAML format. No contract means unknown, not stale.
+# --coverage reports only unclaimed files, so it skips the dependencies.
+[ "$coverage_mode" = 0 ] || dependency_lines=""
 org_dir="$(cd "$(dirname "$contract_file")" && pwd -P)"
 initiation_file=""
 while [ "$org_dir" != "/" ]; do
