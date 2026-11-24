@@ -36,7 +36,7 @@ Code:
 
 Contract:
 
-Read each item in `contract.draft.yaml`, in every section and in `planned`. Read its refs at the commit that the ref names, or at `verified_commit`. `contract-refs.sh` already proved that each ref exists. Does its ref show the claim? A wrong claim is a blocking finding of kind `spec-mismatch`. Give the item as `Where`, for example `abilities[2]`. For a new project, check that each section has content.
+Read each item in `contract.draft.yaml`, in every section and in `planned`. Read its refs at the commit that the ref names, or at `verified_commit`. `contract-refs.sh` already proved that each ref exists. Does its ref show the claim? A wrong claim is a blocking finding of kind `spec-mismatch`. Give the item as `Where`, for example `abilities[2]`. For a new project, check that each section except `open_questions` has content.
 
 Blog: facts, tone, and links against the spec.
 

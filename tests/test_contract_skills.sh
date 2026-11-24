@@ -92,6 +92,11 @@ assert "verify final review reads the gate state with fm_get" 'has "$verify_fina
 assert "verify final review names each file" 'has "$verify_final_review" "If \`contract-brief.md\` does not exist" && has "$verify_final_review" "If \`agents/reviewer.md\` is not there" && ! has "$verify_final_review" "If the file"'
 assert "verify tells the reviewer to judge whether each ref shows its claim" 'has "$verify_final_review" "\`contract-refs.sh\` in step 1 already proved that every ref exists" && has "$verify_final_review" "whether each ref shows its claim"'
 assert "verify runs contract-verify-draft.sh for a contract task" 'has "$verify_step1" "For a \`contract\` task" && has "$verify_step1" "contract-verify-draft.sh\" \"<repository folder>\" \"\$task_dir\" \"<contract path>\" \"<task_id>\" \"/tmp/wstack-evidence/<task_id>\""'
+assert "Count the try sends a fix after a review to the reviewed-copy step" 'grep "^3\. Take the retry limit" "$verify" | grep -qF "If a review already ran, follow \"An edit after the last review\" for the fix."'
+assert "a missing reviewed copy falls back to the whole draft" 'has "$verify_edit_part" "If the reviewed copy is missing, give the reviewer the whole draft."'
+assert "verify: a new project needs content in each section except open_questions" 'has "$verify_final_review" "each section except \`open_questions\` has content"'
+assert "verify step 2 reads base_branch from contract-brief.md" 'grep "^2\. Stale references" "$verify" | grep -qF "fm_get \"\$task_dir/contract-brief.md\" base_branch" && ! grep -qF "comes from the contract frontmatter" "$verify"'
+assert "confirmation asks no question about open_questions" 'has "$write_part" "Skip \`open_questions\`, because it holds only what a later task finds."'
 assert "verify re-reviews an edit after the last review with the diff only" 'has "$verify_edit_part" "a fix for a non-blocking finding" && has "$verify_edit_part" "diff -u \"\$task_dir/contract.draft.reviewed.yaml\" \"\$task_dir/contract.draft.yaml\"" && has "$verify_edit_part" "only the diff of the edit" && has "$verify_final_review" "An edit after the last review"'
 
 # Deliver: Contract write-back
