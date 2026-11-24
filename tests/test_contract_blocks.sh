@@ -191,8 +191,8 @@ for shell in $test_shells; do
   assert "$shell step 9 plan-only: exit 0, the item is removed, verified_commit moves ($out)" '[ "$rc" = 0 ] && [ "$(plan_ids)" = keep-me ] && [ "$(yq .verified_commit "$CONTRACT")" = 12e4567 ]'
   printf 'sections:\n  abilities:\n    sources: [cmd/**]\n    items:\n      - text: A later edit.\n        refs: [cmd/main.go:1]\n' >"$world_dir/later.yaml"
   bash "$repo_root/scripts/contract-edit.sh" apply "$CONTRACT" "$world_dir/later.yaml" >/dev/null
-  undo_plan="$(fill "$(code_after "$confirmation" 'restores the plan items alone:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
-    '<task folder>' "$task" '<removed ids, joined by commas>' gate-item)"
+  undo_plan="$(fill "$(code_after "$confirmation" 'The undo command:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
+    '<task folder>' "$task" " --sections '<applied keys, joined by commas>'" '' '<removed ids, joined by commas>' gate-item)"
   run_block "$undo_plan" "$shell"
   assert "$shell step 9 plan-only undo: the plan item is back and a later edit stays ($out)" '[ "$rc" = 0 ] && [ "$(plan_ids)" = gate-item,keep-me ] && grep -qF "A later edit." "$CONTRACT"'
 

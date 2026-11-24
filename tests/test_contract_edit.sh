@@ -111,6 +111,11 @@ yq -i '.planned[0].title = "Changed title"' "$CONTRACT"
 yq '{"planned": .planned}' "$work/snapshot.yaml" >"$work/planned-only.yaml"
 run_edit apply "$CONTRACT" "$work/planned-only.yaml" --planned video-ack-after-commit
 assert "--planned replaces an item with the same id in place" "[ \"\$out\" = 'planned restored: video-ack-after-commit' ] && [ \"\$(json_of '$CONTRACT')\" = \"\$(json_of '$work/snapshot.yaml')\" ]"
+reset_contract; cp "$CONTRACT" "$work/snapshot.yaml"
+bash "$edit" apply "$CONTRACT" "$work/change.yaml" >/dev/null
+cp "$CONTRACT" "$work/changed.yaml"
+run_edit apply "$CONTRACT" "$work/snapshot.yaml" --planned docs-refresh
+assert "a full snapshot with only --planned leaves every section unchanged and restores the item" "[ $rc -eq 0 ] && [ \"\$out\" = 'planned restored: docs-refresh' ] && [ \"\$(yq -o=json '.sections' '$CONTRACT' | jq -S .)\" = \"\$(yq -o=json '.sections' '$work/changed.yaml' | jq -S .)\" ] && [ \"\$(query '$CONTRACT' '[.planned[].id] | sort | join(\",\")')\" = docs-refresh,video-ack-after-commit ]"
 run_edit apply "$CONTRACT" "$work/snapshot.yaml" --planned no-such-id
 assert "--planned with an id the patch lacks exits 2" "[ $rc -eq 2 ]"
 

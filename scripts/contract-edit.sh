@@ -3,6 +3,7 @@
 # Deliver "Contract files" also writes whole files with cp, under the lock from this script.
 #   lock|unlock <contract_file>
 #   apply <contract_file> <patch_file> [--sections "a,b"] [--section "a"]... [--planned "id,id"]
+#     --planned with no --sections or --section applies no section: it restores the named plan items only.
 #   remove-planned <contract_file> <id>
 #   pending-add <contract_file> <pr> <task_id> | pending-remove <contract_file> <pr>
 #   set-verified <contract_file> <commit>
@@ -95,6 +96,8 @@ case "$subcommand" in
       while IFS= read -r section_key; do
         printf '%s\n' "$patch_keys" | grep -qxF "$section_key" || fail "the patch has no section named: $section_key"
       done <<<"$apply_keys"
+    elif [ -n "$restore_ids" ]; then
+      apply_keys=""  # --planned alone restores plan items only, so a full snapshot undoes no section
     else
       apply_keys="$patch_keys"
     fi

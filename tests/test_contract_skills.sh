@@ -83,7 +83,7 @@ assert "step 9: the gate snapshot is contract.before.yaml, with no plan snapshot
 assert "step 9: a missing patch skips the snapshot and apply lines" 'has "$step9_part" "If \`contract.gate-patch.yaml\` does not exist, skip the \`contract.before.yaml\` line and the \`apply\` line."'
 assert "the gate patch is YAML with a sections map" 'has "$g5_part" "\$task_dir/contract.gate-patch.yaml" && has "$step9_part" "yq -p yaml -o json '"'"'.sections // {} | keys'"'"'" && grep -qF "a \`sections:\` map" "$reader"'
 assert "step 9 undo uses apply with --sections and --planned" 'has "$step9_part" "The undo command: \`bash '"'"'<scripts>/contract-edit.sh'"'"' apply '"'"'<contract_file>'"'"' '"'"'<task folder>/contract.before.yaml'"'"' --sections '"'"'<applied keys, joined by commas>'"'"' --planned '"'"'<removed ids, joined by commas>'"'"'\`"'
-assert "step 9: an undo with no applied key restores plan items alone" 'has "$step9_part" "contract.before-planned.yaml" && has "$step9_part" "applies every section of the snapshot"'
+assert "step 9: an undo with no applied key leaves out --sections and needs no plan-only snapshot" 'has "$step9_part" "If \`apply\` printed no section key, leave out the \`--sections\` flag and its value." && ! has "$step9_part" "contract.before-planned.yaml"'
 assert "step 9: the undo restores verified_commit and has no new-section command" 'has "$step9_part" "add the commit command:" && has "$step9_part" "yq '"'"'.verified_commit'"'"' '"'"'<task folder>/contract.before.yaml'"'"'" && ! has "$step9_part" "new-section"'
 
 # Verify
