@@ -68,4 +68,16 @@ assert "planned refs are checked" '[ $rc = 1 ] && printf "%s\n" "$out" | grep -q
 new_world; yq -i '.verified_commit = ""' "$CONTRACT"; run
 assert "empty verified_commit exits 2" '[ $rc = 2 ] && [ -n "$err" ]'
 
+new_world; add_other_clone
+sed -i.bak "s|^workspace_root: .*|workspace_root: \$HOME/ws|" "$ORG_DIR/handover_handler__initiation.md"
+set_refs "acme-org/other@$other_commit:x.txt:1"
+set +e; out="$(HOME="$(dirname "$REPO")/.." bash "$script" "$REPO" "$CONTRACT" 2>&1)"; rc=$?; set -e
+assert "workspace_root with \$HOME is expanded" '[ $rc = 0 ] && [ "$out" = "refs: 1 checked, 0 bad, 0 unchecked" ]'
+
+new_world; add_other_clone
+mv "$other" "$(dirname "$REPO")/renamed-folder"
+echo "| other | $(dirname "$REPO")/renamed-folder | Services/other |" >> "$ORG_DIR/handover_handler__initiation.md"
+set_refs "acme-org/other@$other_commit:x.txt:1"; run
+assert "Service Mapping remote match finds a clone with another folder name" '[ $rc = 0 ] && [ "$out" = "refs: 1 checked, 0 bad, 0 unchecked" ]'
+
 finish

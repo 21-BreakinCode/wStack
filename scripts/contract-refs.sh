@@ -15,6 +15,7 @@ plugin_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$plugin_root/scripts/lib/frontmatter.sh"
 
 fail() { echo "contract-refs.sh: $1" >&2; exit 2; }
+expand_home() { local path="${1//\$HOME/$HOME}"; echo "${path/#\~/$HOME}"; }
 command -v jq >/dev/null 2>&1 || fail "jq is required but not installed"
 command -v yq >/dev/null 2>&1 || fail "yq is required but not installed"
 [ -f "$contract_file" ] || fail "no contract file: $contract_file"
@@ -34,14 +35,14 @@ done
 mapping_rows=""; workspace_root=""
 if [ -n "$initiation_file" ]; then
   mapping_rows="$(bash "$plugin_root/scripts/handover/parse-mapping.sh" "$initiation_file")" || fail "cannot read the service mapping in $initiation_file"
-  workspace_root="$(fm_get "$initiation_file" workspace_root)"
+  workspace_root="$(expand_home "$(fm_get "$initiation_file" workspace_root)")"
 fi
 
 clone_for() {  # <owner/repo>: print the local clone path, or nothing
   local slug="$1" mapped_repo_path remote_url
   while IFS='|' read -r _ mapped_repo_path _; do
     [ -n "$mapped_repo_path" ] || continue
-    mapped_repo_path="${mapped_repo_path/#\$HOME/$HOME}"
+    mapped_repo_path="$(expand_home "$mapped_repo_path")"
     remote_url="$(git -C "$mapped_repo_path" remote get-url origin 2>/dev/null)" || continue
     case "$remote_url" in *"$slug" | *"$slug.git") echo "$mapped_repo_path"; return ;; esac
   done <<<"$mapping_rows"
