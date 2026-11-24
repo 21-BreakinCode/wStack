@@ -24,7 +24,7 @@ assert "historian: a missing decisions/ goes on" 'grep -F "decisions/" "$histori
 assert "historian: a withdrawn decision is not the reason" 'grep -F "status: withdrawn" "$historian" | grep -qF "Skip it, or name it as withdrawn."'
 assert "historian: a missing docs/adr/ goes on" 'grep -F "docs/adr/" "$historian" | grep -qF "If the folder does not exist"'
 assert "reviewer judges whether each ref shows its claim" 'grep -qx "Contract:" "$repo_root/agents/reviewer.md" && grep -qF "Does its ref show the claim?" "$repo_root/agents/reviewer.md" && grep -qF "A wrong claim is a blocking finding of kind \`spec-mismatch\`." "$repo_root/agents/reviewer.md"'
-assert "reviewer: a new project needs content in each section except open_questions" 'grep -qF "For a new project, check that each section except \`open_questions\` has content." "$repo_root/agents/reviewer.md"'
+assert "reviewer: a new project needs sources and each answer as a plan item" 'grep -qF "Check that each section that needs \`sources\` has them: \`team_docs\`, \`abilities\`, \`interfaces\`, and \`depends_on\`. Also check that each answer under \`## Contract changes\` in the spec is a plan item under \`planned\`." "$repo_root/agents/reviewer.md" && ! grep -qF "has content" "$repo_root/agents/reviewer.md"'
 assert "reviewer has contract-mismatch" 'grep -q "| \`contract-mismatch\` | yes |" "$repo_root/agents/reviewer.md"'
 analyst="$repo_root/agents/retro-analyst.md"
 assert "analyst reads retro-note.md and transcript_stats" 'grep -qF "retro-note.md" "$analyst" && grep -qF "transcript_stats" "$analyst"'

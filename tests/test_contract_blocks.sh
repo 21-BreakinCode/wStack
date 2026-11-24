@@ -78,6 +78,7 @@ set_pending() { PENDING="$1" yq -i '.pending = env(PENDING)' "$CONTRACT"; }  # <
 pending_of() { yq -o json -I0 '.pending' "$CONTRACT"; }
 add_plan_items() { yq -i '.planned = [{"id": "gate-item", "title": "Gate item", "why": "x"}, {"id": "keep-me", "title": "Keep me", "why": "w"}]' "$CONTRACT"; }
 plan_ids() { yq '[.planned[].id] | sort | join(",")' "$CONTRACT"; }
+undo_ids() { printf '%s\n' "$out" | sed -n 's/^undo planned: //p'; }  # the ids on the block's undo planned: line
 same_contract() { [ "$(yq -o json '.planned |= sort_by(.id)' "$1")" = "$(yq -o json '.planned |= sort_by(.id)' "$2")" ]; }
 prepare_inputs() {  # <task folder>: every input file that the blocks read
   local task="$1"
@@ -154,9 +155,11 @@ for shell in $test_shells; do
   assert "$shell step 9 I4: verified_commit stays while abilities has no patch section" '[ "$(yq .verified_commit "$CONTRACT")" = "$FIRST_COMMIT" ]'
   assert "$shell step 9 I4: the output names the section that stays stale" 'printf "%s\n" "$out" | grep -qxF "abilities"'
   assert "$shell step 9 M1: the plan item is removed" '[ "$(plan_ids)" = keep-me ]'
-  assert "$shell step 9 M1: the output names the removed item" 'printf "%s\n" "$out" | grep -qxF "planned removed: gate-item"'
+  assert "$shell step 9 M1: the output names the removed item for the undo" '[ "$(undo_ids)" = gate-item ]'
+  run_block "$(filled_block step9 "$task" "" 0)" "$shell"
+  assert "$shell step 9 rerun: exit 0, and the undo line still names the removed item ($out)" '[ "$rc" = 0 ] && [ "$(undo_ids)" = gate-item ]'
   gate_undo="$(fill "$(code_after "$confirmation" 'The undo command:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
-    '<task folder>' "$task" '<applied keys, joined by commas>' interfaces '<removed ids, joined by commas>' gate-item)"
+    '<task folder>' "$task" '<applied keys, joined by commas>' interfaces '<removed ids, joined by commas>' "$(undo_ids)")"
   run_block "$gate_undo" "$shell"
   assert "$shell step 9: the logged undo restores interfaces and the plan item ($out)" '[ "$rc" = 0 ] && same_contract "$CONTRACT" "$world_dir/contract.orig"'
 
@@ -216,19 +219,34 @@ for shell in $test_shells; do
   write_writeback_patch "$task_a" "A write-back text." a-item
   run_block "$(filled_block merged "$task_a" "" 7)" "$shell"
   assert "$shell task A MERGED: exit 0 ($out)" '[ "$rc" = 0 ]'
-  assert "$shell task A MERGED: the output names the applied key and the removed plan item" 'printf "%s\n" "$out" | grep -qxF interfaces && printf "%s\n" "$out" | grep -qxF "planned removed: a-item"'
+  assert "$shell task A MERGED: the output names the applied key and the removed plan item" 'printf "%s\n" "$out" | grep -qxF interfaces && [ "$(undo_ids)" = a-item ]'
   assert "$shell task A MERGED: the plan item is removed" '[ "$(plan_ids)" = keep-me ]'
   assert "$shell task A MERGED: the pending item is gone" '[ "$(pending_of)" = "[]" ]'
   assert "$shell task A MERGED: the write-back text is in" '[ "$(yq ".sections.interfaces.items[0].text" "$CONTRACT")" = "A write-back text." ]'
   cp "$task_a/contract.writeback.before.yaml" "$world_dir/writeback.before" || true
   run_block "$(filled_block merged "$task_a" "" 7)" "$shell"
   assert "$shell task A MERGED second run: exit 0, and the snapshot keeps the text from before the write-back ($out)" '[ "$rc" = 0 ] && cmp -s "$task_a/contract.writeback.before.yaml" "$world_dir/writeback.before"'
+  assert "$shell task A MERGED second run: the undo line still names the removed plan item" '[ "$(undo_ids)" = a-item ]'
   merged_undo="$(fill "$(code_after "$deliver" 'set the undo of the `contract write-back` target to')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
-    '<task folder>' "$task_a" '<applied keys, joined by commas>' interfaces '<removed ids, joined by commas>' a-item)"
+    '<task folder>' "$task_a" '<applied keys, joined by commas>' interfaces '<removed ids, joined by commas>' "$(undo_ids)")"
   run_block "$merged_undo" "$shell"
   assert "$shell MERGED undo: exit 0 ($out)" '[ "$rc" = 0 ]'
   assert "$shell MERGED undo I2: the edit of task B stays and the write-back text of task A is gone" '[ "$(yq ".sections.interfaces.items[0].text" "$CONTRACT")" = "B edit text." ] && ! grep -qF "A write-back text." "$CONTRACT"'
   assert "$shell MERGED undo: the plan item is back, and the removals of the gate and of task B stay" '[ "$(plan_ids)" = a-item,keep-me ]'
+
+  echo "$shell: MERGED with a plan-only patch, run twice"
+  setup_world "merge-plan-$shell"; add_plan_items
+  set_pending '[{"pr":7,"task":"task-a"}]'
+  task_a="$VAULT/Tasks/task-a"; write_brief "$task_a" '[]'
+  PLAN_ID=gate-item yq -n '.remove_planned = [strenv(PLAN_ID)]' >"$task_a/contract.patch.yaml"
+  cp "$CONTRACT" "$world_dir/contract.orig"
+  run_block "$(filled_block merged "$task_a" "" 7)" "$shell"
+  run_block "$(filled_block merged "$task_a" "" 7)" "$shell"
+  assert "$shell plan-only MERGED rerun: exit 0, the item is gone, and the undo line names it ($out)" '[ "$rc" = 0 ] && [ "$(plan_ids)" = keep-me ] && [ "$(undo_ids)" = gate-item ]'
+  plan_undo="$(fill "$(code_after "$deliver" 'set the undo of the `contract write-back` target to')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
+    '<task folder>' "$task_a" " --sections '<applied keys, joined by commas>'" '' '<removed ids, joined by commas>' "$(undo_ids)")"
+  run_block "$plan_undo" "$shell"
+  assert "$shell plan-only MERGED undo: the plan item is back ($out)" '[ "$rc" = 0 ] && [ "$(plan_ids)" = gate-item,keep-me ]'
 
   echo "$shell: CLOSED"
   setup_world "closed-$shell"
@@ -281,13 +299,15 @@ run_block "$(fill "$(jq -r .undo <<<"$files_record")" '<scripts>' "$repo_root/sc
 assert "Contract files: the recorded undo restores the contract ($out)" '[ "$rc" = 0 ] && cmp -s "$CONTRACT" "$world_dir/contract.orig" && [ ! -e "$contract_folder/decisions" ]'
 
 retro_skill="$repo_root/skills/run-retro/SKILL.md"
-retro_block() {  # <retro folder> <stale JSON> <chosen names, one per line>
+retro_block() {  # <retro folder> <stale JSON> <chosen names, one per line> [yes|no: remove the plan items]
   fill "$(block_after "$retro_skill" 'D6. After the answer')" '<scripts folder>' "$repo_root/scripts" '<retro folder>' "$1" '<retro name>' 2026-W47 \
-    '<contract file>' "$(quote "$CONTRACT")" '<checked commit>' c4ec123 '<stale_sections JSON>' "$2" '<chosen section names, one per line>' "$3"
+    '<contract file>' "$(quote "$CONTRACT")" '<checked commit>' c4ec123 '<stale_sections JSON>' "$2" '<chosen section names, one per line>' "$3" \
+    '<yes or no>' "${4:-no}"
 }
-write_retro_patch() {  # <patch file> <section key>...: one item per key, with the text "Retro <key> text."
+write_retro_patch() {  # <patch file> [--remove-planned <id>] <section key>...: one item per key, with the text "Retro <key> text."
   local patch="$1"; shift
   printf 'sections: {}\n' >"$patch"
+  if [ "${1:-}" = --remove-planned ]; then PLAN_ID="$2" yq -i '.remove_planned = [strenv(PLAN_ID)]' "$patch"; shift 2; fi
   for key in "$@"; do
     KEY="$key" yq -i '.sections[strenv(KEY)] = {"sources": ["any/**"], "items": [{"text": "Retro " + strenv(KEY) + " text.", "refs": ["cmd/main.go:1"]}]}' "$patch"
   done
@@ -312,6 +332,30 @@ for shell in $test_shells; do
   write_retro_patch "$retro_dir/2026-W47.contract-patch.yaml" interfaces
   run_block "$(retro_block "$retro_dir" '["abilities","interfaces"]' 'interfaces')" "$shell"
   assert "$shell retro all: applies the section it has, verified_commit stays, names the section left ($out)" '[ "$rc" = 0 ] && [ "$(yq ".sections.interfaces.items[0].text" "$CONTRACT")" = "Retro interfaces text." ] && [ "$(yq .verified_commit "$CONTRACT")" = "$FIRST_COMMIT" ] && printf "%s\n" "$out" | grep -qxF "abilities"'
+  echo "$shell: run-retro patch with remove_planned"
+  for plan_answer in no yes; do
+    setup_world "retro-plan-$plan_answer-$shell"; add_plan_items
+    retro_dir="$VAULT/Retros"; mkdir -p "$retro_dir"
+    write_retro_patch "$retro_dir/2026-W47.contract-patch.yaml" --remove-planned gate-item interfaces abilities
+    cp "$CONTRACT" "$world_dir/contract.orig"
+    run_block "$(retro_block "$retro_dir" '["abilities","interfaces"]' 'abilities' "$plan_answer")" "$shell"
+    assert "$shell retro plan items $plan_answer: exit 0, only the chosen section is applied ($out)" '[ "$rc" = 0 ] && grep -qF "Retro abilities text." "$CONTRACT" && ! grep -qF "Retro interfaces text." "$CONTRACT"'
+    if [ "$plan_answer" = no ]; then
+      assert "$shell retro plan items no: the plan item stays and no undo ids are printed" '[ "$(plan_ids)" = gate-item,keep-me ] && [ -z "$(undo_ids)" ]'
+    else
+      assert "$shell retro plan items yes: the plan item is removed and named for the undo" '[ "$(plan_ids)" = keep-me ] && [ "$(undo_ids)" = gate-item ]'
+      run_block "$(retro_block "$retro_dir" '["abilities","interfaces"]' 'abilities' yes)" "$shell"
+      assert "$shell retro plan items yes, rerun: the undo line still names the item ($out)" '[ "$rc" = 0 ] && [ "$(undo_ids)" = gate-item ]'
+      run_block "bash '$repo_root/scripts/contract-edit.sh' apply '$CONTRACT' '$retro_dir/2026-W47.contract-before.yaml' --sections abilities --planned '$(undo_ids)'" "$shell"
+      assert "$shell retro plan items yes: the D7 undo restores the contract ($out)" '[ "$rc" = 0 ] && same_contract "$CONTRACT" "$world_dir/contract.orig"'
+    fi
+  done
+  setup_world "retro-plan-only-$shell"; add_plan_items
+  retro_dir="$VAULT/Retros"; mkdir -p "$retro_dir"
+  write_retro_patch "$retro_dir/2026-W47.contract-patch.yaml" --remove-planned gate-item interfaces
+  run_block "$(retro_block "$retro_dir" '["interfaces"]' '' yes)" "$shell"
+  assert "$shell retro plan items only: exit 0, the item is removed, no section changes, verified_commit stays ($out)" '[ "$rc" = 0 ] && [ "$(plan_ids)" = keep-me ] && ! grep -qF "Retro interfaces text." "$CONTRACT" && [ "$(yq .verified_commit "$CONTRACT")" = "$FIRST_COMMIT" ]'
+
   setup_world "retro-lock-$shell"
   mkdir "$CONTRACT.lock"
   run_block "$(retro_block "$retro_dir" '[]' 'interfaces')" "$shell"

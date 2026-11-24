@@ -36,7 +36,7 @@ Code:
 
 Contract:
 
-Read each item in `contract.draft.yaml`, in every section and in `planned`. Read its refs at the commit that the ref names, or at `verified_commit`. `contract-refs.sh` already proved that each ref exists. Does its ref show the claim? A wrong claim is a blocking finding of kind `spec-mismatch`. Give the item as `Where`, for example `abilities[2]`. For a new project, check that each section except `open_questions` has content.
+Read each item in `contract.draft.yaml`, in every section and in `planned`. Read its refs at the commit that the ref names, or at `verified_commit`. `contract-refs.sh` already proved that each ref exists. Does its ref show the claim? A wrong claim is a blocking finding of kind `spec-mismatch`. Give the item as `Where`, for example `abilities[2]`. For a new project (`project: new` in the spec), no code exists yet, so the sections have no items. Check that each section that needs `sources` has them: `team_docs`, `abilities`, `interfaces`, and `depends_on`. Also check that each answer under `## Contract changes` in the spec is a plan item under `planned`.
 
 Blog: facts, tone, and links against the spec.
 

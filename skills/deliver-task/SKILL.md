@@ -74,7 +74,7 @@ Use this for the `write the contract files` target of a `contract` task. The dra
 
    Exit 4 means the lock is busy. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"deliver"`, `"target":"write the contract files"`, and the stderr text as the reason. Set `status` to `waiting-user` and stop. Exit 1 means a check or a step failed, and the stderr text names it. Write the same `stop` line and stop item with the stderr text, and stop.
 3. If `$task_dir/disagreements.md` exists and `report.md` has no `## Doc and code disagree` heading, add that heading at the end of `report.md`. Copy the lines of `disagreements.md` under it.
-4. Record the target: `{"target":"write the contract files","url":"<contract_file>","undo":"bash <scripts>/contract-deliver.sh undo '<task folder>' '<contract_file>' <task_id>"}`. Write the real values for `<scripts>`, `<task folder>`, `<contract_file>`, and `<task_id>`. The undo deletes the new files and moves the archived files back, all or nothing.
+4. Record the target: `{"target":"write the contract files","url":"<contract_file>","undo":"bash <scripts>/contract-deliver.sh undo '<task folder>' '<contract_file>' <task_id>"}`. Write the real values for `<scripts>`, `<task folder>`, `<contract_file>`, and `<task_id>`. The undo deletes the new files and moves the archived files back, all or nothing. It does not render the restored contract. If it prints a `rebuild the page:` line, the user runs that command after the undo. The command builds the HTML page of the old contract again.
 
 ## Contract write-back
 
@@ -83,6 +83,8 @@ Run this once, right after the `open a pull request` target is recorded, for a `
 Read the values in the same Bash call as the commands that use them: `source "$scripts/lib/frontmatter.sh"; contract_file="$(fm_get "$task_dir/contract-brief.md" contract_file)"`, and the same for `base_branch`. The contract folder is the folder that holds `$contract_file`. `<pr>` is the number at the end of the pull request URL.
 
 1. Dispatch the `wstack:contract-reader` agent. Give it the repository folder, the contract path, and this input: "propose contract edits for the diff `origin/<base_branch>...wstack/<slug>` and the spec's `## Contract changes`". Write the part of the reply after the line `=== PATCH ===` to `$task_dir/contract.patch.yaml`. It is YAML with a `sections:` map and an optional `remove_planned:` list of plan ids. If that part is `None`, write no patch file and skip step 2. Decisions do not depend on the patch, so step 3 still runs.
+
+   Then test the patch on a copy, because after the merge a refused patch has no fix. Run `source "$scripts/lib/frontmatter.sh"; contract_file="$(fm_get "$task_dir/contract-brief.md" contract_file)"; test_dir="$(mktemp -d)"; cp "$contract_file" "$test_dir/" && HOME="$test_dir" bash "$scripts/contract-edit.sh" apply "$test_dir/$(basename "$contract_file")" "$task_dir/contract.patch.yaml"; test_exit=$?; rm -rf "$test_dir"; exit "$test_exit"`. `HOME` points to the temp folder, so the render does not touch the real page. If it exits non-zero, the patch is refused. Dispatch the reader once more with the same input and the stderr text, and ask it to fix the patch. Write the new patch to `contract.patch.yaml` and test it the same way. If the second patch is refused too, stop as in "Stop" with `"target":"contract write-back"` and the reason `contract patch refused: <stderr text>`.
 2. Add the pending item. Run this in one Bash call. Write the real values for `<task folder>`, `<pr>`, and `<task_id>`:
 
    ```bash
@@ -218,13 +220,14 @@ For each item, run `gh pr view <pr> --json state -q .state` in the repository fo
   trap 'bash "$scripts/contract-edit.sh" unlock "$contract_file"' EXIT
   [ -f "$task_folder/contract.writeback.before.yaml" ] || cp "$contract_file" "$task_folder/contract.writeback.before.yaml"
   bash "$scripts/contract-edit.sh" apply "$contract_file" "$task_folder/contract.patch.yaml"
+  yq -p yaml -o json '[.planned[]?.id]' "$task_folder/contract.writeback.before.yaml" | jq -r --argjson remove "$(yq -p yaml -o json '.remove_planned // []' "$task_folder/contract.patch.yaml")" '$remove - ($remove - .) | select(length > 0) | "undo planned: " + join(",")'
   bash "$scripts/contract-edit.sh" pending-remove "$contract_file" <pr>
   ```
 
-  - If `<task folder>/contract.patch.yaml` does not exist, skip the `contract.writeback.before.yaml` line and the `apply` line.
+  - If `<task folder>/contract.patch.yaml` does not exist, skip the two lines that name `contract.writeback.before.yaml` and the `apply` line.
   - The write-back has its own snapshot, `contract.writeback.before.yaml`, and it is written once. The gate's step 9 writes `contract.before.yaml`. An undo of the write-back keeps the gate's change and the changes of other tasks before the write-back.
-  - `apply` prints the applied section keys, then one `planned removed: <id>` line for each plan item that the patch's `remove_planned` list removed. Read them from the output of the call. A shell variable does not outlive the call.
-  - If `apply` printed a section key or a `planned removed:` line, set the undo of the `contract write-back` target to the undo command: `bash '<scripts>/contract-edit.sh' apply '<contract_file>' '<task folder>/contract.writeback.before.yaml' --sections '<applied keys, joined by commas>' --planned '<removed ids, joined by commas>'`. Do this in `report.md` of that task. Put each value in single quotes, as in the block. If `apply` printed no `planned removed:` line, leave out the `--planned` flag and its value. If `apply` printed no section key, leave out the `--sections` flag and its value. With `--planned` alone, `apply` restores only those plan items from the snapshot and changes no section.
+  - `apply` prints the applied section keys. The line after `apply` prints `undo planned: <ids>`: each id in the patch's `remove_planned` list that the snapshot holds. It reads the snapshot, not the output of `apply`, so a second run prints the same ids, although `apply` removes nothing then. Read the keys and the ids from the output of the call. A shell variable does not outlive the call.
+  - If `apply` printed a section key or the call printed an `undo planned:` line, set the undo of the `contract write-back` target to the undo command: `bash '<scripts>/contract-edit.sh' apply '<contract_file>' '<task folder>/contract.writeback.before.yaml' --sections '<applied keys, joined by commas>' --planned '<removed ids, joined by commas>'`. Do this in `report.md` of that task. Put each value in single quotes, as in the block. The removed ids are the ids of the `undo planned:` line. If the call printed no `undo planned:` line, leave out the `--planned` flag and its value. If `apply` printed no section key, leave out the `--sections` flag and its value. With `--planned` alone, `apply` restores only those plan items from the snapshot and changes no section.
 - `CLOSED`: the pull request did not merge. The contract text must not change. The decision files of the item's task get `status: withdrawn`. Run this in one Bash call. `<task>` is the `task` value of the item:
 
   ```bash

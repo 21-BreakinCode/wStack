@@ -8,7 +8,7 @@ Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontma
 
 Run this gate before "Write the spec". It keeps the service contract fresh. Its steps are G1 to G6, so they do not clash with the numbered steps below.
 
-G1. If `$task_dir/contract-brief.md` or `$task_dir/contract.gate-patch.yaml` exists, delete it. Then no older gate run leaves files behind. If `work_type` is not `code` or `ops`, skip the rest of the gate.
+G1. If `$task_dir/contract-brief.md` or `$task_dir/contract.gate-patch.yaml` exists, delete it. Then no older gate run leaves files behind. Keep `$task_dir/contract.before.yaml`, so the undo of step 9 still restores the text from before the first gate run. If `work_type` is not `code` or `ops`, skip the rest of the gate.
 G2. Run `bash "$scripts/contract-path.sh" --vault "$vault" "<repository folder>"`. Its output is `$contract_file`.
    - Exit 0: go on. If the file `$contract_file` does not exist, skip G3 and G4. Go to G5, where the check exits 3 at once.
    - Exit 1: write `Contract: not mapped` as a `step` line in `run-log.md`. Skip the rest of the gate and go on to "Write the spec".
@@ -29,7 +29,7 @@ The contract file changes in two places only: G4 applies the merged write-backs 
 2. Find the unclear parts.
    - For a rough idea, ask the user one question at a time. Send one question, then end the reply and wait. Ask until you can fill all eight sections.
    - For a written spec, ask only about the unclear parts, one question at a time. If nothing is unclear, go on.
-   - For a `contract` task, do these steps first. Propose `base_branch` from the branch that recent pull requests target, and ask the user to approve it. Run `git -C "<repository folder>" fetch origin "<base_branch>"`. If the fetch fails, tell the user the stderr text. Ask one question: fix the cause, or go on with the local ref `origin/<base_branch>`. End the reply and wait. List the files with `git -C "<repository folder>" ls-tree -r --name-only "origin/<base_branch>"`. If no listed file is a source file outside the team docs, the project is new. Then take each key under `sections:` in `${CLAUDE_PLUGIN_ROOT}/templates/contract.yaml` in turn. Skip `open_questions`, because it holds only what a later task finds. Ask the user one question at a time until the section has content. End the reply after each question and wait. Every `sources` glob is a planned path. Step 4 writes the answers under `## Contract changes`. If the project has such files, it exists. Then ask no section question. List the team docs and the code areas to read under `## Contract changes`, and Execute absorbs the code, the team docs, and the vault docs.
+   - For a `contract` task, do these steps first. Propose `base_branch` from the branch that recent pull requests target, and ask the user to approve it. Run `git -C "<repository folder>" fetch origin "<base_branch>"`. If the fetch fails, tell the user the stderr text. Ask one question: fix the cause, or go on with the local ref `origin/<base_branch>`. End the reply and wait. List the files with `git -C "<repository folder>" ls-tree -r --name-only "origin/<base_branch>"`. If no listed file is a source file outside the team docs, the project is new. Then take each key under `sections:` in `${CLAUDE_PLUGIN_ROOT}/templates/contract.yaml` in turn. Skip `open_questions`, because it holds only what a later task finds. Ask the user one question at a time until you know what the section will hold and which paths it will use. End the reply after each question and wait. Every `sources` glob is a planned path. Execute writes each answer as a plan item under `planned`, and the globs as the `sources` of the section. Step 4 writes the answers under `## Contract changes`. If the project has such files, it exists. Then ask no section question. List the team docs and the code areas to read under `## Contract changes`, and Execute absorbs the code, the team docs, and the vault docs.
 3. If the answers change `work_type`, fix it in the frontmatter. Then run "Contract gate" again from G1, and go back to step 1.
 4. If `approved_at` is set, set it to empty first: `bash "$scripts/frontmatter-set.sh" "$task_dir/spec.md" approved_at ""`. A changed spec needs a new approval. Then write the body of `spec.md` with these eight headings. Each one has content.
    - `## Goal`: what the result must do.
@@ -40,7 +40,7 @@ The contract file changes in two places only: G4 applies the merged write-backs 
      2. `claim review`: the reviewer judges whether each ref shows its claim. Pass: no blocking finding. Evidence: `## Findings` in `review.md`.
    - `## Non-undoable steps`: every step that needs the user's approval. If there is none, write `None`.
    - `## Deliver targets`: where the result goes, for example `new Obsidian note` or `open a pull request`. For a `contract` task, write `write the contract files`.
-   - `## Contract changes`: the planned contract changes, or `None`. For a new `contract` project, write one line for each section: `<section>: <content>; sources: <planned globs>`. For an existing `contract` project, list the team docs and the code areas to read. A `contract` task never writes `None` here.
+   - `## Contract changes`: the planned contract changes, or `None`. For a new `contract` project, write one line for each section: `<section>: <content>; sources: <planned globs>`. Leave out `; sources:` for `consumers` and `gotchas`, which have no `sources`. For an existing `contract` project, list the team docs and the code areas to read. A `contract` task never writes `None` here.
    - `## Decisions`: each choice between named options, with the options and the reason, or `None`.
 
 Status stays `drafting` until the page exists.
@@ -62,7 +62,7 @@ If the user asks for changes, go back to step 4, then run steps 5 to 8 again.
 ## After approval
 
 9. If `$task_dir/contract-brief.md` does not exist, the task has no contract. Set `approved_at` to the current UTC time, `date -u +%Y-%m-%dT%H:%M:%SZ`, and go to step 10. Otherwise, update the contract first. Run this in one Bash call. Write the real path of `$scripts` from `SKILL.md` for `<scripts folder>`, and the real task folder for `<task folder>`. Put each value in single quotes, and write each `'` in it as `'\''`.
-   - If `contract.gate-patch.yaml` does not exist, skip the `contract.before.yaml` line and the `apply` line.
+   - If `contract.gate-patch.yaml` does not exist, skip the two lines that name `contract.before.yaml` and the `apply` line.
 
    ```bash
    set -e
@@ -76,19 +76,20 @@ If the user asks for changes, go back to step 4, then run steps 5 to 8 again.
    trap 'bash "$scripts/contract-edit.sh" unlock "$contract_file"' EXIT
    [ -f "$task_dir/contract.before.yaml" ] || cp "$contract_file" "$task_dir/contract.before.yaml"
    bash "$scripts/contract-edit.sh" apply "$contract_file" "$task_dir/contract.gate-patch.yaml"
+   yq -p yaml -o json '[.planned[]?.id]' "$task_dir/contract.before.yaml" | jq -r --argjson remove "$(yq -p yaml -o json '.remove_planned // []' "$task_dir/contract.gate-patch.yaml")" '$remove - ($remove - .) | select(length > 0) | "undo planned: " + join(",")'
    patched_keys='[]'; [ ! -f "$task_dir/contract.gate-patch.yaml" ] || patched_keys="$(yq -p yaml -o json '.sections // {} | keys' "$task_dir/contract.gate-patch.yaml")"
    still_stale="$(jq -rn --argjson stale "${stale_sections:-[]}" --argjson patched "$patched_keys" '$stale - $patched | .[]')"
    if [ -z "$still_stale" ]; then bash "$scripts/contract-edit.sh" set-verified "$contract_file" "$checked_commit"; else printf 'still stale:\n%s\n' "$still_stale"; fi
    ```
 
-   The snapshot `contract.before.yaml` is written once, so a second run keeps the text from before the gate. `apply` prints the applied section keys, then one `planned removed: <id>` line for each plan item that it removed.
+   The snapshot `contract.before.yaml` is written once, so a second run keeps the text from before the gate. `apply` prints the applied section keys. The line after `apply` prints `undo planned: <ids>`: each id in the patch's `remove_planned` list that the snapshot holds. It reads the snapshot, not the output of `apply`, so a second run prints the same ids, although `apply` removes nothing then.
    If each key in `stale_sections` is a key under `sections:` in the patch, `set-verified` runs. When the check exited 0, `stale_sections` is `[]`, so `set-verified` runs. If a stale section is not in the patch, the call prints `still stale:` and the keys, and `verified_commit` stays. Then tell the user which sections stay stale.
-   If `apply` printed a section key or a `planned removed:` line, write a `step` line in `run-log.md` with the undo. Join its commands with ` && `, in this order. Quote each value as in the block.
-   - The undo command: `bash '<scripts>/contract-edit.sh' apply '<contract_file>' '<task folder>/contract.before.yaml' --sections '<applied keys, joined by commas>' --planned '<removed ids, joined by commas>'`. If `apply` printed no `planned removed:` line, leave out the `--planned` flag and its value. If `apply` printed no section key, leave out the `--sections` flag and its value. With `--planned` alone, `apply` restores only those plan items and changes no section.
+   If `apply` printed a section key or the call printed an `undo planned:` line, write a `step` line in `run-log.md` with the undo. Join its commands with ` && `, in this order. Quote each value as in the block.
+   - The undo command: `bash '<scripts>/contract-edit.sh' apply '<contract_file>' '<task folder>/contract.before.yaml' --sections '<applied keys, joined by commas>' --planned '<removed ids, joined by commas>'`. The removed ids are the ids of the `undo planned:` line. If the call printed no `undo planned:` line, leave out the `--planned` flag and its value. If `apply` printed no section key, leave out the `--sections` flag and its value. With `--planned` alone, `apply` restores only those plan items and changes no section.
    - If the call did not print `still stale:`, add the commit command: `bash '<scripts>/contract-edit.sh' set-verified '<contract_file>' '<verified_commit>'`. `<verified_commit>` is the output of `yq '.verified_commit' '<task folder>/contract.before.yaml'`. Without this command, the undo leaves `verified_commit` at `checked_commit`, and the check calls the contract fresh.
 
    Exit 4 means the lock is busy. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the stderr text of `lock` as the reason. Set `status` to `waiting-user` and stop.
-   Any other non-zero exit means a command failed after the lock. The trap already ran `unlock`. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the stderr text of that command as the reason. Set `status` to `waiting-user` and stop. Do not set `approved_at`.
+   Any other non-zero exit means a command failed after the lock. The trap already ran `unlock`. Write a `stop` line in `run-log.md`. Append a stop item with `"stage":"confirmation"` and the stderr text of that command as the reason. If the failed command is `apply`, the validator or the key check refused the patch, and the contract is unchanged. Then the reason is `contract gate: patch refused: <stderr text of apply>`, so "After a stop" runs the gate again from G1 and the reader writes a new patch. Set `status` to `waiting-user` and stop. Do not set `approved_at`.
 
    Then set `approved_at` to the current UTC time: `date -u +%Y-%m-%dT%H:%M:%SZ`.
 10. List the tools the verification plan needs from this set: `web`, `diagram`, `video`, `webp`, `terminal`, `r2`. If the list is not empty, run `bash "$scripts/preflight.sh" plan <needs>`.
