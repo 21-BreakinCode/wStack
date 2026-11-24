@@ -14,7 +14,7 @@
 - **change:** The reader's patch is YAML with a `sections:` map. The task files are `contract.draft.yaml`, `contract.before.yaml`, `contract.gate-patch.yaml`, and `contract.patch.yaml`.
 - **change:** `yq` version 4 (mikefarah) is a new required tool. `scripts/preflight.sh` checks it.
 - **fix:** A rebuild keeps `<app_name>.facts.md` in place. Before, the archive step moved it into `_archive/`.
-- **change:** Migration: rebuild each existing contract with a `contract` task. Deliver archives the old Markdown files in `_archive/<task_id>/`.
+- **breaking:** Migration: rebuild each existing contract with a `contract` task. Deliver archives the old Markdown files in `_archive/<task_id>/`.
 
 ## 0.7.0 - 2026-11-23
 

@@ -50,7 +50,7 @@ clone_for() {  # <owner/repo>: print the local clone path, or nothing
     [ -n "$mapped_repo_path" ] || continue
     mapped_repo_path="$(expand_home "$mapped_repo_path")"
     remote_url="$(git -C "$mapped_repo_path" remote get-url origin 2>/dev/null)" || continue
-    case "$remote_url" in *"$slug" | *"$slug.git") echo "$mapped_repo_path"; return ;; esac
+    case "$remote_url" in *[/:]"$slug" | *[/:]"$slug.git") echo "$mapped_repo_path"; return ;; esac
   done <<<"$mapping_rows"
   if [ -n "$workspace_root" ] && [ -d "$workspace_root/${slug#*/}/.git" ]; then echo "$workspace_root/${slug#*/}"; fi
 }

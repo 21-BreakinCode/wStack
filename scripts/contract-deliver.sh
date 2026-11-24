@@ -6,7 +6,7 @@
 #             Prints one line per file: new:, replaced: (old copy: ...), moved: ... -> ..., unchanged:.
 #             Exit 0 done, 4 lock busy, 1 a decision id clash or a failed step.
 #   undo      Delete the contract, the note, the HTML page, and the copied decisions; move the archive back.
-#             A restored old contract is not rendered again. Exit 0 or 1.
+#             A restored old contract is not rendered again: undo prints "rebuild the page: <command>". Exit 0 or 1.
 #   rehearse  Run write and undo on copies in a temp folder with a temp HOME, then diff -r against a clean copy.
 #             Prints the diff. Exit 0 empty diff, 1 a diff or a failed run.
 set -euo pipefail
@@ -105,7 +105,9 @@ case "$action" in
     done
     rm -f "$archive_dir/.archived"
     rmdir "$archive_dir" || fail "files are left in $archive_dir"
-    for empty_folder in "$contract_folder/_archive" "$contract_folder/decisions"; do rmdir "$empty_folder" 2>/dev/null || true; done ;;
+    for empty_folder in "$contract_folder/_archive" "$contract_folder/decisions"; do rmdir "$empty_folder" 2>/dev/null || true; done
+    # No render here: a page under the real HOME would make the rehearsal diff differ.
+    [ ! -f "$contract_file" ] || echo "rebuild the page: bash '$scripts/contract-render.sh' '$contract_file'" ;;
 
   rehearse)
     rehearsal_dir="$(mktemp -d)"
@@ -114,6 +116,7 @@ case "$action" in
       mkdir -p "$rehearsal_dir/$copy"
       if [ -d "$contract_folder" ]; then cp -R "$contract_folder" "$rehearsal_dir/$copy/contract"; else mkdir "$rehearsal_dir/$copy/contract"; fi
       cp -R "$task_dir" "$rehearsal_dir/$copy/task"
+      rm -rf "$rehearsal_dir/$copy/contract"/*.lock  # a lock held on the real contract would make write wait and fail
     done
     mkdir "$rehearsal_dir/home"
     for step in write undo; do

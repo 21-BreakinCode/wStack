@@ -80,4 +80,11 @@ echo "| other | $(dirname "$REPO")/renamed-folder | Services/other |" >> "$ORG_D
 set_refs "acme-org/other@$other_commit:x.txt:1"; run
 assert "Service Mapping remote match finds a clone with another folder name" '[ $rc = 0 ] && [ "$out" = "refs: 1 checked, 0 bad, 0 unchecked" ]'
 
+new_world; add_other_clone
+git -C "$other" remote set-url origin git@github.com:xacme-org/other.git
+mv "$other" "$(dirname "$REPO")/longer-name"
+echo "| other | $(dirname "$REPO")/longer-name | Services/other |" >> "$ORG_DIR/handover_handler__initiation.md"
+set_refs "acme-org/other@$other_commit:x.txt:1"; run
+assert "a remote of xacme-org/other is not a clone of acme-org/other ($out)" '[ $rc = 0 ] && printf "%s\n" "$out" | grep -q "^unchecked: acme-org/other@" && printf "%s\n" "$out" | grep -q "0 checked, 0 bad, 1 unchecked"'
+
 finish

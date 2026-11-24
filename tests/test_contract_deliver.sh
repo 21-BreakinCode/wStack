@@ -65,7 +65,13 @@ run "$deliver" write "$task" "$CONTRACT" "$task_id"; write_rc=$rc
 [ -f "$page" ] && page_after_write=yes || page_after_write=no
 run "$deliver" undo "$task" "$CONTRACT" "$task_id"
 assert "undo restores the folder ($out)" '[ $write_rc = 0 ] && [ $rc = 0 ] && same_as_copy'
+assert "undo of a rebuild names the render command for the restored contract" 'has_line "rebuild the page: bash '"'"'$repo_root/scripts/contract-render.sh'"'"' '"'"'$CONTRACT'"'"'"'
 assert "undo removes the html page" '[ $page_after_write = yes ] && [ ! -e "$page" ]'
+
+new_world; rm -rf "$folder"
+run "$deliver" write "$task" "$CONTRACT" "$task_id"; write_rc=$rc
+run "$deliver" undo "$task" "$CONTRACT" "$task_id"
+assert "undo of a new contract names no render command ($out)" '[ $write_rc = 0 ] && [ $rc = 0 ] && ! printf "%s\n" "$out" | grep -qF "rebuild the page:"'
 
 new_world; keep_copy
 run "$deliver" undo "$task" "$CONTRACT" "$task_id"
@@ -85,6 +91,11 @@ assert "undo with a name clash changes nothing, and a second undo restores the f
 new_world; echo '# old plan' >"$folder/plan.md"; keep_copy
 run "$deliver" rehearse "$task" "$CONTRACT" "$task_id"
 assert "rehearse exits 0 and leaves the real folders unchanged ($out)" '[ $rc = 0 ] && same_as_copy && [ ! -e "$page" ]'
+
+new_world; mkdir "$CONTRACT.lock"; keep_copy
+run "$deliver" rehearse "$task" "$CONTRACT" "$task_id"
+assert "rehearse exits 0 while a lock is held on the real contract, and the lock stays ($out)" '[ $rc = 0 ] && same_as_copy && [ -d "$CONTRACT.lock" ]'
+rmdir "$CONTRACT.lock"
 
 new_world; evidence="$work_dir/evidence $case_count"
 run "$verify_draft" "$REPO" "$task" "$CONTRACT" "$task_id" "$evidence"

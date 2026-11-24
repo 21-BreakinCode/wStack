@@ -233,7 +233,7 @@ A task with a contract adds these files. Section 7.2 describes the gate.
 
 Each copy is written once. The write-back has its own copies, so its undo keeps the gate change.
 
-A `contract` task adds `contract.draft.yaml` (plan items sit in its `planned` list), `disagreements.md`, and `decisions.draft/`. Execute writes them. `disagreements.md` lists each place where a doc and the code disagree, and Deliver copies it into the report. Deliver copies the draft and the decision files into the vault with `contract-deliver.sh`. The script writes `contract-files.txt`, one line for each file, so Finish builds the file tree from it.
+A `contract` task adds `contract.draft.yaml` (plan items sit in its `planned` list), `disagreements.md`, and `decisions.draft/`. Execute writes them. `disagreements.md` lists each place where a doc and the code disagree, and Deliver copies it into the report. Deliver copies the draft and the decision files into the vault with `contract-deliver.sh`. The script prints one line for each file. The Deliver step saves that output in `contract-files.txt`, so Finish builds the file tree from it.
 
 Each agent reads the files from the steps before it. `/wstack:run-retro` reads every finished task folder that no retro read yet.
 
@@ -465,7 +465,7 @@ The list is not complete. The worker agent picks the closest type. If no type fi
 | thinking | research, analysis, learning input and output | answers the spec question, every claim has a source, guesses are marked | delete the new note |
 | blog | blog posts | facts, tone, and links checked | delete the draft |
 | video | video editing | cuts, audio, length, plays correctly | delete the rendered file |
-| contract | set up or rebuild the service contract of a mapped repository | each ref in `contract.draft.yaml` exists at `origin/<base_branch>`, the validator and the coverage check pass, and each section of a new project has content | `contract-deliver.sh undo`: delete the new contract, its note and page, and the copied decision files, then restore the files from `_archive/<task_id>/` |
+| contract | set up or rebuild the service contract of a mapped repository | each ref in `contract.draft.yaml` exists at `origin/<base_branch>`, and the validator and the coverage check pass. In a new project, each answer is a plan item | `contract-deliver.sh undo`: delete the new contract, its note and page, and the copied decision files, then restore the files from `_archive/<task_id>/` |
 
 ### 9.1 Thinking work (confirmed)
 
