@@ -24,7 +24,9 @@ mk_task 2026-11-25-open executing ""
 mk_task 2026-11-20-cancelled cancelled ""
 mkdir -p "$mark_vault/Tasks/_archive/2026-11-01-old"
 mk_task _archive/2026-11-01-old delivered ""
-printf -- '---\ncontract_file: %s/Services/app/app.md\n---\n' "$mark_vault" > "$mark_vault/Tasks/2026-11-10-long/contract-brief.md"
+printf -- '---\ncontract_file: %s/Services/app/app.contract.yaml\n---\n' "$mark_vault" > "$mark_vault/Tasks/2026-11-10-long/contract-brief.md"
+mkdir -p "$mark_vault/Tasks/2026-11-20-cancelled"
+printf -- '---\ncontract_file: %s/Services/old/old.md\n---\n' "$mark_vault" > "$mark_vault/Tasks/2026-11-20-cancelled/contract-brief.md"
 mark_out="$(bash "$script" --vault "$mark_vault" --tasks-dir Tasks --today 2026-11-30)"
 assert "finished task 20 days old is read" 'jq -e ".[] | select(.task_id==\"2026-11-10-long\") | .state==\"finished\"" <<<"$mark_out" >/dev/null'
 assert "task with retro_read is skipped" '! jq -e ".[] | select(.task_id==\"2026-11-28-read\")" <<<"$mark_out" >/dev/null'
@@ -33,6 +35,7 @@ assert "cancelled task is finished" 'jq -e ".[] | select(.task_id==\"2026-11-20-
 assert "finished task carries age_days" 'jq -e ".[] | select(.task_id==\"2026-11-10-long\") | .age_days==20" <<<"$mark_out" >/dev/null'
 assert "archive is never read" '! jq -e ".[] | select(.task_id==\"2026-11-01-old\")" <<<"$mark_out" >/dev/null'
 assert "facts_file comes from contract-brief.md" 'jq -e ".[] | select(.task_id==\"2026-11-10-long\") | .facts_file==\"$mark_vault/Services/app/app.facts.md\"" <<<"$mark_out" >/dev/null'
+assert "an old .md contract_file still gives its facts_file" 'jq -e ".[] | select(.task_id==\"2026-11-20-cancelled\") | .facts_file==\"$mark_vault/Services/old/old.facts.md\"" <<<"$mark_out" >/dev/null'
 assert "no contract-brief.md gives null" 'jq -e ".[] | select(.task_id==\"2026-11-25-open\") | .facts_file==null" <<<"$mark_out" >/dev/null'
 assert "--days is gone" '! bash "$script" --vault "$mark_vault" --tasks-dir Tasks --days 7 2>/dev/null'
 

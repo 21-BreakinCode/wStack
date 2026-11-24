@@ -42,7 +42,9 @@ for folder in "$vault/$tasks_dir"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*/;
   age_days="$(( (today_epoch - $(day_epoch "$task_date")) / 86400 ))"
   facts_file=null
   contract_file="$(fm_get "$folder/contract-brief.md" contract_file 2>/dev/null || true)"
-  [ -z "$contract_file" ] || facts_file="$(jq -n --arg file "${contract_file%.md}.facts.md" '$file')"
+  contract_stem="${contract_file%.contract.yaml}"
+  contract_stem="${contract_stem%.md}"  # task folders from before the YAML contract name <app>.md
+  [ -z "$contract_file" ] || facts_file="$(jq -n --arg file "$contract_stem.facts.md" '$file')"
   has_retro_note=false
   [ -f "$folder/retro-note.md" ] && has_retro_note=true
   transcript_stats=null

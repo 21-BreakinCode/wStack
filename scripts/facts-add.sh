@@ -14,7 +14,7 @@ for value in "$evidence" "$text"; do
   case "$value" in *$'\n'*) echo "facts-add.sh: a value holds a newline" >&2; exit 1 ;; esac
 done
 
-contract_file="${facts_file%.facts.md}.md"
+contract_file="${facts_file%.facts.md}.contract.yaml"
 service="$(basename "$facts_file" .facts.md)"
 lock_status=0
 bash "$plugin_root/scripts/contract-edit.sh" lock "$contract_file" || lock_status=$?

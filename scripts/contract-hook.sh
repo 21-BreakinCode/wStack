@@ -25,7 +25,7 @@ set -e
 [ "$check_rc" -eq 1 ] || exit 0
 
 field() { printf '%s\n' "$report" | sed -n "s/^$1: //p"; }
-app_name="$(basename "$contract" .md)"
+app_name="$(basename "$contract" .contract.yaml)"
 sections="$(field stale_sections | jq -r 'join(", ")')" || exit 0
 unclaimed_count="$(field unclaimed_count)"
 detail=""

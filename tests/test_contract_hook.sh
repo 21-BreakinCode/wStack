@@ -24,14 +24,15 @@ out="$(hook SessionStart "$REPO" "")"
 context="$(printf '%s' "$out" | jq -r .hookSpecificOutput.additionalContext)"
 assert "session start, stale: one line" '[ "$(printf "%s\n" "$out" | wc -l | tr -d " ")" = 1 ]'
 assert "session start, stale: behind" '[[ "$context" == *"1 commits behind origin/main"* ]]'
-assert "session start, stale: section" '[[ "$context" == *"Stale: Interfaces"* ]]'
+assert "session start, stale: section" '[[ "$context" == *"Stale: interfaces"* ]]'
+assert "session start, stale: app name from the YAML file name" '[[ "$context" == "wStack: svc contract is "* ]]'
 
 out="$(hook PostToolUse "$REPO" "git pull --ff-only")"
 assert "after git pull" '[ "$(printf "%s" "$out" | jq -r .hookSpecificOutput.hookEventName)" = PostToolUse ] && [ "$(printf "%s\n" "$out" | wc -l | tr -d " ")" = 1 ]'
 
 for compound in "git pull;ls" "ls && git pull" "git -C $REPO pull" "git -c x=y rebase main|cat" "gh pr checkout 5" "/usr/bin/git pull" "/opt/homebrew/bin/git -C $REPO merge x"; do
   out="$(hook PostToolUse "$REPO" "$compound")"
-  assert "A1-12 matches: $compound" '[[ "$out" == *"Stale: Interfaces"* ]]'
+  assert "A1-12 matches: $compound" '[[ "$out" == *"Stale: interfaces"* ]]'
 done
 out="$(hook PostToolUse "$REPO" "git pullx")"
 assert "A1-12 git pullx does not match" '[ -z "$out" ]'
@@ -62,7 +63,7 @@ out="$(hook SessionStart "$REPO" "")"
 assert "no vault: no output" '[ -z "$out" ]'
 
 out="$(CLAUDE_PLUGIN_OPTION_VAULT_PATH="$VAULT" hook SessionStart "$REPO" "")"
-assert "plugin option: one line" '[[ "$out" == *"Stale: Interfaces"* ]]'
+assert "plugin option: one line" '[[ "$out" == *"Stale: interfaces"* ]]'
 
 source "$(bash "$repo_root/tests/fixtures/contract/setup.sh" "$work_dir/world2")"
 echo x > "$REPO/README.md"

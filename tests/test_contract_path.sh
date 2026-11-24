@@ -10,6 +10,7 @@ source "$(bash "$repo_root/tests/fixtures/contract/setup.sh" "$work_dir/world")"
 
 out="$(bash "$script" --vault "$VAULT" "$REPO")"
 assert "repo maps to the contract" '[ "$out" = "$CONTRACT" ]'
+assert "prints the .contract.yaml path" '[ "$out" = "$VAULT/01Project/Acme/Services/svc/svc.contract.yaml" ]'
 
 worktree="$work_dir/world/.herdr/worktrees/svc/feat"
 git -C "$REPO" worktree add -q -b feat "$worktree"

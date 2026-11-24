@@ -54,7 +54,7 @@ while IFS='|' read -r app_name repo_path lifeos_subpath <&3; do
         continue
     fi
     handover_folder="$vault/01Project/$org/$lifeos_subpath/handover"
-    contract_file="$vault/01Project/$org/$lifeos_subpath/$app_name.md"
+    contract_file="$vault/01Project/$org/$lifeos_subpath/$app_name.contract.yaml"
     vault_state=missing
     [ -d "$handover_folder" ] && vault_state=ok
     notes=""

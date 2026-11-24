@@ -11,7 +11,7 @@ ORIGIN="$dir/origin.git"
 REPO="$dir/ws/svc"
 VAULT="$dir/vault"
 ORG_DIR="$VAULT/01Project/Acme"
-CONTRACT="$ORG_DIR/Services/svc/svc.md"
+CONTRACT="$ORG_DIR/Services/svc/svc.contract.yaml"
 
 git init -q --bare -b main "$ORIGIN"
 mkdir -p "$dir/ws"
@@ -45,29 +45,34 @@ tags: [type/config]
 | svc | $REPO | Services/svc |
 INIT
 cat > "$CONTRACT" <<DOC
----
 app_name: svc
 repo: acme-org/svc
 base_branch: main
-verified_commit: $FIRST_COMMIT
-verified_at: 2026-11-21T10:00:00Z
+verified_commit: "$FIRST_COMMIT"
+verified_at: "2026-11-21T10:00:00Z"
 pending: []
 ignore: ["tests/**"]
-tags: ["type/contract"]
----
-
-# svc contract
-
-## Team docs
-- @docs/PRD.md
-
-## Abilities
-<!-- sources: cmd/** -->
-
-## Interfaces
-<!-- sources: api/** -->
-
-## Depends on
+tags: [type/contract]
+summary: Test service.
+sections:
+  team_docs:
+    sources: [docs/PRD.md]
+  abilities:
+    sources: [cmd/**]
+    items: []
+  interfaces:
+    sources: [api/**]
+    items: []
+  depends_on:
+    sources: []
+    items: []
+  consumers:
+    items: []
+  gotchas:
+    items: []
+  open_questions:
+    items: []
+planned: []
 DOC
 
 out="$dir/world.env"

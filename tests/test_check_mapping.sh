@@ -46,10 +46,10 @@ ln -s "$ws/elsewhere" "$ws/other repo/handover"
 make_repo "$ws/real dir"; mkdir -p "$ws/real dir/handover/notes"
 mkdir -p "$ws/plain"
 mkdir -p "$ORG_DIR/Services/realdir"
-printf -- '---\nbase_branch: main\n---\n' > "$ORG_DIR/Services/realdir/realdir.md"
+printf 'base_branch: main\n' > "$ORG_DIR/Services/realdir/realdir.contract.yaml"
 make_repo "$ws/no vault"; echo /handover > "$ws/no vault/.gitignore"
 ln -s "$ORG_DIR/Services/novault/handover" "$ws/no vault/handover"
-mkdir -p "$ORG_DIR/Services/example-service"; touch "$ORG_DIR/Services/example-service/ExampleService.md"
+mkdir -p "$ORG_DIR/Services/example-service"; touch "$ORG_DIR/Services/example-service/ExampleService.contract.yaml"
 cat >> "$init" <<ROWS
 | spaced | \$HOME/ws/sp repo | Services/spaced |
 | other | $ws/other repo | Services/other |
@@ -64,7 +64,7 @@ run "$VAULT" Acme
 assert "a \$HOME path, a link spelled with a trailing slash, and a gitignore rule are ok" '[ "$(col spaced 1)" = ok ] && [ "$(col spaced 3)" = "$ws/sp repo" ] && [ "$(col spaced 5)" = ok ] && [ "$(col spaced 6)" = ok ] && [ "$(col spaced 8)" = missing ]'
 assert "a link to another folder needs init and names its target" '[ "$(col other 1)" = fix ] && [ "$(col other 5)" = "wrong: -> $ws/elsewhere" ]'
 assert "a real handover folder is not a link" '[ "$(col realdir 1)" = fix ] && [ "$(col realdir 5)" = "not a link" ]'
-assert "a contract that contract-check rejects reads error with its message" '[ "$(col realdir 8)" = "error: contract-check.sh: contract has no verified_commit: $ORG_DIR/Services/realdir/realdir.md" ]'
+assert "a contract that contract-check rejects reads error with its message" '[ "$(col realdir 8)" = "error: contract-check.sh: contract has no verified_commit: $ORG_DIR/Services/realdir/realdir.contract.yaml" ]'
 assert "a correct link to a missing vault folder needs init for the vault folder only" '[ "$(col novault 1)" = fix ] && [ "$(col novault 5)" = ok ] && [ "$(col novault 6)" = ok ] && [ "$(col novault 7)" = missing ]'
 assert "a row with no lifeos_subpath is broken" '[ "$(col nosubpath 1)" = broken ] && [ "$(col nosubpath 9)" = "row has no lifeos_subpath" ]'
 assert "a missing repo path is broken and its checks are skipped" '[ "$(col gone 1)" = broken ] && [ "$(col gone 4)" = missing ] && [ "$(col gone 5)" = - ] && [ "$(col gone 6)" = - ]'
