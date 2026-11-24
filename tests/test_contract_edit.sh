@@ -120,6 +120,8 @@ run_edit remove-planned "$CONTRACT" no-such-id
 assert "remove-planned missing id exits 1" "[ $rc -eq 1 ] && [ \"\$(cksum <'$CONTRACT')\" = '$before' ]"
 run_edit remove-planned "$CONTRACT" docs-refresh
 assert "remove-planned removes the item" "[ $rc -eq 0 ] && [ \"\$(query '$CONTRACT' '.planned | length')\" = 1 ]"
+run_edit remove-planned "$CONTRACT" video-ack-after-commit
+assert "remove-planned on an item a gotcha links exits 0 and keeps the link" "[ $rc -eq 0 ] && [ \"\$(query '$CONTRACT' '.planned | length')\" = 0 ] && [ \"\$(query '$CONTRACT' '.sections.gotchas.items[0].planned')\" = video-ack-after-commit ]"
 run_edit delete-section "$CONTRACT" abilities
 assert "delete-section is gone" "[ $rc -eq 2 ]"
 

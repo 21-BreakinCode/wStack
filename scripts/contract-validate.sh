@@ -50,8 +50,11 @@ findings="$(printf '%s' "$contract_json" | jq -r '
              | select((type == "string" and valid_ref) | not) | "E bad ref form: \($where): \(.)"),
            (if ($item | has("mapped_commit")) and (($item.mapped_commit | type) != "string" or ($item.mapped_commit | test("^[0-9a-f]{4,64}$") | not))
             then "E mapped_commit must be a quoted hex string: \($where)" else empty end),
-           (if ($item | has("planned")) and (($item.planned | type) != "string" or ($planned_ids | index($item.planned) | not))
-            then "E planned link to a missing id: \($where): \($item.planned)" else empty end),
+           (if ($item | has("planned")) | not then empty
+            elif ($item.planned | type) != "string" or ($item.planned | test("^[a-z0-9]+(-[a-z0-9]+)*$") | not)
+            then "E planned link must be a kebab-case id: \($where): \($item.planned)"
+            elif ($planned_ids | index($item.planned) | not)
+            then "W warning: \($where) links missing plan item \($item.planned)" else empty end),
            (if ($item.text | type) == "string" and ($item.text | word_count) > 25
             then "W warning: \($where) has \($item.text | word_count) words" else empty end))
      end),

@@ -84,7 +84,13 @@ mutate badid '.planned[0].id = "Video_Ack"'; run_case "$work_dir/badid.yaml"
 assert "planned id not kebab case exits 1" '[ "$rc" = "1" ] && echo "$err" | grep -q "Video_Ack"'
 
 mutate badlink '.sections.gotchas.items[0].planned = "no-such-id"'; run_case "$work_dir/badlink.yaml"
-assert "gotcha planned link to a missing id exits 1" '[ "$rc" = "1" ] && echo "$err" | grep -q "no-such-id"'
+assert "gotcha planned link to a missing id exits 0 with a warning" '[ "$rc" = "0" ] && echo "$err" | grep -qx "warning: gotchas\[0\] links missing plan item no-such-id"'
+
+mutate badlinkcase '.sections.gotchas.items[0].planned = "No_Such"'; run_case "$work_dir/badlinkcase.yaml"
+assert "gotcha planned link not kebab case exits 1" '[ "$rc" = "1" ] && echo "$err" | grep -q "No_Such"'
+
+mutate badlinktype '.sections.gotchas.items[0].planned = 5'; run_case "$work_dir/badlinktype.yaml"
+assert "gotcha planned link not a string exits 1" '[ "$rc" = "1" ] && echo "$err" | grep -q "gotchas\[0\]"'
 
 sed 's/^verified_commit: .*/verified_commit: 1234567/' "$valid" > "$work_dir/numeric.yaml"; run_case "$work_dir/numeric.yaml"
 assert "numeric verified_commit exits 1" '[ "$rc" = "1" ] && echo "$err" | grep -q verified_commit'
