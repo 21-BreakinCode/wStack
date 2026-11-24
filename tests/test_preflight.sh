@@ -22,6 +22,7 @@ fresh_bin() {  # system utilities the script needs, plus stubs for every tool
   make_stub gh 'echo "gh version 2.104.0 (2026-01-01)"'
   make_stub node 'echo "v26.13.1"'
   make_stub claude 'if [ "$1" = "plugin" ]; then echo "answer-me-with-html@answer-me-with-html  enabled"; else echo "2.1.327 (Claude Code)"; fi'
+  make_stub yq 'echo "yq (https://github.com/mikefarah/yq/) version v4.54.3"'
   make_stub herdr 'echo "herdr 0.5.0"'
   make_stub playwright-cli 'if [ "$1" = "install-browser" ]; then printf "FFmpeg (playwright ffmpeg v1013)\n  Install location:    %s\n  Download url:        https://example.invalid/x.zip\n" "$FAKE_FFMPEG_DIR"; else echo "0.1.24"; fi'
   make_stub ffmpeg 'if [ "$1" = "-encoders" ]; then echo " V....D libx264"; echo " V....D libx265"; else echo "ffmpeg version 7.1"; fi'
@@ -40,6 +41,15 @@ fresh_bin
 run_preflight base
 assert "base all present exits 0" '[ "$rc" = "0" ]'
 assert "base prints OK gh" 'echo "$output" | grep -q "^OK gh 2.104.0"'
+
+fresh_bin; make_stub yq 'echo "yq 3.4.1"'
+run_preflight base
+assert "python yq exits 1" '[ "$rc" = "1" ]'
+assert "python yq line" 'echo "$output" | grep -qx "MISSING yq: brew install yq"'
+
+fresh_bin; rm "$stub_bin/yq"
+run_preflight base
+assert "missing yq line" 'echo "$output" | grep -qx "MISSING yq: brew install yq"'
 
 fresh_bin; rm "$stub_bin/jq"
 run_preflight base

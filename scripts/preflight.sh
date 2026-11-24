@@ -50,11 +50,22 @@ node_accepted_by_cf() {
 
 check_playwright_cli() { check playwright-cli 'playwright-cli --version' '' 'npm i -g @playwright/cli@0.1.24'; }
 
+check_yq() {
+  local yq_version
+  command -v yq >/dev/null 2>&1 || { missing yq 'brew install yq'; return; }
+  yq_version="$(yq --version 2>&1 || true)"
+  case "$yq_version" in
+    *mikefarah*" v4."*) echo "OK yq $(printf '%s\n' "$yq_version" | first_version)" ;;
+    *) missing yq 'brew install yq' ;;  # the contract needs mikefarah yq v4, not the Python yq
+  esac
+}
+
 check_base() {
   check git 'git --version' '' 'xcode-select --install'
   check gh 'gh --version' 2.99.0 'brew upgrade gh'
   check node 'node --version' '' 'mise use -g node@26'
   check jq 'jq --version' '' 'brew install jq'
+  check_yq
   check claude 'claude --version' 2.1.51 'claude update'
   check_playwright_cli  # every spec render checks the page width with it
   local plugin_install='claude plugin marketplace add QingYunA/answer-me-with-html && claude plugin install answer-me-with-html@answer-me-with-html'

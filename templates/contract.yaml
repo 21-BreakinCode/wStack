@@ -1,0 +1,28 @@
+app_name: {{app_name}}
+repo: {{repo}}
+base_branch: {{base_branch}}
+verified_commit: ""
+verified_at: ""
+pending: []
+ignore: []
+tags: [type/contract, "project/{{org_kebab}}/{{app_name}}"]
+summary: ""
+sections:
+  team_docs:
+    sources: []
+  abilities:
+    sources: []
+    items: []
+  interfaces:
+    sources: []
+    items: []
+  depends_on:
+    sources: []
+    items: []
+  consumers:
+    items: []
+  gotchas:
+    items: []
+  open_questions:
+    items: []
+planned: []
