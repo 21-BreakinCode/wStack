@@ -218,14 +218,15 @@ For each item, run `gh pr view <pr> --json state -q .state` in the repository fo
   task_folder='<task folder>'
   bash "$scripts/contract-edit.sh" lock "$contract_file"
   trap 'bash "$scripts/contract-edit.sh" unlock "$contract_file"' EXIT
-  [ -f "$task_folder/contract.writeback.before.yaml" ] || cp "$contract_file" "$task_folder/contract.writeback.before.yaml"
+  [ -f "$task_folder/contract.writeback.before.yaml" ] || cp "$contract_file" "$task_folder/contract.writeback.before.new.yaml"
   bash "$scripts/contract-edit.sh" apply "$contract_file" "$task_folder/contract.patch.yaml"
+  [ ! -f "$task_folder/contract.writeback.before.new.yaml" ] || mv "$task_folder/contract.writeback.before.new.yaml" "$task_folder/contract.writeback.before.yaml"
   yq -p yaml -o json '[.planned[]?.id]' "$task_folder/contract.writeback.before.yaml" | jq -r --argjson remove "$(yq -p yaml -o json '.remove_planned // []' "$task_folder/contract.patch.yaml")" '$remove - ($remove - .) | select(length > 0) | "undo planned: " + join(",")'
   bash "$scripts/contract-edit.sh" pending-remove "$contract_file" <pr>
   ```
 
-  - If `<task folder>/contract.patch.yaml` does not exist, skip the two lines that name `contract.writeback.before.yaml` and the `apply` line.
-  - The write-back has its own snapshot, `contract.writeback.before.yaml`, and it is written once. The gate's step 9 writes `contract.before.yaml`. An undo of the write-back keeps the gate's change and the changes of other tasks before the write-back.
+  - If `<task folder>/contract.patch.yaml` does not exist, skip the three lines that name `contract.writeback.before` and the `apply` line.
+  - The write-back has its own snapshot, `contract.writeback.before.yaml`, and it is written once, after `apply` succeeds. The gate's step 9 writes `contract.before.yaml`. An undo of the write-back keeps the gate's change and the changes of other tasks before the write-back.
   - `apply` prints the applied section keys. The line after `apply` prints `undo planned: <ids>`: each id in the patch's `remove_planned` list that the snapshot holds. It reads the snapshot, not the output of `apply`, so a second run prints the same ids, although `apply` removes nothing then. Read the keys and the ids from the output of the call. A shell variable does not outlive the call.
   - If `apply` printed a section key or the call printed an `undo planned:` line, set the undo of the `contract write-back` target to the undo command: `bash '<scripts>/contract-edit.sh' apply '<contract_file>' '<task folder>/contract.writeback.before.yaml' --sections '<applied keys, joined by commas>' --planned '<removed ids, joined by commas>'`. Do this in `report.md` of that task. Put each value in single quotes, as in the block. The removed ids are the ids of the `undo planned:` line. If the call printed no `undo planned:` line, leave out the `--planned` flag and its value. If `apply` printed no section key, leave out the `--sections` flag and its value. With `--planned` alone, `apply` restores only those plan items from the snapshot and changes no section.
 - `CLOSED`: the pull request did not merge. The contract text must not change. The decision files of the item's task get `status: withdrawn`. Run this in one Bash call. `<task>` is the `task` value of the item:

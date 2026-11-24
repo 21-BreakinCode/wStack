@@ -123,8 +123,9 @@ D6. After the answer to step 8, read the chosen sections and whether the user ch
    [ "$remove_plan_items" = yes ] || yq -i -p yaml -o yaml 'del(.remove_planned)' "$chosen_patch"
    bash "$scripts/contract-edit.sh" lock "$contract_file"
    trap 'bash "$scripts/contract-edit.sh" unlock "$contract_file"' EXIT
-   [ -f "$retro_dir/$retro_name.contract-before.yaml" ] || cp "$contract_file" "$retro_dir/$retro_name.contract-before.yaml"
+   [ -f "$retro_dir/$retro_name.contract-before.yaml" ] || cp "$contract_file" "$retro_dir/$retro_name.contract-before.new.yaml"
    bash "$scripts/contract-edit.sh" apply "$contract_file" "$chosen_patch"
+   [ ! -f "$retro_dir/$retro_name.contract-before.new.yaml" ] || mv "$retro_dir/$retro_name.contract-before.new.yaml" "$retro_dir/$retro_name.contract-before.yaml"
    yq -p yaml -o json '[.planned[]?.id]' "$retro_dir/$retro_name.contract-before.yaml" | jq -r --argjson remove "$(yq -p yaml -o json '.remove_planned // []' "$chosen_patch")" '$remove - ($remove - .) | select(length > 0) | "undo planned: " + join(",")'
    still_stale="$(jq -rn --argjson stale "${stale_sections:-[]}" --arg chosen "$chosen_sections" '$stale - ($chosen | split("\n")) | .[]')"
    if [ -z "$still_stale" ]; then bash "$scripts/contract-edit.sh" set-verified "$contract_file" "$checked_commit"; else printf 'still stale:\n%s\n' "$still_stale"; fi

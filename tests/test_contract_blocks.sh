@@ -182,6 +182,24 @@ for shell in $test_shells; do
   assert "$shell step 9 undo: verified_commit is back, so the drift shows again" '[ "$(yq .verified_commit "$CONTRACT")" = "$FIRST_COMMIT" ]'
   assert "$shell step 9 undo: interfaces is back" '[ "$(yq ".sections.interfaces.items | length" "$CONTRACT")" = 0 ] && ! grep -qF "answers 204" "$CONTRACT"'
 
+  echo "$shell: gate step 9 refused, a write-back lands, then accepted"
+  setup_world "gate-refused-$shell"
+  task="$VAULT/Tasks/task-a5"
+  write_brief "$task" '["interfaces"]'
+  printf 'sections:\n  interfaces:\n    items: []\n' >"$task/contract.gate-patch.yaml"
+  run_block "$(filled_block step9 "$task" "" 0)" "$shell"
+  assert "$shell step 9 refused: exit non-zero and no promoted snapshot" '[ "$rc" -ne 0 ] && [ ! -e "$task/contract.before.yaml" ]'
+  printf 'sections:\n  abilities:\n    sources: [cmd/**]\n    items:\n      - text: A merged write-back.\n        refs: [cmd/main.go:1]\n' >"$world_dir/writeback.yaml"
+  bash "$repo_root/scripts/contract-edit.sh" apply "$CONTRACT" "$world_dir/writeback.yaml" >/dev/null
+  cp "$CONTRACT" "$world_dir/contract.after-writeback"
+  write_gate_patch "$task" "GET /health answers 204."
+  run_block "$(filled_block step9 "$task" "" 0)" "$shell"
+  assert "$shell step 9 accepted: before copy is the contract after the write-back ($out)" '[ "$rc" = 0 ] && cmp -s "$task/contract.before.yaml" "$world_dir/contract.after-writeback" && [ ! -e "$task/contract.before.new.yaml" ]'
+  undo_refused="$(fill "$(code_after "$confirmation" 'The undo command:')" '<scripts>' "$repo_root/scripts" '<contract_file>' "$CONTRACT" \
+    '<task folder>' "$task" '<applied keys, joined by commas>' interfaces " --planned '<removed ids, joined by commas>'" '')"
+  run_block "$undo_refused" "$shell"
+  assert "$shell step 9 refused-then-accepted undo: the write-back text stays ($out)" '[ "$rc" = 0 ] && grep -qF "A merged write-back." "$CONTRACT" && ! grep -qF "answers 204" "$CONTRACT"'
+
   echo "$shell: gate step 9 with a plan-only patch"
   setup_world "gate-plan-$shell"; add_plan_items
   task="$VAULT/Tasks/task-a3"
@@ -200,7 +218,7 @@ for shell in $test_shells; do
   setup_world "gate-none-$shell"
   task="$VAULT/Tasks/task-a4"
   write_brief "$task" '["interfaces"]'
-  no_patch_block="$(raw_block step9 | grep -vF 'contract.before.yaml' | grep -vF 'contract-edit.sh" apply')"
+  no_patch_block="$(raw_block step9 | grep -vF 'contract.before' | grep -vF 'contract-edit.sh" apply')"
   run_block "$(fill "$no_patch_block" '<scripts folder>' "$repo_root/scripts" '<task folder>' "$(quote "$task")")" "$shell"
   assert "$shell step 9 no patch: exit 0, still stale, verified_commit stays ($out)" '[ "$rc" = 0 ] && printf "%s\n" "$out" | grep -qxF "interfaces" && printf "%s\n" "$out" | grep -qxF "still stale:" && [ "$(yq .verified_commit "$CONTRACT")" = "$FIRST_COMMIT" ]'
 

@@ -8,7 +8,7 @@ Set `$task_dir`, `$vault`, and `$scripts` as in `SKILL.md`. Change every frontma
 
 Run this gate before "Write the spec". It keeps the service contract fresh. Its steps are G1 to G6, so they do not clash with the numbered steps below.
 
-G1. If `$task_dir/contract-brief.md` or `$task_dir/contract.gate-patch.yaml` exists, delete it. Then no older gate run leaves files behind. Keep `$task_dir/contract.before.yaml`, so the undo of step 9 still restores the text from before the first gate run. If `work_type` is not `code` or `ops`, skip the rest of the gate.
+G1. If `$task_dir/contract-brief.md`, `$task_dir/contract.gate-patch.yaml`, or `$task_dir/contract.before.new.yaml` exists, delete it. Then no older gate run leaves files behind. Keep `$task_dir/contract.before.yaml`, so the undo of step 9 still restores the text from before the first gate run. If `work_type` is not `code` or `ops`, skip the rest of the gate.
 G2. Run `bash "$scripts/contract-path.sh" --vault "$vault" "<repository folder>"`. Its output is `$contract_file`.
    - Exit 0: go on. If the file `$contract_file` does not exist, skip G3 and G4. Go to G5, where the check exits 3 at once.
    - Exit 1: write `Contract: not mapped` as a `step` line in `run-log.md`. Skip the rest of the gate and go on to "Write the spec".
@@ -62,7 +62,7 @@ If the user asks for changes, go back to step 4, then run steps 5 to 8 again.
 ## After approval
 
 9. If `$task_dir/contract-brief.md` does not exist, the task has no contract. Set `approved_at` to the current UTC time, `date -u +%Y-%m-%dT%H:%M:%SZ`, and go to step 10. Otherwise, update the contract first. Run this in one Bash call. Write the real path of `$scripts` from `SKILL.md` for `<scripts folder>`, and the real task folder for `<task folder>`. Put each value in single quotes, and write each `'` in it as `'\''`.
-   - If `contract.gate-patch.yaml` does not exist, skip the two lines that name `contract.before.yaml` and the `apply` line.
+   - If `contract.gate-patch.yaml` does not exist, skip the three lines that name `contract.before` and the `apply` line.
 
    ```bash
    set -e
@@ -74,15 +74,16 @@ If the user asks for changes, go back to step 4, then run steps 5 to 8 again.
    stale_sections="$(fm_get "$task_dir/contract-brief.md" stale_sections)"
    bash "$scripts/contract-edit.sh" lock "$contract_file"
    trap 'bash "$scripts/contract-edit.sh" unlock "$contract_file"' EXIT
-   [ -f "$task_dir/contract.before.yaml" ] || cp "$contract_file" "$task_dir/contract.before.yaml"
+   [ -f "$task_dir/contract.before.yaml" ] || cp "$contract_file" "$task_dir/contract.before.new.yaml"
    bash "$scripts/contract-edit.sh" apply "$contract_file" "$task_dir/contract.gate-patch.yaml"
+   [ ! -f "$task_dir/contract.before.new.yaml" ] || mv "$task_dir/contract.before.new.yaml" "$task_dir/contract.before.yaml"
    yq -p yaml -o json '[.planned[]?.id]' "$task_dir/contract.before.yaml" | jq -r --argjson remove "$(yq -p yaml -o json '.remove_planned // []' "$task_dir/contract.gate-patch.yaml")" '$remove - ($remove - .) | select(length > 0) | "undo planned: " + join(",")'
    patched_keys='[]'; [ ! -f "$task_dir/contract.gate-patch.yaml" ] || patched_keys="$(yq -p yaml -o json '.sections // {} | keys' "$task_dir/contract.gate-patch.yaml")"
    still_stale="$(jq -rn --argjson stale "${stale_sections:-[]}" --argjson patched "$patched_keys" '$stale - $patched | .[]')"
    if [ -z "$still_stale" ]; then bash "$scripts/contract-edit.sh" set-verified "$contract_file" "$checked_commit"; else printf 'still stale:\n%s\n' "$still_stale"; fi
    ```
 
-   The snapshot `contract.before.yaml` is written once, so a second run keeps the text from before the gate. `apply` prints the applied section keys. The line after `apply` prints `undo planned: <ids>`: each id in the patch's `remove_planned` list that the snapshot holds. It reads the snapshot, not the output of `apply`, so a second run prints the same ids, although `apply` removes nothing then.
+   The snapshot `contract.before.yaml` is promoted only after `apply` succeeds, so a refused `apply` leaves no snapshot. It is written once, so a second run keeps the text from before the gate. `apply` prints the applied section keys. The line after `apply` prints `undo planned: <ids>`: each id in the patch's `remove_planned` list that the snapshot holds. It reads the snapshot, not the output of `apply`, so a second run prints the same ids, although `apply` removes nothing then.
    If each key in `stale_sections` is a key under `sections:` in the patch, `set-verified` runs. When the check exited 0, `stale_sections` is `[]`, so `set-verified` runs. If a stale section is not in the patch, the call prints `still stale:` and the keys, and `verified_commit` stays. Then tell the user which sections stay stale.
    If `apply` printed a section key or the call printed an `undo planned:` line, write a `step` line in `run-log.md` with the undo. Join its commands with ` && `, in this order. Quote each value as in the block.
    - The undo command: `bash '<scripts>/contract-edit.sh' apply '<contract_file>' '<task folder>/contract.before.yaml' --sections '<applied keys, joined by commas>' --planned '<removed ids, joined by commas>'`. The removed ids are the ids of the `undo planned:` line. If the call printed no `undo planned:` line, leave out the `--planned` flag and its value. If `apply` printed no section key, leave out the `--sections` flag and its value. With `--planned` alone, `apply` restores only those plan items and changes no section.
