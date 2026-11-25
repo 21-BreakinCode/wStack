@@ -11,6 +11,7 @@ execute="$repo_root/skills/start-task/references/execute.md"
 launch="$repo_root/skills/start-task/SKILL.md"
 deliver="$repo_root/skills/deliver-task/SKILL.md"
 reader="$repo_root/agents/contract-reader.md"
+retro_skill="$repo_root/skills/run-retro/SKILL.md"
 decision_template="$repo_root/templates/decision.md"
 contract_template="$repo_root/templates/contract.yaml"
 
@@ -83,7 +84,7 @@ assert "step 9: the gate snapshot is contract.before.yaml, with no plan snapshot
 assert "step 9: a missing patch skips the snapshot and apply lines" 'has "$step9_part" "If \`contract.gate-patch.yaml\` does not exist, skip the three lines that name \`contract.before\` and the \`apply\` line."'
 assert "step 9: the undo ids come from the snapshot, so a rerun keeps them" 'has "$step9_part" "\"\$task_dir/contract.before.yaml\" | jq -r --argjson remove" && has "$step9_part" "The removed ids are the ids of the \`undo planned:\` line." && ! has "$step9_part" "planned removed:"'
 assert "step 9: a refused patch is a gate stop, and G1 keeps the snapshot" 'has "$step9_part" "the reason is \`contract gate: patch refused: <stderr text of apply>\`" && has "$g1_line" "Keep \`\$task_dir/contract.before.yaml\`" && has "$g1_line" "contract.before.new.yaml"'
-assert "the gate patch is YAML with a sections map" 'has "$g5_part" "\$task_dir/contract.gate-patch.yaml" && has "$step9_part" "yq -p yaml -o json '"'"'(.sections // {} | keys)" && grep -qF "a \`sections:\` map" "$reader"'
+assert "the gate patch is YAML with a sections map" 'has "$g5_part" "\$task_dir/contract.gate-patch.yaml" && has "$step9_part" "(.sections // {} | keys) + (if has(\"diagrams\")" && grep -qF "a \`sections:\` map" "$reader"'
 assert "step 9 undo uses apply with --sections and --planned" 'has "$step9_part" "The undo command: \`bash '"'"'<scripts>/contract-edit.sh'"'"' apply '"'"'<contract_file>'"'"' '"'"'<task folder>/contract.before.yaml'"'"' --sections '"'"'<applied keys, joined by commas>'"'"' --planned '"'"'<removed ids, joined by commas>'"'"' --diagrams\`"'
 assert "step 9: an undo with no applied key leaves out --sections and needs no plan-only snapshot" 'has "$step9_part" "If \`apply\` printed no section key, leave out the \`--sections\` flag and its value." && ! has "$step9_part" "contract.before-planned.yaml"'
 assert "step 9: the undo restores verified_commit and has no new-section command" 'has "$step9_part" "add the commit command:" && has "$step9_part" "yq '"'"'.verified_commit'"'"' '"'"'<task folder>/contract.before.yaml'"'"'" && ! has "$step9_part" "new-section"'
@@ -253,7 +254,9 @@ for needle in 'contract-diagram.sh stale' 'diagrams.backup' 'diagrams.drawn.txt'
 done
 
 # Contract diagrams: update path
-retro_skill="$repo_root/skills/run-retro/SKILL.md"
+assert "step 9 uses its own diagram list names" 'has "$step9_part" "diagrams.gate.drawn.txt" && has "$step9_part" "diagrams.gate.backup" && ! has "$step9_part" "diagrams.drawn.txt"'
+assert "Pending items uses its own diagram list names" 'has "$pending_part" "diagrams.writeback.drawn.txt" && has "$pending_part" "diagrams.writeback.backup" && ! has "$pending_part" "diagrams.drawn.txt"'
+assert "redraw runs only after a diagrams line" 'has "$step9_part" "If \`apply\` printed the line \`diagrams\`, redraw" && has "$pending_part" "If \`apply\` printed the line \`diagrams\`, redraw" && grep -qF "If it printed the line \`diagrams\`, redraw" "$retro_skill"'
 assert "reader patch holds a diagrams block" 'grep -qF "diagrams:" "$reader"'
 for needle in 'has("diagrams")' '--diagrams' 'contract-diagram.sh" stale' "contract-diagram.sh' restore"; do
   assert "step 9 names $needle" 'has "$step9_part" "$needle"'

@@ -64,6 +64,7 @@ mv "$work_dir/flow.backup" "$backups/flow.html"
 out="$(bash "$script" restore "$record")"
 assert "restore puts back the backup" '! grep -q SECOND "$flow_html" && grep -q charset "$flow_html" && printf "%s\n" "$out" | grep -qx "restored: $flow_html"'
 assert "restore removes a new deep dive" '[ ! -e "$folder/diagrams/architecture.html" ] && printf "%s\n" "$out" | grep -qx "removed: $folder/diagrams/architecture.html"'
+assert "restore moves the backup, so it is gone" '[ ! -e "$backups/flow.html" ]'
 assert "restore removes the used list" '[ ! -e "$record" ]'
 
 rm "$flow_html"

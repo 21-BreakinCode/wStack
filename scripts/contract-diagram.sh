@@ -4,6 +4,7 @@
 #   install <contract.yaml> <subject> <drawn.html> [--backup-dir <dir> --record <list file>]
 #   stale <contract.yaml>                        prints "stale: <subject> <path>" per stale deep dive
 #   restore <list file>                          list line: <installed path><TAB><backup path or empty>
+#                                                a backup is moved over its target, so it is gone after restore
 # Exit 0 done, 1 no such subject or a missing backup, 2 bad call or input, 4 lock busy.
 set -euo pipefail
 
@@ -96,7 +97,7 @@ for dive in read_deep_dives(sys.argv[2], (json.load(sys.stdin) or {}).get("diagr
     done <"$list"
     while IFS="$tab" read -r installed backup; do
       [ -n "$installed" ] || continue
-      if [ -n "$backup" ]; then cp "$backup" "$installed"; echo "restored: $installed"
+      if [ -n "$backup" ]; then mv "$backup" "$installed"; echo "restored: $installed"
       else rm -f "$installed"; echo "removed: $installed"; fi
       rmdir "$(dirname "$installed")" 2>/dev/null || true
     done <"$list"

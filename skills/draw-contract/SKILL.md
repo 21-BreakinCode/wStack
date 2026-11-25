@@ -17,11 +17,11 @@ Set `scripts="${CLAUDE_PLUGIN_ROOT}/scripts"`.
 
 ## Inside a task
 
-Deliver runs the Draw steps and passes the contract path, `--backup-dir`, and `--record`. So skip step 1 and the vault work in Config. In this mode, a problem never stops the task. Ask the user nothing.
+Four callers run the Draw steps in a task: Deliver, gate step 9 of Confirmation, "Pending items" of deliver-task, and the retro. Each passes the contract path, `--backup-dir`, and `--record`. So skip step 1 and the vault work in Config. In this mode, a problem never stops the task. Ask the user nothing.
 
 - If diagram-design is not installed (step 3), write the `step` line `deep dive <subject> skipped: diagram-design is not installed` in `run-log.md` and return.
 - If any other step fails, write the `step` line `deep dive <subject> failed: <reason>` in `run-log.md` and return. A failure is any non-zero exit, or a step that says to ask the user. `<reason>` is the first line of stderr.
-- Use `flow` or the subject that Deliver names.
+- Use `flow` or the subject that the caller names.
 
 In every step below, "stop" means: outside a task, print the stderr text and stop. Inside a task, write the log line above and return.
 
