@@ -92,6 +92,25 @@ run "$deliver" undo "$task" "$CONTRACT" "$task_id"
 assert "undo with a name clash changes nothing, and a second undo restores the folder ($clash_out | $out)" '[ $write_rc = 0 ] && [ $clash_rc = 1 ] &&
   printf "%s\n" "$clash_out" | grep -qF "will not move over $folder/zz-notes.md" && [ $clash_unchanged = yes ] && [ $rc = 0 ] && same_as_copy'
 
+new_world; mkdir -p "$folder/diagrams"; echo '<p>flow</p>' >"$folder/diagrams/flow.html"
+run "$deliver" write "$task" "$CONTRACT" "$task_id"
+assert "write leaves diagrams in place ($out)" '[ $rc = 0 ] && [ -f "$folder/diagrams/flow.html" ] && [ ! -e "$archive/diagrams" ] && has_line "unchanged: $folder/diagrams"'
+
+new_world; mkdir -p "$folder/diagrams"; echo '<p>original</p>' >"$folder/diagrams/sequence-create.html"; keep_copy
+run "$deliver" write "$task" "$CONTRACT" "$task_id"; write_rc=$rc
+backup="$work_dir/backup-sequence-create.html"
+cp "$folder/diagrams/sequence-create.html" "$backup"
+echo '<p>redrawn</p>' >"$folder/diagrams/sequence-create.html"; echo '<p>new</p>' >"$folder/diagrams/flow.html"
+printf '%s\t%s\n%s\t\n' "$folder/diagrams/sequence-create.html" "$backup" "$folder/diagrams/flow.html" >"$task/diagrams.drawn.txt"
+rm -rf "$work_dir/after-write"; cp -R "$folder" "$work_dir/after-write"
+mv "$backup" "$backup.hold"
+run "$deliver" undo "$task" "$CONTRACT" "$task_id"; missing_rc=$rc
+missing_unchanged=no; diff -r "$folder" "$work_dir/after-write" >/dev/null && [ -f "$task/diagrams.drawn.txt" ] && missing_unchanged=yes
+mv "$backup.hold" "$backup"
+run "$deliver" undo "$task" "$CONTRACT" "$task_id"
+assert "undo with a missing deep dive backup changes nothing ($missing_rc)" '[ $write_rc = 0 ] && [ $missing_rc = 1 ] && [ $missing_unchanged = yes ]'
+assert "undo restores deep dive backups and removes drawn deep dives ($out)" '[ $rc = 0 ] && [ ! -e "$folder/diagrams/flow.html" ] && [ "$(cat "$folder/diagrams/sequence-create.html")" = "<p>original</p>" ] && same_as_copy'
+
 new_world; echo '# old plan' >"$folder/plan.md"; keep_copy
 run "$deliver" rehearse "$task" "$CONTRACT" "$task_id"
 assert "rehearse exits 0 and leaves the real folders unchanged ($out)" '[ $rc = 0 ] && same_as_copy && [ ! -e "$page" ]'

@@ -3,9 +3,10 @@
 # Deliver "Contract files": copy <task_dir>/contract.draft.yaml and decisions.draft/* into the contract folder.
 #   write     Check decision ids, take the lock, move the old root files to _archive/<task_id>/ (once, marker
 #             .archived), copy the drafts, run set-verified (it renders). Safe to run again after a failure.
-#             Prints one line per file: new:, replaced: (old copy: ...), moved: ... -> ..., unchanged:.
+#             Leaves diagrams/ (the deep dives) where it is. Prints one line per file: new:, replaced: (old copy: ...), moved: ... -> ..., unchanged:.
 #             Exit 0 done, 4 lock busy, 1 a decision id clash or a failed step.
-#   undo      Delete the contract, the note, the HTML page, and the copied decisions; move the archive back.
+#   undo      First restore the deep dives listed in diagrams.drawn.txt (backup back, new ones removed).
+#             Delete the contract, the note, the HTML page, and the copied decisions; move the archive back.
 #             A restored old contract is not rendered again: undo prints "rebuild the page: <command>". Exit 0 or 1.
 #   rehearse  Run write and undo on copies in a temp folder with a temp HOME, then diff -r against a clean copy.
 #             Prints the diff. Exit 0 empty diff, 1 a diff or a failed run.
@@ -27,6 +28,7 @@ contract_name="$(basename "$contract_file")"
 note_name="$app_name.md"
 archive_dir="$contract_folder/_archive/$task_id"
 copied_list="$task_dir/decisions.copied.txt"
+drawn_list="$task_dir/diagrams.drawn.txt"
 
 print_written() {  # <root file name>
   if [ -e "$archive_dir/$1" ]; then echo "replaced: $contract_folder/$1 (old copy: $archive_dir/$1)"
@@ -54,7 +56,7 @@ case "$action" in
     mkdir -p "$archive_dir"
     if [ ! -e "$archive_dir/.archived" ]; then
       for old_file in "$contract_folder"/*; do  # the glob skips dot files, so they stay
-        case "$(basename "$old_file")" in handover|decisions|_archive|*.lock|*.facts.md) continue ;; esac
+        case "$(basename "$old_file")" in handover|decisions|diagrams|_archive|*.lock|*.facts.md) continue ;; esac
         [ ! -e "$archive_dir/$(basename "$old_file")" ] || continue
         mv "$old_file" "$archive_dir/"
       done
@@ -81,7 +83,7 @@ case "$action" in
       echo "moved: $contract_folder/$archived_name -> $archived"
     done
     for kept in "$contract_folder"/*; do
-      case "$(basename "$kept")" in handover|*.facts.md) echo "unchanged: $kept" ;; esac
+      case "$(basename "$kept")" in handover|diagrams|*.facts.md) echo "unchanged: $kept" ;; esac
     done ;;
 
   undo)
@@ -93,6 +95,12 @@ case "$action" in
       case "$(basename "$archived")" in "$contract_name"|"$note_name") continue ;; esac  # undo deletes these first
       [ ! -e "$contract_folder/$(basename "$archived")" ] || fail "will not move over $contract_folder/$(basename "$archived"), so nothing changed"
     done
+    if [ -f "$drawn_list" ]; then  # restore checks this too, but only after undo started changing files
+      while IFS=$'\t' read -r _ backup_path; do
+        [ -z "$backup_path" ] || [ -f "$backup_path" ] || fail "deep dive backup missing: $backup_path, so nothing changed"
+      done <"$drawn_list"
+    fi
+    bash "$scripts/contract-diagram.sh" restore "$drawn_list"
     rm -f "$contract_file" "$contract_folder/$note_name" "$HOME/.wstack/pages/contracts/$app_name.html"
     if [ -f "$copied_list" ]; then
       while IFS= read -r copied_name; do
