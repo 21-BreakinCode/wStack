@@ -1,0 +1,101 @@
+diagrams:
+  flow:
+    parts:
+      - id: api
+        label: API
+        refs: [cmd/main.go:1]
+      - id: worker
+        label: Worker
+        refs: [api/routes.go:1]
+    callers:
+      - id: web-ui
+        label: web-ui
+      - id: batch-job
+        label: batch-job
+    dependencies:
+      - id: postgres
+        label: postgres
+      - id: other-svc
+        label: other-svc
+    edges:
+      - from: web-ui
+        to: api
+        label: GET /items
+        refs: [cmd/main.go:1]
+      - from: batch-job
+        to: api
+        label: POST /items
+        refs: [cmd/main.go:1]
+      - from: api
+        to: worker
+        label: items.created
+        refs: [api/routes.go:1]
+      - from: worker
+        to: postgres
+        label: SQL
+        refs: [api/routes.go:1]
+      - from: other-svc
+        to: worker
+        label: items.done
+        refs: [api/routes.go:1]
+  sequences:
+    - id: create
+      title: Create an item
+      steps:
+        - from: web-ui
+          to: api
+          label: POST /items
+          refs: [cmd/main.go:1]
+        - from: api
+          to: api
+          label: validate the body
+          refs: [cmd/main.go:1]
+        - from: api
+          to: worker
+          label: publish items.created
+          refs: [api/routes.go:1]
+        - from: worker
+          to: postgres
+          label: insert the row
+          refs: [api/routes.go:1]
+  states:
+    - id: item-status
+      title: Item status
+      initial: new
+      transitions:
+        - from: new
+          to: queued
+          label: the api accepts it
+          refs: [cmd/main.go:1]
+        - from: queued
+          to: done
+          label: the worker finishes
+          refs: [api/routes.go:1]
+        - from: queued
+          to: failed
+          label: the worker fails
+          refs: [api/routes.go:1]
+        - from: failed
+          to: queued
+          label: a retry
+          refs: [api/routes.go:1]
+  architecture:
+    style: clean
+    layers:
+      - name: adapters
+        components:
+          - id: sql-store
+            label: SQL store
+            kind: adapter
+            refs: [api/routes.go:1]
+      - name: use-cases
+        components:
+          - id: store-port
+            label: Store port
+            kind: port
+            refs: [cmd/main.go:1]
+      - name: entities
+        components: []
+    implements:
+      - adapter: sql-store
+        port: store-port

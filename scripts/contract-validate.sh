@@ -24,6 +24,70 @@ findings="$(printf '%s' "$contract_json" | jq -r '
   def section_keys: ["team_docs","abilities","interfaces","depends_on","consumers","gotchas","open_questions"];
   def with_sources: ["team_docs","abilities","interfaces","depends_on"];
   def word_count: [scan("\\S+")] | length;
+  def kebab: type == "string" and test("^[a-z0-9]+(-[a-z0-9]+)*$");
+  def as_obj: if type == "object" then . else {} end;
+  def items($where): (if type == "array" then . else [] end) | to_entries
+    | map({where: "\($where)[\(.key)]", e: (.value | as_obj)});
+  def id_findings: .[] | select(.e.id | kebab | not) | "E bad diagram id: \(.where): \(.e.id)";
+  def dup_findings: . as $l | to_entries[]
+    | select(.key as $k | .value.e.id as $id | ($id | type) == "string" and ($l[:$k] | map(.e.id) | index($id)))
+    | "E duplicate diagram id: \(.value.where): \(.value.e.id)";
+  def entry_findings($refs_required; $label_required): .where as $w | .e as $e
+    | (if $refs_required and (($e.refs | type) != "array" or ($e.refs | length) == 0)
+       then "E diagram entry without refs: \($w)" else empty end),
+      ($e.refs | arrays | .[] | select((type == "string" and valid_ref) | not) | "E bad ref form: \($w): \(.)"),
+      (if $label_required and (($e.label | type) != "string" or ($e.label | length) == 0)
+       then "E diagram entry without label: \($w)" else empty end),
+      ($e.label | strings | select(length > 40) | "W warning: label has \(length) characters: \($w)");
+  def node_count_warning($where; $count): if $count > 30 then "W warning: \($where) has \($count) nodes" else empty end;
+  def diagram_findings:
+    (.flow | as_obj) as $flow
+    | ($flow.parts | items("diagrams.flow.parts")) as $parts
+    | ($flow.callers | items("diagrams.flow.callers")) as $callers
+    | ($flow.dependencies | items("diagrams.flow.dependencies")) as $dependencies
+    | ($parts + $callers + $dependencies) as $nodes
+    | ($nodes | map(.e.id)) as $node_ids
+    | ($parts | map(.e.id)) as $part_ids
+    | ($nodes | id_findings), ($nodes | dup_findings),
+      ($parts[] | entry_findings(true; true)),
+      (($callers + $dependencies)[] | entry_findings(false; true)),
+      ($flow.edges | items("diagrams.flow.edges")[] | . as $edge | .e as $e
+        | ([$e.from, $e.to][] | select(. as $n | $node_ids | index($n) | not)
+            | "E edge names an unknown id: \($edge.where): \(.)"),
+          (if ([$e.from, $e.to] | all(. as $n | $node_ids | index($n) != null))
+              and ([$e.from, $e.to] | any(. as $n | $part_ids | index($n) != null) | not)
+           then "E edge touches no part: \($edge.where)" else empty end),
+          ($edge | entry_findings(true; false))),
+      node_count_warning("diagrams.flow"; $nodes | length),
+      ((.sequences | items("diagrams.sequences")) as $sequences
+       | ($sequences | id_findings), ($sequences | dup_findings),
+         ($sequences[] | . as $seq | ($seq.e.steps | items("\($seq.where).steps")) as $steps
+          | (if ($steps | length) == 0 then "E sequence without steps: \($seq.where)" else empty end),
+            ($steps[] | entry_findings(true; true)),
+            node_count_warning($seq.where; [$steps[].e | .from, .to | strings] | unique | length))),
+      ((.states | items("diagrams.states")) as $states
+       | ($states | id_findings), ($states | dup_findings),
+         ($states[] | . as $life | ($life.e.transitions | items("\($life.where).transitions")) as $transitions
+          | ([$transitions[].e | .from, .to | strings] | unique) as $state_names
+          | (if ($transitions | length) == 0 then "E state lifecycle without transitions: \($life.where)" else empty end),
+            (if ($life.e | has("initial")) and ($state_names | index($life.e.initial) | not)
+             then "E initial names no state: \($life.where): \($life.e.initial)" else empty end),
+            ($transitions[] | entry_findings(true; false)),
+            node_count_warning($life.where; $state_names | length))),
+      ((.architecture | as_obj) as $arch
+       | ($arch.layers | items("diagrams.architecture.layers")) as $layers
+       | ([$layers[] | . as $layer | $layer.e.components | items("\($layer.where).components")[]]) as $components
+       | (if ($arch | has("style")) and (["clean","hexagonal","layered"] | index($arch.style) | not)
+          then "E bad architecture style: diagrams.architecture.style: \($arch.style)" else empty end),
+         ($components | id_findings), ($components | dup_findings),
+         ($components[] | entry_findings(true; true)),
+         ($components[] | select(.e.kind as $kind | ["entity","use_case","port","adapter","controller","other"] | index($kind) | not)
+           | "E bad component kind: \(.where): \(.e.kind)"),
+         ($arch.implements | items("diagrams.architecture.implements")[] | . as $pair
+           | (if ([$components[] | select(.e.kind == "adapter") | .e.id] | index($pair.e.adapter))
+                and ([$components[] | select(.e.kind == "port") | .e.id] | index($pair.e.port))
+              then empty else "E implements needs an adapter and a port: \($pair.where)" end)),
+         node_count_warning("diagrams.architecture"; $components | length));
   . as $c
   | ($c.planned // [] | if type == "array" then map(.id // empty) else [] end) as $planned_ids
   | (
@@ -65,7 +129,9 @@ findings="$(printf '%s' "$contract_json" | jq -r '
          (if ($e.value.title | type) == "string" then empty else "E plan item without title: \($where)" end),
          (if ($e.value.why | type) == "string" then empty else "E plan item without why: \($where)" end),
          (($e.value.refs // []) | .[]? | select((type == "string" and valid_ref) | not) | "E bad ref form: \($where): \(.)")
-     else "E planned must be a list: planned" end)
+     else "E planned must be a list: planned" end),
+    (if ($c.diagrams // {} | type) == "object" then ($c.diagrams // {} | diagram_findings)
+     else "E diagrams must be a map: diagrams" end)
   )' 2>&1)" || { echo "contract-validate.sh: cannot check $contract_file: $findings" >&2; exit 2; }
 
 broken=0

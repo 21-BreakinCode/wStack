@@ -92,7 +92,8 @@ while IFS= read -r ref; do
   fi
   checked=$((checked + 1))
 done < <(jq -r '[(.sections // {} | .[] | objects | .items // [] | .[] | objects | .refs // [] | .[]),
-                 (.planned // [] | .[] | objects | .refs // [] | .[])] | .[] | strings' <<<"$contract_json")
+                 (.planned // [] | .[] | objects | .refs // [] | .[]),
+                 (.diagrams // {} | .. | objects | select(has("refs")) | .refs | arrays | .[])] | .[] | strings' <<<"$contract_json")
 
 echo "refs: $checked checked, $bad bad, $unchecked unchecked"
 [ "$bad" = 0 ]

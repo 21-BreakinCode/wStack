@@ -87,4 +87,8 @@ echo "| other | $(dirname "$REPO")/longer-name | Services/other |" >> "$ORG_DIR/
 set_refs "acme-org/other@$other_commit:x.txt:1"; run
 assert "a remote of xacme-org/other is not a clone of acme-org/other ($out)" '[ $rc = 0 ] && printf "%s\n" "$out" | grep -q "^unchecked: acme-org/other@" && printf "%s\n" "$out" | grep -q "0 checked, 0 bad, 1 unchecked"'
 
+new_world; yq -i '. *= load("'"$repo_root/tests/fixtures/contract/diagrams-block.yaml"'")' "$CONTRACT"
+yq -i '.diagrams.flow.edges[0].refs = ["nofile.go:1"]' "$CONTRACT"; run
+assert "diagram refs are checked" '[ $rc = 1 ] && printf "%s\n" "$out" | grep -qx "bad: nofile.go:1: no file nofile.go at $FIRST_COMMIT" && printf "%s\n" "$out" | grep -q "^refs: 16 checked, 1 bad"'
+
 finish

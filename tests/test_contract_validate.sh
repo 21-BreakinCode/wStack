@@ -116,4 +116,82 @@ sed -e 's/{{app_name}}/example-service/g' -e 's/{{repo}}/example-org\/example-se
 run_case "$filled"
 assert "template with placeholders filled is valid except empty verified_commit" '[ "$rc" = "0" ]'
 
+fixture="$repo_root/tests/fixtures/contract/diagrams-block.yaml"
+with_diagrams="$work_dir/with-diagrams.yaml"
+cp "$valid" "$with_diagrams"; yq -i '. *= load("'"$fixture"'")' "$with_diagrams"
+mutate_diagrams() {  # <name> <yq expression>; mutates a copy of the full fixture block
+  yq "$2" "$with_diagrams" > "$work_dir/$1.yaml"; run_case "$work_dir/$1.yaml"
+}
+expect_error() {  # <label> <stderr text>
+  expected_text="$2"
+  assert "$1" '[ "$rc" = "1" ] && printf "%s\n" "$err" | grep -qF -- "$expected_text"'
+}
+
+run_case "$with_diagrams"
+assert "the full fixture block is valid" '[ "$rc" = "0" ] && [ -z "$err" ]'
+mutate_diagrams nodiagrams 'del(.diagrams)'
+assert "no diagrams key is valid" '[ "$rc" = "0" ]'
+mutate_diagrams emptydiagrams '.diagrams = {}'
+assert "diagrams: {} is valid" '[ "$rc" = "0" ]'
+mutate_diagrams nulldiagrams '.diagrams = null'
+assert "diagrams: null is valid" '[ "$rc" = "0" ]'
+
+mutate_diagrams listdiagrams '.diagrams = []'
+expect_error "diagrams that is a list fails" "diagrams must be a map: diagrams"
+mutate_diagrams badid '.diagrams.flow.parts[0].id = "Bad_Id"'
+expect_error "a bad id fails" "bad diagram id: diagrams.flow.parts[0]: Bad_Id"
+mutate_diagrams dupid '.diagrams.flow.callers[0].id = "api"'
+expect_error "a duplicate id fails" "duplicate diagram id: diagrams.flow.callers[0]: api"
+mutate_diagrams unknownedge '.diagrams.flow.edges[0].from = "nobody"'
+expect_error "an edge to an unknown id fails" "edge names an unknown id: diagrams.flow.edges[0]: nobody"
+mutate_diagrams noparttouch '.diagrams.flow.edges[0].to = "postgres"'
+expect_error "an edge that touches no part fails" "edge touches no part: diagrams.flow.edges[0]"
+
+mutate_diagrams partnorefs 'del(.diagrams.flow.parts[0].refs)'
+expect_error "a part without refs fails" "diagram entry without refs: diagrams.flow.parts[0]"
+mutate_diagrams edgenorefs 'del(.diagrams.flow.edges[0].refs)'
+expect_error "an edge without refs fails" "diagram entry without refs: diagrams.flow.edges[0]"
+mutate_diagrams stepnorefs 'del(.diagrams.sequences[0].steps[0].refs)'
+expect_error "a step without refs fails" "diagram entry without refs: diagrams.sequences[0].steps[0]"
+mutate_diagrams transitionnorefs 'del(.diagrams.states[0].transitions[0].refs)'
+expect_error "a transition without refs fails" "diagram entry without refs: diagrams.states[0].transitions[0]"
+mutate_diagrams componentnorefs 'del(.diagrams.architecture.layers[0].components[0].refs)'
+expect_error "an architecture component without refs fails" "diagram entry without refs: diagrams.architecture.layers[0].components[0]"
+mutate_diagrams callernorefs 'del(.diagrams.flow.callers[0].refs)'
+assert "a caller without refs is valid" '[ "$rc" = "0" ]'
+
+mutate_diagrams partnolabel 'del(.diagrams.flow.parts[0].label)'
+expect_error "a part without a label fails" "diagram entry without label: diagrams.flow.parts[0]"
+mutate_diagrams callernolabel 'del(.diagrams.flow.callers[0].label)'
+expect_error "a caller without a label fails" "diagram entry without label: diagrams.flow.callers[0]"
+mutate_diagrams depnolabel 'del(.diagrams.flow.dependencies[0].label)'
+expect_error "a dependency without a label fails" "diagram entry without label: diagrams.flow.dependencies[0]"
+mutate_diagrams stepnolabel 'del(.diagrams.sequences[0].steps[0].label)'
+expect_error "a step without a label fails" "diagram entry without label: diagrams.sequences[0].steps[0]"
+mutate_diagrams componentnolabel 'del(.diagrams.architecture.layers[0].components[0].label)'
+expect_error "a component without a label fails" "diagram entry without label: diagrams.architecture.layers[0].components[0]"
+mutate_diagrams edgenolabel 'del(.diagrams.flow.edges[0].label) | del(.diagrams.states[0].transitions[0].label)'
+assert "edges and transitions need no label" '[ "$rc" = "0" ]'
+
+mutate_diagrams nosteps '.diagrams.sequences[0].steps = []'
+expect_error "a sequence without steps fails" "sequence without steps: diagrams.sequences[0]"
+mutate_diagrams notransitions '.diagrams.states[0].transitions = []'
+expect_error "a state lifecycle without transitions fails" "state lifecycle without transitions: diagrams.states[0]"
+mutate_diagrams badinitial '.diagrams.states[0].initial = "gone"'
+expect_error "initial that names no state fails" "initial names no state: diagrams.states[0]: gone"
+mutate_diagrams badstyle '.diagrams.architecture.style = "onion"'
+expect_error "a bad style fails" "bad architecture style: diagrams.architecture.style: onion"
+mutate_diagrams badkind '.diagrams.architecture.layers[0].components[0].kind = "thing"'
+expect_error "a bad component kind fails" "bad component kind: diagrams.architecture.layers[0].components[0]: thing"
+mutate_diagrams badimplements '.diagrams.architecture.implements[0].port = "sql-store"'
+expect_error "an implements pair with a wrong kind fails" "implements needs an adapter and a port: diagrams.architecture.implements[0]"
+mutate_diagrams badrefform '.diagrams.flow.edges[0].refs = ["nofile"]'
+expect_error "a bad ref form in a diagram fails" "bad ref form: diagrams.flow.edges[0]: nofile"
+
+extra_parts="$(for n in $(seq 1 25); do printf '{"id": "extra-%s", "label": "x", "refs": ["a.go:1"]}, ' "$n"; done)"
+mutate_diagrams manynodes ".diagrams.flow.parts += [${extra_parts%, }]"
+assert "31 flow nodes only warn" '[ "$rc" = "0" ] && printf "%s\n" "$err" | grep -qF "diagrams.flow has 31 nodes"'
+mutate_diagrams longlabel '.diagrams.flow.parts[0].label = "01234567890123456789012345678901234567890"'
+assert "a 41-character label only warns" '[ "$rc" = "0" ] && printf "%s\n" "$err" | grep -qF "label has 41 characters"'
+
 finish
