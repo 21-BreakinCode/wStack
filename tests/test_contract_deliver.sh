@@ -115,6 +115,13 @@ new_world; echo '# old plan' >"$folder/plan.md"; keep_copy
 run "$deliver" rehearse "$task" "$CONTRACT" "$task_id"
 assert "rehearse exits 0 and leaves the real folders unchanged ($out)" '[ $rc = 0 ] && same_as_copy && [ ! -e "$page" ]'
 
+new_world; mkdir -p "$folder/diagrams"; echo '<p>real</p>' >"$folder/diagrams/flow.html"; echo '<p>old</p>' >"$work_dir/real-backup.html"
+echo '<p>drawn</p>' >"$folder/diagrams/sequence-create.html"
+printf '%s\t%s\n%s\t\n' "$folder/diagrams/sequence-create.html" "$work_dir/real-backup.html" "$folder/diagrams/flow.html" >"$task/diagrams.drawn.txt"
+keep_copy
+run "$deliver" rehearse "$task" "$CONTRACT" "$task_id"
+assert "rehearse with a drawn list leaves the real deep dives, backup, and list alone ($out)" '[ $rc = 0 ] && same_as_copy && [ -f "$folder/diagrams/flow.html" ] && [ "$(cat "$folder/diagrams/sequence-create.html")" = "<p>drawn</p>" ] && [ -f "$work_dir/real-backup.html" ]'
+
 new_world; mkdir "$CONTRACT.lock"; keep_copy
 run "$deliver" rehearse "$task" "$CONTRACT" "$task_id"
 assert "rehearse exits 0 while a lock is held on the real contract, and the lock stays ($out)" '[ $rc = 0 ] && same_as_copy && [ -d "$CONTRACT.lock" ]'

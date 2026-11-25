@@ -125,6 +125,7 @@ case "$action" in
       mkdir -p "$rehearsal_dir/$copy"
       if [ -d "$contract_folder" ]; then cp -R "$contract_folder" "$rehearsal_dir/$copy/contract"; else mkdir "$rehearsal_dir/$copy/contract"; fi
       cp -R "$task_dir" "$rehearsal_dir/$copy/task"
+      rm -f "$rehearsal_dir/$copy/task/diagrams.drawn.txt"  # its paths are real files; write draws nothing, so undo needs no list
       rm -rf "$rehearsal_dir/$copy/contract"/*.lock  # a lock held on the real contract would make write wait and fail
     done
     mkdir "$rehearsal_dir/home"
