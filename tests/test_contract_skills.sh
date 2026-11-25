@@ -83,8 +83,8 @@ assert "step 9: the gate snapshot is contract.before.yaml, with no plan snapshot
 assert "step 9: a missing patch skips the snapshot and apply lines" 'has "$step9_part" "If \`contract.gate-patch.yaml\` does not exist, skip the three lines that name \`contract.before\` and the \`apply\` line."'
 assert "step 9: the undo ids come from the snapshot, so a rerun keeps them" 'has "$step9_part" "\"\$task_dir/contract.before.yaml\" | jq -r --argjson remove" && has "$step9_part" "The removed ids are the ids of the \`undo planned:\` line." && ! has "$step9_part" "planned removed:"'
 assert "step 9: a refused patch is a gate stop, and G1 keeps the snapshot" 'has "$step9_part" "the reason is \`contract gate: patch refused: <stderr text of apply>\`" && has "$g1_line" "Keep \`\$task_dir/contract.before.yaml\`" && has "$g1_line" "contract.before.new.yaml"'
-assert "the gate patch is YAML with a sections map" 'has "$g5_part" "\$task_dir/contract.gate-patch.yaml" && has "$step9_part" "yq -p yaml -o json '"'"'.sections // {} | keys'"'"'" && grep -qF "a \`sections:\` map" "$reader"'
-assert "step 9 undo uses apply with --sections and --planned" 'has "$step9_part" "The undo command: \`bash '"'"'<scripts>/contract-edit.sh'"'"' apply '"'"'<contract_file>'"'"' '"'"'<task folder>/contract.before.yaml'"'"' --sections '"'"'<applied keys, joined by commas>'"'"' --planned '"'"'<removed ids, joined by commas>'"'"'\`"'
+assert "the gate patch is YAML with a sections map" 'has "$g5_part" "\$task_dir/contract.gate-patch.yaml" && has "$step9_part" "yq -p yaml -o json '"'"'(.sections // {} | keys)" && grep -qF "a \`sections:\` map" "$reader"'
+assert "step 9 undo uses apply with --sections and --planned" 'has "$step9_part" "The undo command: \`bash '"'"'<scripts>/contract-edit.sh'"'"' apply '"'"'<contract_file>'"'"' '"'"'<task folder>/contract.before.yaml'"'"' --sections '"'"'<applied keys, joined by commas>'"'"' --planned '"'"'<removed ids, joined by commas>'"'"' --diagrams\`"'
 assert "step 9: an undo with no applied key leaves out --sections and needs no plan-only snapshot" 'has "$step9_part" "If \`apply\` printed no section key, leave out the \`--sections\` flag and its value." && ! has "$step9_part" "contract.before-planned.yaml"'
 assert "step 9: the undo restores verified_commit and has no new-section command" 'has "$step9_part" "add the commit command:" && has "$step9_part" "yq '"'"'.verified_commit'"'"' '"'"'<task folder>/contract.before.yaml'"'"'" && ! has "$step9_part" "new-section"'
 
@@ -133,7 +133,7 @@ assert "write-back: the patch is tested on a copy with a temp HOME" 'has "$write
 assert "write-back: a refused patch gets one more reader try, then a stop" 'has "$writeback_part" "Dispatch the reader once more with the same input and the stderr text" && has "$writeback_part" "If the second patch is refused too, stop as in \"Stop\""'
 assert "Contract files: the undo record says to run the rebuild line" 'has "$files_part" "If it prints a \`rebuild the page:\` line, the user runs that command after the undo."'
 assert "MERGED: the write-back snapshot is contract.writeback.before.yaml, with no plan snapshot" 'has "$merged_part" "[ -f \"\$task_folder/contract.writeback.before.yaml\" ] || cp \"\$contract_file\" \"\$task_folder/contract.writeback.before.new.yaml\"" && has "$merged_part" "mv \"\$task_folder/contract.writeback.before.new.yaml\" \"\$task_folder/contract.writeback.before.yaml\"" && ! has "$pending_part" "plan.writeback.before" && ! has "$pending_part" "delete-section" && ! has "$pending_part" "task_folder/contract.before"'
-assert "MERGED undo uses apply with --sections and --planned" 'has "$merged_part" "set the undo of the \`contract write-back\` target to the undo command: \`bash '"'"'<scripts>/contract-edit.sh'"'"' apply '"'"'<contract_file>'"'"' '"'"'<task folder>/contract.writeback.before.yaml'"'"' --sections '"'"'<applied keys, joined by commas>'"'"' --planned '"'"'<removed ids, joined by commas>'"'"'\`" && has "$merged_part" "leave out the \`--planned\` flag and its value" && has "$merged_part" "leave out the \`--sections\` flag and its value"'
+assert "MERGED undo uses apply with --sections and --planned" 'has "$merged_part" "set the undo of the \`contract write-back\` target to the undo command: \`bash '"'"'<scripts>/contract-edit.sh'"'"' apply '"'"'<contract_file>'"'"' '"'"'<task folder>/contract.writeback.before.yaml'"'"' --sections '"'"'<applied keys, joined by commas>'"'"' --planned '"'"'<removed ids, joined by commas>'"'"' --diagrams\`" && has "$merged_part" "leave out the \`--planned\` flag and its value" && has "$merged_part" "leave out the \`--sections\` flag and its value"'
 assert "CLOSED: decision files of the task are withdrawn and logged" 'has "$closed_part" "fm_set \"\$decision_file\" status withdrawn" && has "$closed_part" "For each \`decision withdrawn:\` line, write a \`step\` line in \`run-log.md\`"'
 assert "pending: a stuck item can be dropped without withdrawing decisions" 'has "$pending_part" "If the user says to drop the item, run \`pending-remove\` for its pull request" && has "$pending_part" "Do not withdraw its decisions."'
 assert "pending: no new-section text is left, because the section keys are fixed" '! has "$pending_part" "new-section" && ! has "$pending_part" "adds the section at the end"'
@@ -250,6 +250,19 @@ assert "reviewer judges diagrams.flow" 'grep -qF "diagrams.flow" "$reviewer_agen
 assert "verify names diagrams" 'grep -qF "diagrams" "$verify"'
 for needle in 'contract-diagram.sh stale' 'diagrams.backup' 'diagrams.drawn.txt' '/wstack:draw-contract'; do
   assert "deliver names $needle" 'has "$(cat "$deliver")" "$needle"'
+done
+
+# Contract diagrams: update path
+retro_skill="$repo_root/skills/run-retro/SKILL.md"
+assert "reader patch holds a diagrams block" 'grep -qF "diagrams:" "$reader"'
+for needle in 'has("diagrams")' '--diagrams' 'contract-diagram.sh" stale' "contract-diagram.sh' restore"; do
+  assert "step 9 names $needle" 'has "$step9_part" "$needle"'
+done
+for needle in '--diagrams' "contract-diagram.sh' restore"; do
+  assert "Pending items names $needle" 'has "$pending_part" "$needle"'
+done
+for needle in '--diagrams' 'contract-diagram.sh" stale'; do
+  assert "run-retro names $needle" 'grep -qF -- "$needle" "$retro_skill"'
 done
 
 # glob_blocks_without_null_glob <file>...: counts bash blocks that loop over a glob and lack the setopt line

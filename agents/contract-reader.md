@@ -46,6 +46,7 @@ The output has `status:`, `base:`, `behind:`, `stale_sections:`, `stale_dependen
 The patch covers every stale section from the check, and each unclaimed file. When the facts of the task change them, it also covers `consumers` and `gotchas`.
 
 - The patch is YAML with a `sections:` map. Its keys are section keys of the contract. The apply script replaces each named section as a whole.
+- The patch also holds the whole new `diagrams:` block at the top level, next to `sections:`, in two cases. One case is a check that lists `diagrams` in `stale_sections`. The other is a task whose facts change a diagram. The apply script replaces the block as a whole. Keep each diagram that did not change.
 - Each section in the map is the whole new section, with its `sources` list for `team_docs`, `abilities`, `interfaces`, and `depends_on`. The apply script refuses a section that lost its required `sources`.
 - Write each stale section in full from the code at `origin/<base_branch>`. If the code does not show a fact, leave the fact out. Each item has `text`, one claim in at most 25 words, and `refs`, at least one `path:lines` ref at `origin/<base_branch>`. In a flow list, put a ref that holds a comma in double quotes, for example `refs: ["app/main.py:10,40-42"]`, or write `refs` as a block list.
 - Never copy text from a team doc into the patch. Add a glob for the doc to the `sources` of `team_docs` instead.
@@ -69,5 +70,5 @@ Reply in this exact form. The line `=== PATCH ===` stands alone. Write no code f
 ### Project facts
 <every line under "## Facts" of the facts file, or None>
 === PATCH ===
-<the YAML patch: a sections: map with each stale section in full, then an optional remove_planned: list of built plan item ids, or the word None>
+<the YAML patch: a sections: map with each stale section in full, then an optional diagrams: block, then an optional remove_planned: list of built plan item ids, or the word None>
 ```
