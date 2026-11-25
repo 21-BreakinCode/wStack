@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
-# Usage: contract-open.sh --vault <vault> [--note] [--print] [<service>]
+# Usage: contract-open.sh --vault <vault> [--note] [--print] [--contract] [<service>]
 # Finds a contract (by <service> name, or by the current folder), renders its views when they are
 # missing or older than the .contract.yaml, and opens the HTML page (or, with --note, the vault note
-# in Obsidian). --print prints the path and does not open it.
+# in Obsidian). --print prints the path and does not open it. --contract prints the contract YAML
+# path and renders nothing.
 # Exit 0 opened, 1 no contract found (lists the rendered pages on stderr), 2 bad call or render failure.
 set -euo pipefail
 
-usage() { echo "usage: contract-open.sh --vault <vault> [--note] [--print] [<service>]" >&2; exit 2; }
-vault="" want_note=0 print_only=0 service=""
+usage() { echo "usage: contract-open.sh --vault <vault> [--note] [--print] [--contract] [<service>]" >&2; exit 2; }
+vault="" want_note=0 print_only=0 want_contract=0 service=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --vault) [ -n "${2:-}" ] || usage; vault="$2"; shift 2 ;;
     --note) want_note=1; shift ;;
     --print) print_only=1; shift ;;
+    --contract) want_contract=1; shift ;;
     -*) usage ;;
     *) [ -z "$service" ] || usage; service="$1"; shift ;;
   esac
@@ -43,6 +45,8 @@ else
   contract="$(find "$vault/01Project" -name "$service.contract.yaml" -not -path '*/_archive/*' 2>/dev/null | head -n 1)"
 fi
 [ -n "$contract" ] && [ -f "$contract" ] || no_contract "no contract for ${service:-the current repository}"
+
+[ "$want_contract" = 0 ] || { echo "$contract"; exit 0; }
 
 app_name="$(basename "$contract" .contract.yaml)"
 note="$(dirname "$contract")/$app_name.md"

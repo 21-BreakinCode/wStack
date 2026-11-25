@@ -41,4 +41,10 @@ set +e; bash "$script" --vault "$VAULT" --print "../x" >/dev/null 2>&1; rc=$?; s
 assert "a bad service name exits 2" '[ $rc = 2 ]'
 set +e; bash "$script" --print svc >/dev/null 2>&1; rc=$?; set -e
 assert "a missing --vault exits 2" '[ $rc = 2 ]'
+rm -f "$page"
+out="$(cd "$REPO" && bash "$script" --vault "$VAULT" --contract)"
+assert "--contract prints the YAML path for the current repository" '[ "$out" = "$CONTRACT" ]'
+out="$(cd "$work_dir" && bash "$script" --vault "$VAULT" --contract svc)"
+assert "--contract prints the YAML path for a service name" '[ "$out" = "$CONTRACT" ]'
+assert "--contract writes no page" '[ ! -e "$page" ]'
 finish
