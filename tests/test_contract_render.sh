@@ -115,6 +115,7 @@ else
   assert "html fits 375 px" '[ "$rc" -eq 0 ]'
 fi
 assert "a contract without diagrams has no Diagrams heading" '! grep -q "^## Diagrams" "$note"'
+assert "a page without diagrams has no Diagrams heading" '! grep -q "<h2>Diagrams</h2>" "$page"'
 
 diagram_vault="$work_dir/diagram-vault"
 mkdir -p "$diagram_vault/diagrams"
@@ -128,6 +129,8 @@ assert "the note shows Diagrams after the summary and before Gotchas" '[ "$summa
 for heading in "Component flow" "Sequence: Create an item" "States: Item status" "Architecture (clean)"; do
   assert "the note has the heading $heading with a text block" '[ "$(grep -A2 -F "### $heading" "$diagram_note" | sed -n 3p)" = "\`\`\`text" ]'
 done
+assert "the page has four SVG diagrams" 'grep -qF "<h2>Diagrams</h2>" "$page" && [ "$(grep -o "<svg" "$page" | wc -l | tr -d " ")" = "4" ]'
+assert "the page wraps diagrams for horizontal scroll" 'grep -qF ".diagram { overflow-x: auto;" "$page"'
 
 cat > "$diagram_vault/diagrams/flow.html" <<HTML
 <html><head><meta name="wstack-subject" content="flow"><meta name="wstack-subject-hash" content="0000"></head></html>

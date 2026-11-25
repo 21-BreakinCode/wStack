@@ -11,6 +11,7 @@ import sys
 from urllib.parse import quote
 
 import contract_diagrams
+import contract_diagrams_svg
 
 SECTIONS = [
     ("gotchas", "Gotchas"),
@@ -154,6 +155,20 @@ ul.items li { margin: 8px 0; }
 details { margin: 4px 0; }
 summary { cursor: pointer; color: var(--muted); }
 code { overflow-wrap: anywhere; }
+.diagram { overflow-x: auto; margin: 12px 0; }
+.diagram figcaption { font-weight: 600; margin: 0 0 6px; }
+.diagram svg { display: block; max-width: none; }
+.diagram text { font: 13px system-ui, sans-serif; fill: var(--fg); }
+.diagram .lbl { paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.diagram .layer-name { font-weight: 600; }
+.diagram .node, .diagram .pill { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
+.diagram .layer { fill: var(--card); fill-opacity: .5; stroke: var(--line); stroke-width: 1.5; }
+.diagram .svc { fill: none; stroke: var(--link); stroke-width: 1.5; }
+.diagram .edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+.diagram .impl { stroke-dasharray: 5 4; }
+.diagram .life { stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 4 4; }
+.diagram .head, .diagram .start { fill: var(--link); }
+.badge { margin-left: 6px; padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: .8rem; }
 """
 
 
@@ -183,7 +198,7 @@ def html_item(item, repo, commit, plans_by_id):
     return "<li>%s</li>" % "".join(parts)
 
 
-def render_html(data):
+def render_html(data, deep_dives):
     repo, commit = data.get("repo", ""), str(data.get("verified_commit") or "")
     sections = data.get("sections") or {}
     planned = data.get("planned") or []
@@ -202,6 +217,9 @@ def render_html(data):
         '<ul class="counts">%s</ul></div>' % (
             esc(commit), esc(data.get("verified_at") or "unknown time"), esc(data.get("base_branch", "")), count_html),
     ]
+    diagram_section = contract_diagrams_svg.html_section(data.get("diagrams") or {}, deep_dives)
+    if diagram_section:
+        body.append(diagram_section)
     for key, title in SECTIONS + [("planned", "Planned"), ("open_questions", "Open questions")]:
         if key == "open_questions" and not items_of(key):
             continue
@@ -241,7 +259,7 @@ def main():
     with open(note_path, "w", encoding="utf-8") as note:
         note.write(render_note(data, contract_name, deep_dives))
     with open(html_path, "w", encoding="utf-8") as page:
-        page.write(render_html(data))
+        page.write(render_html(data, deep_dives))
 
 
 if __name__ == "__main__":
