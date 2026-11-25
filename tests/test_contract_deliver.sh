@@ -55,6 +55,10 @@ run "$deliver" write "$task" "$CONTRACT" "$task_id"
 assert "write twice is safe ($out)" '[ $first_rc = 0 ] && [ $rc = 0 ] && [ "$out" = "$first_out" ] && cmp -s "$archive/svc.contract.yaml" "$work_dir/contract.orig" &&
   [ "$(cat "$task/decisions.copied.txt")" = "$(printf "0001-baseline.md\n0002-queue.md")" ] && grep -qxF "summary: New text." "$CONTRACT" && [ ! -e "$CONTRACT.lock" ]'
 
+new_world; rm -rf "$task/decisions.draft"
+run "$deliver" write "$task" "$CONTRACT" "$task_id"
+assert "write with no decision drafts makes no decisions folder ($out)" '[ $rc = 0 ] && [ ! -e "$folder/decisions" ]'
+
 new_world; mkdir -p "$folder/decisions"; echo other >"$folder/decisions/0001-other.md"; keep_copy
 run "$deliver" write "$task" "$CONTRACT" "$task_id"
 assert "decision id clash exits 1 before any change ($out)" '[ $rc = 1 ] && printf "%s\n" "$out" | grep -qF "decision id 0001 already exists in decisions/: 0001-other.md" && same_as_copy'

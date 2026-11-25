@@ -114,10 +114,13 @@ def render_note(data, contract_name):
     for plan in planned:
         out += ["### " + heading_text(plan.get("title", "")), "", md_text(plan.get("why", "")), ""]
         out += [line[2:] for line in md_refs(plan.get("refs") or [], repo, commit)] + [""]
-    out += ["## Open questions", ""]
-    for item in (sections.get("open_questions") or {}).get("items") or []:
-        out += md_item(item, repo, commit, plans_by_id)
-    out += ["", "## Team docs", ""]
+    open_questions = (sections.get("open_questions") or {}).get("items") or []
+    if open_questions:
+        out += ["## Open questions", ""]
+        for item in open_questions:
+            out += md_item(item, repo, commit, plans_by_id)
+        out.append("")
+    out += ["## Team docs", ""]
     for name, block in (("team_docs", sections.get("team_docs") or {}),) + tuple(
             (key, sections.get(key) or {}) for key in ("abilities", "interfaces", "depends_on")):
         sources = block.get("sources") or []
@@ -195,6 +198,8 @@ def render_html(data):
             esc(commit), esc(data.get("verified_at") or "unknown time"), esc(data.get("base_branch", "")), count_html),
     ]
     for key, title in SECTIONS + [("planned", "Planned"), ("open_questions", "Open questions")]:
+        if key == "open_questions" and not items_of(key):
+            continue
         body.append("<h2>%s</h2>" % title)
         if key == "interfaces" and data.get("openapi"):
             body.append('<p>OpenAPI: <a href="%s">%s</a></p>' % (

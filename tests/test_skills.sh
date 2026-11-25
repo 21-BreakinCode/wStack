@@ -3,7 +3,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$repo_root/tests/_assert.sh"
 
-expected_skills="board build-review-page capture-evidence create-handover deliver-task init-org init-service pause-work resume-work run-retro start-task wrap-up-handovers"
+expected_skills="board build-review-page capture-evidence create-handover deliver-task init-org init-service open-contract pause-work resume-work run-retro start-task wrap-up-handovers"
 actual_skills="$(ls "$repo_root/skills" | sort | tr '\n' ' ' | sed 's/ $//')"
 assert "skill folders" '[ "$actual_skills" = "$expected_skills" ]'
 
@@ -30,6 +30,7 @@ done
 for skill in build-review-page capture-evidence deliver-task; do
   assert "$skill is a helper" 'grep -qx "user-invocable: false" "$repo_root/skills/$skill/SKILL.md"'
 done
+assert "open-contract stays model-invocable" '! grep -q "disable-model-invocation" "$repo_root/skills/open-contract/SKILL.md" && grep -qF "contract-open.sh" "$repo_root/skills/open-contract/SKILL.md"'
 assert "board skill lists needs you, stalled, stopped in order" 'grep -qE "needs you.*stalled.*stopped" "$repo_root/skills/board/SKILL.md"'
 assert "start-task holds the wait rule" 'grep -qF "never end a turn to wait" "$repo_root/skills/start-task/SKILL.md"'
 assert "board --watch splits a pane and runs board-watch.sh" 'grep -qF "board-watch.sh" "$repo_root/skills/board/SKILL.md" && grep -qF "herdr pane split --current --direction down --no-focus" "$repo_root/skills/board/SKILL.md" && grep -qF "herdr pane run" "$repo_root/skills/board/SKILL.md"'

@@ -42,6 +42,7 @@ User commands:
 - `/wstack:pause-work`: pause the work of any session. It writes a resume note, then stops the background agents, shells, and processes the session started. Run it before you close the computer.
 - `/wstack:resume-work`: resume from the newest resume note of the current folder. For a task, it prints `cd "<workspace_cwd>" && claude "/wstack:start-task --task <task_id>"`, so the task resumes in its own folder with its configuration values.
 - `/wstack:init-org`: scaffold the handover initiation file for an org. Run it once per org.
+- `/wstack:open-contract [<service>] [--note]`: open the HTML page of a service contract in the browser. With no service name, it opens the contract of the current repository. With `--note`, it opens the vault note in Obsidian. It renders the page again first when the page is missing or older than the contract. If no contract matches, it lists the rendered contracts. A session can also run it when you ask to see a contract.
 - `/wstack:init-service`: set up a repository for handovers. Run it once per repository. `/wstack:init-service <repo-path> ...` sets up each repository you name, from any folder. `/wstack:init-service --check` reports the state of every mapped repository and changes nothing.
 - `/wstack:create-handover`: create a handover document from the current conversation.
 - `/wstack:wrap-up-handovers`: wrap up all active handovers in the vault.

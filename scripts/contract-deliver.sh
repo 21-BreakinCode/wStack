@@ -51,7 +51,7 @@ case "$action" in
         fail "decision id ${draft_name%%-*} already exists in decisions/: $(basename "$same_id")"
       done
     done
-    mkdir -p "$archive_dir" "$contract_folder/decisions"
+    mkdir -p "$archive_dir"
     if [ ! -e "$archive_dir/.archived" ]; then
       for old_file in "$contract_folder"/*; do  # the glob skips dot files, so they stay
         case "$(basename "$old_file")" in handover|decisions|_archive|*.lock|*.facts.md) continue ;; esac
@@ -64,6 +64,7 @@ case "$action" in
     for draft_decision in "$task_dir/decisions.draft"/*; do
       [ -e "$draft_decision" ] || continue
       grep -qsxF "$(basename "$draft_decision")" "$copied_list" || basename "$draft_decision" >>"$copied_list"
+      mkdir -p "$contract_folder/decisions"
       cp "$draft_decision" "$contract_folder/decisions/"
     done
     bash "$scripts/contract-edit.sh" set-verified "$contract_file" "$verified_commit" || fail "set-verified failed"

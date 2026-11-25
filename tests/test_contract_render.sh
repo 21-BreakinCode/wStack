@@ -82,7 +82,8 @@ assert "note starts with the generated notice" '[[ "$body_first" == *svc.contrac
 assert "note keeps the tags" 'sed -n 1,6p "$note" | grep -q "type/contract" && sed -n 1,6p "$note" | grep -q "^tags:"'
 
 order="$(grep -E '^## ' "$note" | tr '\n' '|')"
-assert "note section order" '[ "$order" = "## Gotchas|## Abilities|## Interfaces|## Depends on|## Consumers|## Planned|## Open questions|## Team docs|" ]'
+assert "note section order" '[ "$order" = "## Gotchas|## Abilities|## Interfaces|## Depends on|## Consumers|## Planned|## Team docs|" ]'
+assert "empty open questions get no heading" '! grep -q "Open questions" "$note" && ! grep -q "Open questions" "$page"'
 assert "summary and freshness sit before Gotchas" '[ "$(grep -n "Test service that stores things" "$note" | cut -d: -f1)" -lt "$(grep -n "^## Gotchas" "$note" | cut -d: -f1)" ] && grep -q "$sha" "$note"'
 assert "refs fold in a callout" 'grep -qF "> [!quote]- refs (2)" "$note"'
 assert "ref links to GitHub at verified_commit" 'grep -qF "https://github.com/acme-org/svc/blob/$sha/api/routes.go#L3-L5" "$note"'

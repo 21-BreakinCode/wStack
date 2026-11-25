@@ -117,6 +117,7 @@ wstack/
 │   ├── init-service/SKILL.md      user command: /wstack:init-service
 │   ├── create-handover/SKILL.md   user command: /wstack:create-handover
 │   ├── wrap-up-handovers/SKILL.md user command: /wstack:wrap-up-handovers
+│   ├── open-contract/SKILL.md     command: /wstack:open-contract (model can run it too)
 │   ├── build-review-page/SKILL.md helper: build review.html
 │   ├── capture-evidence/SKILL.md  helper: capture, compress, upload evidence
 │   └── deliver-task/SKILL.md      helper: deliver rules and approval gate
@@ -153,6 +154,7 @@ wstack/
 │   ├── contract-refs.sh           proves that every ref of the contract exists at its commit
 │   ├── contract-render.sh         writes the vault note and the HTML page from the contract YAML
 │   ├── contract_render.py         the renderer that contract-render.sh calls
+│   ├── contract-open.sh           finds a contract, renders stale views, opens the page or the note
 │   ├── contract-deliver.sh        write, undo, and rehearse the Deliver step of a contract task
 │   ├── contract-verify-draft.sh   runs the four scripted checks on contract.draft.yaml
 │   ├── find-test-skips.sh         prints the skip lines of a saved test output
