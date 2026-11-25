@@ -5,9 +5,12 @@ Usage: contract_render.py <note path> <html path> <contract file name>
 """
 import html
 import json
+import os
 import re
 import sys
 from urllib.parse import quote
+
+import contract_diagrams
 
 SECTIONS = [
     ("gotchas", "Gotchas"),
@@ -90,7 +93,7 @@ def md_item(item, repo, commit, plans_by_id):
     return lines + md_refs(item.get("refs") or [], repo, commit)
 
 
-def render_note(data, contract_name):
+def render_note(data, contract_name, deep_dives):
     repo, commit = data.get("repo", ""), str(data.get("verified_commit") or "")
     sections = data.get("sections") or {}
     planned = data.get("planned") or []
@@ -102,6 +105,8 @@ def render_note(data, contract_name):
            "Verified at `%s` on %s. Base branch: `%s`." % (
                commit, one_line(data.get("verified_at") or "unknown time"), one_line(data.get("base_branch", ""))),
            ""]
+    diagram_lines = contract_diagrams.note_lines(data.get("diagrams") or {}, deep_dives)
+    out += diagram_lines
     for key, title in SECTIONS:
         out += ["## " + title, ""]
         if key == "interfaces" and data.get("openapi"):
@@ -231,8 +236,10 @@ def main():
     data = json.load(sys.stdin)
     if not isinstance(data, dict):
         sys.exit("contract is not a mapping")
+    deep_dives = contract_diagrams.read_deep_dives(
+        os.path.dirname(os.path.abspath(note_path)), data.get("diagrams") or {})
     with open(note_path, "w", encoding="utf-8") as note:
-        note.write(render_note(data, contract_name))
+        note.write(render_note(data, contract_name, deep_dives))
     with open(html_path, "w", encoding="utf-8") as page:
         page.write(render_html(data))
 

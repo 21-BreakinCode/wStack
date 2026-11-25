@@ -114,4 +114,28 @@ if [ "$rc" -eq 2 ] && grep -q "playwright-cli not found" "$work_dir/width.err"; 
 else
   assert "html fits 375 px" '[ "$rc" -eq 0 ]'
 fi
+assert "a contract without diagrams has no Diagrams heading" '! grep -q "^## Diagrams" "$note"'
+
+diagram_vault="$work_dir/diagram-vault"
+mkdir -p "$diagram_vault/diagrams"
+{ cat "$contract"; cat "$repo_root/tests/fixtures/contract/diagrams-block.yaml"; } > "$diagram_vault/svc.contract.yaml"
+"$render" "$diagram_vault/svc.contract.yaml" >/dev/null
+diagram_note="$diagram_vault/svc.md"
+summary_line="$(grep -n "Test service that stores things" "$diagram_note" | cut -d: -f1)"
+diagrams_line="$(grep -n "^## Diagrams" "$diagram_note" | cut -d: -f1)"
+gotchas_line="$(grep -n "^## Gotchas" "$diagram_note" | cut -d: -f1)"
+assert "the note shows Diagrams after the summary and before Gotchas" '[ "$summary_line" -lt "$diagrams_line" ] && [ "$diagrams_line" -lt "$gotchas_line" ]'
+for heading in "Component flow" "Sequence: Create an item" "States: Item status" "Architecture (clean)"; do
+  assert "the note has the heading $heading with a text block" '[ "$(grep -A2 -F "### $heading" "$diagram_note" | sed -n 3p)" = "\`\`\`text" ]'
+done
+
+cat > "$diagram_vault/diagrams/flow.html" <<HTML
+<html><head><meta name="wstack-subject" content="flow"><meta name="wstack-subject-hash" content="0000"></head></html>
+HTML
+"$render" "$diagram_vault/svc.contract.yaml" >/dev/null
+assert "the note lists deep dives with their state" 'grep -q "^### Deep dives" "$diagram_note" && grep -qF -- "- [flow.html](diagrams/flow.html) (stale)" "$diagram_note"'
+fresh_hash="$(yq -o=json "$diagram_vault/svc.contract.yaml" | /usr/bin/python3 "$repo_root/scripts/contract_diagrams.py" hash flow)"
+sed -i.bak "s/0000/$fresh_hash/" "$diagram_vault/diagrams/flow.html"
+"$render" "$diagram_vault/svc.contract.yaml" >/dev/null
+assert "a fresh deep dive has no mark" 'grep -qF -- "- [flow.html](diagrams/flow.html)" "$diagram_note" && ! grep -qF "flow.html](diagrams/flow.html) (" "$diagram_note"'
 finish
