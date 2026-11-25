@@ -169,6 +169,12 @@ while IFS=$'\t' read -r app_name mapped_commit; do
   mark_section_stale depends_on
 done <<<"$dependency_lines"
 
+# The diagrams draw on these four sections, so a stale one makes a drawn block stale. Coverage mode marks nothing stale.
+if [ "$coverage_mode" = 0 ] && [ "$(yq '(.diagrams // {}) | length' "$contract_file")" -gt 0 ] \
+  && printf '%s' "$stale_sections" | grep -qxE 'abilities|interfaces|depends_on|consumers'; then
+  mark_section_stale diagrams
+fi
+
 if [ -n "$stale_sections" ] || [ -n "$stale_dependencies" ] || [ "$unclaimed_count" -gt 0 ]; then is_stale=1; fi
 status=fresh; [ "$is_stale" = 0 ] || status=stale
 

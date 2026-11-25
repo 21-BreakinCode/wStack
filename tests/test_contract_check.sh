@@ -219,4 +219,13 @@ assert "--mapping-from works with --coverage in either order" '[ $flag_first_rc 
 run --mapping-from
 assert "--mapping-from with no path exits 2" '[ $rc = 2 ] && grep -q "usage: contract-check.sh" "$work_dir/err"'
 
+# diagrams staleness
+diagrams_block="$repo_root/tests/fixtures/contract/diagrams-block.yaml"
+new_world; yq -i '. *= load("'"$diagrams_block"'")' "$CONTRACT"; push_file api/new.go; run
+assert "diagrams is stale when interfaces is stale" '[ $rc = 1 ] && [ "$(field stale_sections)" = "[\"interfaces\",\"diagrams\"]" ]'
+new_world; yq -i '.diagrams = {}' "$CONTRACT"; push_file api/new.go; run
+assert "an empty diagrams block is never stale" '[ "$(field stale_sections)" = "[\"interfaces\"]" ]'
+new_world; yq -i '. *= load("'"$diagrams_block"'")' "$CONTRACT"; set_key "$CONTRACT" ignore '[]'; push_file README.md; run --coverage
+assert "coverage mode never lists diagrams" '[ "$(field stale_sections)" = "[]" ]'
+
 finish

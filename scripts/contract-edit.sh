@@ -2,7 +2,9 @@
 # contract-edit.sh <subcommand> ...  The only script that edits a service contract (<app>.contract.yaml) and its lock.
 # Deliver "Contract files" also writes whole files with cp, under the lock from this script.
 #   lock|unlock <contract_file>
-#   apply <contract_file> <patch_file> [--sections "a,b"] [--section "a"]... [--planned "id,id"]
+#   apply <contract_file> <patch_file> [--sections "a,b"] [--section "a"]... [--planned "id,id"] [--diagrams]
+#     A patch may hold a top-level diagrams: map. No flag applies it with the sections. --diagrams applies it alone:
+#     it sets .diagrams to the patch block, or removes .diagrams if the patch has none. With any flag, only flagged parts apply.
 #     --planned with no --sections or --section applies no section: it restores the named plan items only.
 #   remove-planned <contract_file> <id>
 #   pending-add <contract_file> <pr> <task_id> | pending-remove <contract_file> <pr>
@@ -65,14 +67,16 @@ case "$subcommand" in
     rmdir "$lock_dir" || { echo "contract-edit.sh: cannot remove the lock folder: $lock_dir" >&2; exit 1; } ;;
 
   apply)
-    apply_usage='usage: contract-edit.sh apply <contract_file> <patch_file> [--sections "a,b"] [--section "a"]... [--planned "id,id"]'
+    apply_usage='usage: contract-edit.sh apply <contract_file> <patch_file> [--sections "a,b"] [--section "a"]... [--planned "id,id"] [--diagrams]'
     target_file="${1:?$apply_usage}"
     patch_file="${2:?$apply_usage}"
     shift 2
     wanted_sections=""   # one key per line
     restore_ids=""       # one plan id per line
+    diagrams_flag=0
     while [ $# -gt 0 ]; do
       case "$1" in
+        --diagrams) diagrams_flag=1; shift; continue ;;
         --sections) wanted_sections="$wanted_sections$(printf '%s' "${2:?--sections needs a value}" | split_names)"$'\n' ;;
         --section) wanted_sections="$wanted_sections$(printf '%s' "${2:?--section needs a value}" | split_names)"$'\n' ;;
         --planned) restore_ids="$restore_ids$(printf '%s' "${2:?--planned needs a value}" | split_names)"$'\n' ;;
@@ -86,6 +90,8 @@ case "$subcommand" in
     jq -e 'type == "object" and ((.sections // {}) | type == "object")
       and ((.remove_planned // []) | type == "array" and all(type == "string"))' >/dev/null <<<"$patch_json" \
       || fail "the patch must be a map with a sections: map and an optional remove_planned: list of ids: $patch_file"
+    jq -e '(has("diagrams") | not) or (.diagrams | type == "object" or type == "null")' >/dev/null <<<"$patch_json" \
+      || fail "diagrams in the patch must be a map: $patch_file"
     contract_keys="$(yq -p yaml -o json '.sections | keys' "$target_file" 2>/dev/null)" || fail "cannot read the sections of $target_file"
     unknown_keys="$(jq -r --argjson contract_keys "$contract_keys" \
       '(.sections // {}) | keys_unsorted[] | select(. as $key | $contract_keys | index($key) | not)' <<<"$patch_json")"
@@ -101,18 +107,27 @@ case "$subcommand" in
     else
       apply_keys="$patch_keys"
     fi
+    patch_has_diagrams="$(jq -r 'has("diagrams")' <<<"$patch_json")"
+    if [ "$diagrams_flag" = 1 ]; then apply_diagrams=1
+    elif [ -n "$wanted_sections$restore_ids" ]; then apply_diagrams=0
+    elif [ "$patch_has_diagrams" = true ]; then apply_diagrams=1
+    else apply_diagrams=0; fi
     restore_ids="$(printf '%s' "$restore_ids" | grep -v '^$' || true)"
     while IFS= read -r plan_id; do
       [ -z "$plan_id" ] || [ "$(plan_item_count "$patch_file" "$plan_id")" -gt 0 ] || fail "the patch has no plan item: $plan_id"
     done <<<"$restore_ids"
     remove_ids="$(jq -r '(.remove_planned // [])[]' <<<"$patch_json")"
-    [ -n "$apply_keys$restore_ids$remove_ids" ] || fail "patch holds nothing to apply: $patch_file"
+    [ -n "$apply_keys$restore_ids$remove_ids" ] || [ "$apply_diagrams" = 1 ] || fail "patch holds nothing to apply: $patch_file"
 
     stage "$target_file"
     export PATCH_FILE="$patch_file"
     while IFS= read -r section_key; do
       [ -z "$section_key" ] || SECTION_KEY="$section_key" edit_staged '.sections[strenv(SECTION_KEY)] = load(strenv(PATCH_FILE)).sections[strenv(SECTION_KEY)]'
     done <<<"$apply_keys"
+    if [ "$apply_diagrams" = 1 ]; then
+      if [ "$patch_has_diagrams" = true ]; then edit_staged '.diagrams = load(strenv(PATCH_FILE)).diagrams'
+      else edit_staged 'del(.diagrams)'; fi
+    fi
     while IFS= read -r plan_id; do
       [ -n "$plan_id" ] || continue
       export PLAN_ID="$plan_id"
@@ -133,6 +148,7 @@ case "$subcommand" in
     done <<<"$remove_ids"
     commit_staged "$target_file"
     [ -z "$apply_keys" ] || printf '%s\n' "$apply_keys"
+    [ "$apply_diagrams" = 0 ] || echo diagrams
     [ -z "$restore_ids" ] || printf '%s\n' "$restore_ids" | sed 's/^/planned restored: /'
     [ -z "$removed_ids" ] || printf '%s' "$removed_ids" | sed 's/^/planned removed: /' ;;
 

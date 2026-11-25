@@ -193,6 +193,26 @@ assert "set-verified on a 444 file works and keeps 444" "[ $rc -eq 0 ] && [ \"\$
 chmod 644 "$CONTRACT"
 assert "no temp file left after writes" "no_stray_temp"
 
+echo "diagrams"
+block="$here/fixtures/contract/diagrams-block.yaml"
+reset_contract; cp "$CONTRACT" "$work/no-diagrams-snapshot.yaml"
+cp "$block" "$work/diagrams-patch.yaml"
+yq -i '.sections.abilities = load("'"$CONTRACT"'").sections.abilities | .sections.abilities.items = [{"text": "New ability.", "refs": ["cmd/main.go:1"]}]' "$work/diagrams-patch.yaml"
+run_edit apply "$CONTRACT" "$work/diagrams-patch.yaml"
+assert "apply with no flag applies diagrams" "[ $rc -eq 0 ] && printf '%s\n' \"\$out\" | grep -qx diagrams && [ \"\$(query '$CONTRACT' '.diagrams' | jq -S .)\" = \"\$(query '$block' '.diagrams' | jq -S .)\" ]"
+reset_contract
+run_edit apply "$CONTRACT" "$work/diagrams-patch.yaml" --sections abilities
+assert "--sections alone leaves diagrams" "[ $rc -eq 0 ] && [ \"\$(query '$CONTRACT' '.diagrams')\" = null ] && ! printf '%s\n' \"\$out\" | grep -qx diagrams"
+reset_contract; yq -i '. *= load("'"$block"'")' "$CONTRACT"
+run_edit apply "$CONTRACT" "$work/no-diagrams-snapshot.yaml" --diagrams
+assert "--diagrams from a snapshot without diagrams removes the block" "[ $rc -eq 0 ] && [ \"\$(query '$CONTRACT' '.diagrams')\" = null ] && printf '%s\n' \"\$out\" | grep -qx diagrams"
+reset_contract; yq '{"diagrams": .diagrams}' "$block" > "$work/only-diagrams.yaml"
+run_edit apply "$CONTRACT" "$work/only-diagrams.yaml"
+assert "a patch with only diagrams is accepted" "[ $rc -eq 0 ] && [ \"\$out\" = diagrams ] && [ \"\$(query '$CONTRACT' '.diagrams.flow.parts[0].id')\" = api ]"
+reset_contract; printf 'diagrams:\n  - a\n' > "$work/list-diagrams.yaml"
+run_edit apply "$CONTRACT" "$work/list-diagrams.yaml"
+assert "a patch with diagrams as a list is refused" "[ $rc -ne 0 ] && [ \"\$(json_of '$CONTRACT')\" = \"\$(json_of '$base')\" ]"
+
 echo "next-decision-id"
 assert "missing folder gives 0001" "[ \"\$(bash '$edit' next-decision-id '$work/none')\" = 0001 ]"
 mkdir "$work/dec"; touch "$work/dec/0001-a.md" "$work/dec/0003-b.md"
