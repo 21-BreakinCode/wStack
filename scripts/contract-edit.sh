@@ -89,7 +89,7 @@ case "$subcommand" in
     patch_json="$(yq -p yaml -o json '.' "$patch_file" 2>/dev/null)" || fail "cannot read the patch YAML: $patch_file"
     jq -e 'type == "object" and ((.sections // {}) | type == "object")
       and ((.remove_planned // []) | type == "array" and all(type == "string"))' >/dev/null <<<"$patch_json" \
-      || fail "the patch must be a map with a sections: map and an optional remove_planned: list of ids: $patch_file"
+      || fail "a patch holds a sections: map and/or a diagrams: map, plus an optional remove_planned: list of ids: $patch_file"
     jq -e '(has("diagrams") | not) or (.diagrams | type == "object" or type == "null")' >/dev/null <<<"$patch_json" \
       || fail "diagrams in the patch must be a map: $patch_file"
     contract_keys="$(yq -p yaml -o json '.sections | keys' "$target_file" 2>/dev/null)" || fail "cannot read the sections of $target_file"
@@ -102,8 +102,8 @@ case "$subcommand" in
       while IFS= read -r section_key; do
         printf '%s\n' "$patch_keys" | grep -qxF "$section_key" || fail "the patch has no section named: $section_key"
       done <<<"$apply_keys"
-    elif [ -n "$restore_ids" ]; then
-      apply_keys=""  # --planned alone restores plan items only, so a full snapshot undoes no section
+    elif [ -n "$restore_ids" ] || [ "$diagrams_flag" = 1 ]; then
+      apply_keys=""  # --planned or --diagrams alone applies no section, so a full snapshot undoes no section
     else
       apply_keys="$patch_keys"
     fi

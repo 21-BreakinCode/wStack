@@ -206,6 +206,11 @@ assert "--sections alone leaves diagrams" "[ $rc -eq 0 ] && [ \"\$(query '$CONTR
 reset_contract; yq -i '. *= load("'"$block"'")' "$CONTRACT"
 run_edit apply "$CONTRACT" "$work/no-diagrams-snapshot.yaml" --diagrams
 assert "--diagrams from a snapshot without diagrams removes the block" "[ $rc -eq 0 ] && [ \"\$(query '$CONTRACT' '.diagrams')\" = null ] && printf '%s\n' \"\$out\" | grep -qx diagrams"
+reset_contract; yq -i '. *= load("'"$block"'")' "$CONTRACT"; cp "$CONTRACT" "$work/full-snapshot.yaml"
+yq -i '.sections.abilities.items = [{"text": "Newer ability.", "refs": ["cmd/main.go:1"]}] | .diagrams.flow.parts[0].label = "Changed"' "$CONTRACT"
+cp "$CONTRACT" "$work/before-undo.yaml"
+run_edit apply "$CONTRACT" "$work/full-snapshot.yaml" --diagrams
+assert "--diagrams alone from a full snapshot restores the block and no section" "[ $rc -eq 0 ] && [ \"\$out\" = diagrams ] && [ \"\$(query '$CONTRACT' '.sections' | jq -S .)\" = \"\$(query '$work/before-undo.yaml' '.sections' | jq -S .)\" ] && [ \"\$(query '$CONTRACT' '.diagrams' | jq -S .)\" = \"\$(query '$work/full-snapshot.yaml' '.diagrams' | jq -S .)\" ]"
 reset_contract; yq '{"diagrams": .diagrams}' "$block" > "$work/only-diagrams.yaml"
 run_edit apply "$CONTRACT" "$work/only-diagrams.yaml"
 assert "a patch with only diagrams is accepted" "[ $rc -eq 0 ] && [ \"\$out\" = diagrams ] && [ \"\$(query '$CONTRACT' '.diagrams.flow.parts[0].id')\" = api ]"
