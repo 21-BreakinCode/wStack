@@ -43,6 +43,7 @@ User commands:
 - `/wstack:resume-work`: resume from the newest resume note of the current folder. For a task, it prints `cd "<workspace_cwd>" && claude "/wstack:start-task --task <task_id>"`, so the task resumes in its own folder with its configuration values.
 - `/wstack:init-org`: scaffold the handover initiation file for an org. Run it once per org.
 - `/wstack:open-contract [<service>] [--note]`: open the HTML page of a service contract in the browser. With no service name, it opens the contract of the current repository. With `--note`, it opens the vault note in Obsidian. It renders the page again first when the page is missing or older than the contract. If no contract matches, it lists the rendered contracts. A session can also run it when you ask to see a contract.
+- `/wstack:draw-contract [<service>] [<what to draw>]`: draw a deep dive of a service contract with the diagram-design plugin. `<what to draw>` is `flow`, `sequence:<id>`, `states:<id>`, or `architecture`. With no value, it draws `flow`. The deep dive is an HTML file in the `diagrams/` folder next to the contract. The contract page links it. If the contract changed that part of the `diagrams` block after the drawing, the page marks the deep dive stale. If you ask to draw a contract, a session can also run it.
 - `/wstack:init-service`: set up a repository for handovers. Run it once per repository. `/wstack:init-service <repo-path> ...` sets up each repository you name, from any folder. `/wstack:init-service --check` reports the state of every mapped repository and changes nothing.
 - `/wstack:create-handover`: create a handover document from the current conversation.
 - `/wstack:wrap-up-handovers`: wrap up all active handovers in the vault.
@@ -95,6 +96,8 @@ To set up a contract:
 3. For a new project, answer one question for each section. For an existing project, the spec lists the team docs and code areas to read.
 4. Approve the spec. Execute writes drafts in the task folder. Deliver runs `contract-deliver.sh write`. It moves the old vault files into `_archive/<task_id>/`, writes the contract, and renders the note and the page. It is safe to run again. `contract-deliver.sh undo` reverses it.
 
+The contract views show diagrams from the `diagrams` block of the contract. The vault note draws them as ASCII, and the HTML page draws them as SVG. They cover the component flow, the key sequences, the state lifecycles, and the architecture layers. A contract task fills the block. A contract update redraws the views. A contract that was built before this feature has no `diagrams` block. To add one, rerun the contract task with a `**change:**` line in the idea.
+
 To ask why a service is the way it is, ask in any session. Claude sends the question to the `contract-historian` agent.
 
 ## Install
@@ -111,6 +114,13 @@ The GitHub repository 21-BreakinCode/wStack is private. If you have no GitHub ac
 ```
 claude plugin marketplace add 21-BreakinCode/wStack
 claude plugin install wstack@wstack
+```
+
+Deep dives need the diagram-design plugin. wStack works without it. In that case, a task skips the deep dives and writes one line in `run-log.md`. To install it:
+
+```
+claude plugin marketplace add cathrynlavery/diagram-design
+claude plugin install diagram-design@diagram-design
 ```
 
 `/wstack:start-task` checks the base tools first. To run the same check yourself from a clone of this repository, run:

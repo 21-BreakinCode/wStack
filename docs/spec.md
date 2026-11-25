@@ -118,6 +118,7 @@ wstack/
 │   ├── create-handover/SKILL.md   user command: /wstack:create-handover
 │   ├── wrap-up-handovers/SKILL.md user command: /wstack:wrap-up-handovers
 │   ├── open-contract/SKILL.md     command: /wstack:open-contract (model can run it too)
+│   ├── draw-contract/SKILL.md     command: /wstack:draw-contract (model can run it too)
 │   ├── build-review-page/SKILL.md helper: build review.html
 │   ├── capture-evidence/SKILL.md  helper: capture, compress, upload evidence
 │   └── deliver-task/SKILL.md      helper: deliver rules and approval gate
@@ -154,6 +155,9 @@ wstack/
 │   ├── contract-refs.sh           proves that every ref of the contract exists at its commit
 │   ├── contract-render.sh         writes the vault note and the HTML page from the contract YAML
 │   ├── contract_render.py         the renderer that contract-render.sh calls
+│   ├── contract_diagrams.py       draws the diagrams block as ASCII, hashes subjects
+│   ├── contract_diagrams_svg.py   draws the diagrams block as SVG
+│   ├── contract-diagram.sh        stamps, installs, lists stale, and restores deep dives
 │   ├── contract-open.sh           finds a contract, renders stale views, opens the page or the note
 │   ├── contract-deliver.sh        write, undo, and rehearse the Deliver step of a contract task
 │   ├── contract-verify-draft.sh   runs the four scripted checks on contract.draft.yaml
@@ -479,6 +483,29 @@ The list is not complete. The worker agent picks the closest type. If no type fi
 
 - Input: the agent finds and prepares material for the user to read, watch, or study.
 - Output: the agent helps the user make notes, a blog post, or a talk. It also tests what the user learned with quizzes, flashcards, or an "explain it back" exercise.
+
+### 9.3 Contract diagrams
+
+The contract YAML has an optional top-level `diagrams` block. A contract with no block stays valid. A new project has no block. The block has four subjects:
+
+- `flow`: `parts`, `callers`, `dependencies`, and `edges`. Each edge joins two flow ids, and at least one end is a part.
+- `sequences`: key flows, step by step. Each sequence has an `id`, a `title`, and `steps`.
+- `states`: the status lifecycle of a record, with `initial` and `transitions`.
+- `architecture`: a `style` (`clean`, `hexagonal`, or `layered`), `layers` of components, and `implements` pairs of an adapter and a port.
+
+Every part, edge, step, transition, and architecture component cites `refs`. `contract-refs.sh` proves them like any other ref. `contract-validate.sh` checks the shape of the block.
+
+`scripts/contract_diagrams.py` draws the block as ASCII, and `scripts/contract_diagrams_svg.py` draws it as SVG. `contract_render.py` calls both. The vault note shows the ASCII under `## Diagrams`. The HTML page shows the SVG in the same place. Every contract edit redraws both, so they always match the YAML.
+
+A deep dive is one HTML file that the diagram-design plugin draws for one subject: `flow`, `sequence:<id>`, `states:<id>`, or `architecture`. It lives in `diagrams/<subject slug>.html` next to the contract. `contract-diagram.sh install` writes three `meta` tags into its head: `wstack-subject`, `wstack-subject-hash`, and `wstack-drawn-at`. `contract_diagrams.py` computes the hash from the drawn shape of the subject. The hash ignores `refs`, so a change that only moves cited lines keeps the deep dive fresh. If the hash of a deep dive differs from the current subject, the note and the page mark it `stale`. If its subject is gone, they mark it `subject removed`.
+
+Three flows draw deep dives, each with the steps of `/wstack:draw-contract`:
+
+- Deliver of a contract task redraws each stale deep dive. If the contract has a `flow` and no deep dive of `flow` exists, it draws `flow`.
+- If the apply of a contract update changed the `diagrams` block, the update redraws the stale deep dives. This holds for gate step 9, "Pending items" of `deliver-task`, and the retro.
+- `/wstack:draw-contract` draws one deep dive on request.
+
+The gate and the write-back keep separate backup lists, so each undo restores only its own files. diagram-design is a soft dependency. It is not in `dependencies` of `plugin.json`. If it is missing, a task skips the deep dive and writes one line in `run-log.md`. The generated diagrams do not need it.
 
 ## 10. Review page (confirmed)
 
