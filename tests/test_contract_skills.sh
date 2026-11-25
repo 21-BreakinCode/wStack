@@ -239,6 +239,19 @@ assert "Contract: line appears only in Phase 8 text and the Phase 9 report block
 assert "init-service names the contract.yaml path" 'has "$init_contract_part" "\`<app_name>.contract.yaml\`" && has "$init_contract_part" "An old \`<app_name>.md\` contract does not count"'
 assert "init-service report has a Contract: line" 'has "$init_report_part" "Contract:"'
 
+# Contract diagrams: build path
+draw_skill="$repo_root/skills/draw-contract/SKILL.md"
+reviewer_agent="$repo_root/agents/reviewer.md"
+for needle in 'diagram-design:diagram-design' 'faithful' 'contract-open.sh' '--contract' 'contract-render.sh' 'keep the default style'; do
+  assert "draw-contract names $needle" 'grep -qF -- "$needle" "$draw_skill"'
+done
+assert "execute fills diagrams.flow and architecture" 'has "$(cat "$execute")" "diagrams.flow" && has "$(cat "$execute")" "architecture"'
+assert "reviewer judges diagrams.flow" 'grep -qF "diagrams.flow" "$reviewer_agent"'
+assert "verify names diagrams" 'grep -qF "diagrams" "$verify"'
+for needle in 'contract-diagram.sh stale' 'diagrams.backup' 'diagrams.drawn.txt' '/wstack:draw-contract'; do
+  assert "deliver names $needle" 'has "$(cat "$deliver")" "$needle"'
+done
+
 # glob_blocks_without_null_glob <file>...: counts bash blocks that loop over a glob and lack the setopt line
 glob_blocks_without_null_glob() {
   awk '/^[[:space:]]*```bash/ { in_block = 1; has_glob = 0; has_setopt = 0; next }

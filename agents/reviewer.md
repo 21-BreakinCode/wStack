@@ -38,6 +38,12 @@ Contract:
 
 Read each item in `contract.draft.yaml`, in every section and in `planned`. Read its refs at the commit that the ref names, or at `verified_commit`. `contract-refs.sh` already proved that each ref exists. Does its ref show the claim? A wrong claim is a blocking finding of kind `spec-mismatch`. Give the item as `Where`, for example `abilities[2]`. For a new project (`project: new` in the spec), no code exists yet, so the sections have no items. Check that each section that needs `sources` has them: `team_docs`, `abilities`, `interfaces`, and `depends_on`. Also check that each answer under `## Contract changes` in the spec is a plan item under `planned`.
 
+Judge each entry of the `diagrams` block like an item, with the entry as `Where`, for example `diagrams.sequences[0].steps[2]`:
+
+- A ref that does not show its claim is a blocking finding of kind `spec-mismatch`.
+- A flow that misses a caller in `consumers`, or a network service in `depends_on`, is a blocking finding. `Where` is `diagrams.flow`.
+- An `architecture` block for code with no clean, hexagonal, or layered layers is a blocking finding. `Where` is `diagrams.architecture`.
+
 Blog: facts, tone, and links against the spec.
 
 Video: cuts, audio, and length against the spec.
