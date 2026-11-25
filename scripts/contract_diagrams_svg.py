@@ -44,8 +44,8 @@ def curve(start, control_1, control_2, end):
 class Canvas:
     """Collects SVG elements and grows the view box to hold them. Edge labels paint last."""
 
-    def __init__(self, prefix):
-        self.marker = "%s-arrow" % prefix
+    def __init__(self, prefix, title):
+        self.marker, self.title = "%s-arrow" % prefix, title
         self.shapes, self.labels, self.right, self.bottom = [], [], 0.0, 0.0
 
     def grow(self, x, y):
@@ -80,8 +80,18 @@ class Canvas:
         marker = ('<defs><marker id="%s" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" '
                   'markerUnits="userSpaceOnUse" orient="auto"><path class="head" d="M0 0 L10 5 L0 10 z"/>'
                   '</marker></defs>' % esc(self.marker))
-        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %s %s" width="%s" height="%s">%s%s</svg>' % (
-            width, height, width, height, marker, "".join(self.shapes + self.labels))
+        return ('<svg xmlns="http://www.w3.org/2000/svg" role="img" viewBox="0 0 %s %s" width="%s" height="%s">'
+                '<title>%s</title>%s%s</svg>') % (
+            width, height, width, height, esc(self.title), marker, "".join(self.shapes + self.labels))
+
+
+def caption(kind, value):
+    if kind == "flow":
+        return "Component flow"
+    if kind in ("sequence", "states"):
+        return "%s: %s" % (kind.capitalize(), value.get("title") or value.get("id", ""))
+    style = value.get("style")
+    return "Architecture (%s)" % style if style else "Architecture"
 
 
 def lane_width(edge):
@@ -181,7 +191,7 @@ def svg_flow(flow, prefix):
             for r, (end, edge) in enumerate(items):
                 slot[(id(edge), end)] = tops[i] + 15 + SLOT * (r + (rows[i] - len(items)) / 2)
 
-    canvas = Canvas(prefix)
+    canvas = Canvas(prefix, caption("flow", flow))
     canvas.rect(service_x, PAD, service_right - service_x, service_bottom - PAD, "svc", rx=10)
     for i, part in enumerate(parts):
         canvas.rect(part_x, tops[i], part_w, heights[i], "node", node=part["id"])
@@ -213,7 +223,7 @@ def svg_flow(flow, prefix):
 def svg_sequence(sequence, prefix):
     steps = sequence.get("steps") or []
     names = sequence_participants(steps)
-    canvas = Canvas(prefix)
+    canvas = Canvas(prefix, caption("sequence", sequence))
     if not names:
         return canvas.svg()
     widths = [text_width(n) + 24 for n in names]
@@ -282,8 +292,16 @@ def svg_states(lifecycle, prefix):
         stacks[column[name]].append(name)
     count = max(stacks) + 1 if stacks else 0
     widths = [max([text_width(n) + 28 for n in stacks[c]] + [0]) for c in range(count)]
+    # A back route drops through the gap left of its source column and rises through the gap right of its target column.
+    # Column 0 holds only the start state, so a back route never starts there.
+    lanes = collections.Counter()
+    for t in transitions:
+        if t["from"] != t["to"] and column[t["to"]] <= column[t["from"]]:
+            lanes[(column[t["from"]] - 1, "source")] += 1
+            lanes[(column[t["to"]], "target")] += 1
     gaps = [max([text_width(t.get("label", "")) for t in transitions
-                 if column[t["from"]] == c and column[t["to"]] == c + 1] + [20]) + 36 for c in range(count)]
+                 if column[t["from"]] == c and column[t["to"]] == c + 1] + [20,
+                 6 * (lanes[(c, "source")] + lanes[(c, "target")]) - 4]) + 36 for c in range(count)]
     top = PAD + (16 if any(t["from"] == t["to"] for t in transitions) else 0)
     x = PAD + (30 if initial else 0)
     box = {}
@@ -292,7 +310,7 @@ def svg_states(lifecycle, prefix):
             box[name] = (x, top + STATE_ROW * row, widths[c], STATE_H)
         x += widths[c] + gaps[c]
 
-    canvas = Canvas(prefix)
+    canvas = Canvas(prefix, caption("states", lifecycle))
     for name, (bx, by, bw, bh) in box.items():
         canvas.rect(bx, by, bw, bh, "node", rx=12, node=name)
         canvas.text(bx + bw / 2, by + 20, name)
@@ -301,7 +319,7 @@ def svg_states(lifecycle, prefix):
         canvas.shapes.append('<circle class="start" cx="%s" cy="%s" r="5"/>' % (num(bx - 25), num(by + STATE_H / 2)))
         canvas.path(line((bx - 20, by + STATE_H / 2), (bx, by + STATE_H / 2)))
     floor = max([by + bh for bx, by, bw, bh in box.values()] + [0])
-    back_count = 0
+    back_count, used = 0, collections.Counter()
     for t in transitions:
         sx, sy, sw, sh = box[t["from"]]
         ex, ey, ew, eh = box[t["to"]]
@@ -316,10 +334,13 @@ def svg_states(lifecycle, prefix):
         else:
             # Breadth-first columns make every other edge go back or stay in its column. It runs through the column gaps
             # and a channel below every box, so it crosses no box.
-            channel, offset = floor + 22 + 30 * back_count, 16 + 6 * back_count
+            source_lane, target_lane = (column[t["from"]] - 1, "source"), (column[t["to"]], "target")
+            down_x, up_x = sx - 16 - 6 * used[source_lane], ex + ew + 16 + 6 * used[target_lane]
+            used.update((source_lane, target_lane))
+            channel = floor + 22 + 30 * back_count
             back_count += 1
-            d = line((sx, sy + sh - 6), (sx - offset, sy + sh - 6), (sx - offset, channel),
-                     (ex + ew + offset, channel), (ex + ew + offset, ey + eh - 6), (ex + ew, ey + eh - 6))
+            d = line((sx, sy + sh - 6), (down_x, sy + sh - 6), (down_x, channel),
+                     (up_x, channel), (up_x, ey + eh - 6), (ex + ew, ey + eh - 6))
             spot = ((sx + ex + ew) / 2, channel + 16)
         canvas.path(d, source=t["from"], target=t["to"])
         if t.get("label"):
@@ -336,7 +357,7 @@ def svg_architecture(architecture, prefix):
     for depth in reversed(range(len(layers))):
         widths[depth] = inner_w = max(heads[depth], inner_w + 48 if inner_w else 0)
         heights[depth] = inner_h = LAYER_HEAD + (inner_h + 24 if inner_h else 0)
-    canvas = Canvas(prefix)
+    canvas = Canvas(prefix, caption("architecture", architecture))
     pills = {}
     for depth, layer in enumerate(layers):
         x, y = PAD + 24 * depth, PAD + LAYER_HEAD * depth
@@ -368,19 +389,12 @@ def html_section(diagrams, deep_dives):
     present = subjects(diagrams)
     if not present and not deep_dives:
         return ""
+    draw = {"flow": svg_flow, "sequence": svg_sequence, "states": svg_states, "architecture": svg_architecture}
     out = ["<h2>Diagrams</h2>"]
     for subject, value in present.items():
-        kind, prefix = subject.partition(":")[0], subject_slug(subject)
-        if kind == "flow":
-            caption, drawing = "Component flow", svg_flow(value, prefix)
-        elif kind == "sequence":
-            caption, drawing = "Sequence: %s" % (value.get("title") or value["id"]), svg_sequence(value, prefix)
-        elif kind == "states":
-            caption, drawing = "States: %s" % (value.get("title") or value["id"]), svg_states(value, prefix)
-        else:
-            style = value.get("style")
-            caption, drawing = "Architecture (%s)" % style if style else "Architecture", svg_architecture(value, prefix)
-        out.append('<figure class="diagram"><figcaption>%s</figcaption>%s</figure>' % (esc(caption), drawing))
+        kind = subject.partition(":")[0]
+        out.append('<figure class="diagram"><figcaption>%s</figcaption>%s</figure>' % (
+            esc(caption(kind, value)), draw[kind](value, subject_slug(subject))))
     if deep_dives:
         items = "".join('<li><a href="%s">%s</a>%s</li>' % (
             esc("file://" + quote(d["path"])), esc(d["name"]),

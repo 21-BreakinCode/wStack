@@ -70,13 +70,24 @@ class Base(unittest.TestCase):
             self.assertTrue(any(on_border(last, b) for b in boxes[target]), name + " ends off its target box")
         return boxes, edges
 
+    def assert_no_box_crossing(self, boxes, edges):
+        for source, target, _, _, points in edges:
+            for name, ((bx, by, bw, bh),) in boxes.items():
+                for (x0, y0), (x1, y1) in zip(points, points[1:]):
+                    if x0 == x1 or y0 == y1:
+                        crosses = (min(x0, x1) < bx + bw - 0.5 and max(x0, x1) > bx + 0.5
+                                   and min(y0, y1) < by + bh - 0.5 and max(y0, y1) > by + 0.5)
+                        self.assertFalse(crosses, "%s->%s crosses %s" % (source, target, name))
+
 
 class Svg(Base):
     def test_svgs_parse(self):
-        for text in drawings():
+        titles = ["Component flow", "Sequence: Create an item", "States: Item status", "Architecture (clean)"]
+        for text, title in zip(drawings(), titles):
             root = ET.fromstring(text)
             self.assertTrue(root.tag.endswith("svg"))
             self.assertTrue(root.get("viewBox"))
+            self.assertTrue(root.get("role") == "img" and root[0].tag.endswith("title") and root[0].text == title)
 
     def test_labels_present_and_escaped(self):
         flow, sequence, states, architecture = drawings()
@@ -202,13 +213,16 @@ class Geometry(Base):
                                      {"from": "done", "to": "new", "label": "reopen"}]
         boxes, edges = self.assert_edges_touch(cds.svg_states(lifecycle, "s"),
                                                [(t["from"], t["to"]) for t in lifecycle["transitions"]])
-        for source, target, _, _, points in edges:
-            for name, ((bx, by, bw, bh),) in boxes.items():
-                for (x0, y0), (x1, y1) in zip(points, points[1:]):
-                    if x0 == x1 or y0 == y1:
-                        crosses = (min(x0, x1) < bx + bw - 0.5 and max(x0, x1) > bx + 0.5
-                                   and min(y0, y1) < by + bh - 0.5 and max(y0, y1) > by + 0.5)
-                        self.assertFalse(crosses, "%s->%s crosses %s" % (source, target, name))
+        self.assert_no_box_crossing(boxes, edges)
+
+    def test_states_many_back_routes_stay_in_their_gaps(self):
+        back = [("d", "a"), ("d", "a"), ("c", "d"), ("d", "c"), ("d", "b"), ("c", "b"), ("c", "b"), ("c", "b")]
+        lifecycle = {"initial": "a", "transitions": [{"from": "a", "to": "b"}, {"from": "b", "to": "c"},
+                                                     {"from": "b", "to": "d"}]
+                     + [{"from": s, "to": t} for s, t in back]}
+        boxes, edges = self.assert_edges_touch(cds.svg_states(lifecycle, "s"),
+                                               [(t["from"], t["to"]) for t in lifecycle["transitions"]])
+        self.assert_no_box_crossing(boxes, edges)
 
     def test_architecture_nests_and_joins_pills(self):
         architecture = DIAGRAMS["architecture"]
