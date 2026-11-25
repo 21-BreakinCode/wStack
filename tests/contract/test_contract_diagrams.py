@@ -1,6 +1,7 @@
 """Unit tests for scripts/contract_diagrams.py: python3 tests/contract/test_contract_diagrams.py"""
 import copy
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -61,6 +62,24 @@ class Ascii(unittest.TestCase):
         columns = {first_bar_column(l) for l in lines if "│" in l}
         self.assertEqual(len(columns), 1)
 
+    def test_ascii_flow_rows_sit_beside_their_part(self):
+        lines = cd.ascii_flow(DIAGRAMS["flow"]).split("\n")
+        worker_row = next(i for i, l in enumerate(lines) if "Worker" in l)
+        self.assertLess(next(i for i, l in enumerate(lines) if "POST /items" in l), worker_row)
+        self.assertLess(next(i for i, l in enumerate(lines) if "API" in l),
+                        next(i for i, l in enumerate(lines) if "POST /items" in l))
+        self.assertIn("Worker", [l for l in lines if "SQL" in l][0])
+        self.assertGreater(next(i for i, l in enumerate(lines) if "items.done" in l), worker_row)
+        self.assertFalse(any(re.search(r"▶ {2,}│", l) for l in lines))
+
+    def test_ascii_flow_part_with_two_edges_grows(self):
+        lines = cd.ascii_flow(DIAGRAMS["flow"]).split("\n")
+        api_rows = [l for l in lines if "│" in l][:2]
+        self.assertIn("GET /items", api_rows[0])
+        self.assertIn("POST /items", api_rows[1])
+        self.assertIn("API", api_rows[0])
+        self.assertNotIn("API", api_rows[1])
+
     def test_ascii_flow_wide_label(self):
         flow = copy.deepcopy(DIAGRAMS["flow"])
         flow["parts"][0]["label"] = "圖片服務"
@@ -72,7 +91,7 @@ class Ascii(unittest.TestCase):
     def test_ascii_flow_edge_without_label(self):
         flow = copy.deepcopy(DIAGRAMS["flow"])
         del flow["edges"][0]["label"]
-        self.assertIn("web-ui ──▶", cd.ascii_flow(flow))
+        self.assertRegex(cd.ascii_flow(flow), r"web-ui ─+▶ │")
 
     def test_ascii_truncates(self):
         flow = copy.deepcopy(DIAGRAMS["flow"])
@@ -140,6 +159,14 @@ class DeepDives(unittest.TestCase):
             ("sequence-create.html", "stale"), ("states-gone.html", "subject removed")])
         self.assertEqual(result[0]["subject"], "flow")
         self.assertIsNone(result[1]["subject"])
+
+    def test_invalid_utf8_is_not_stamped(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "diagrams"
+            target.mkdir()
+            (target / "bad.html").write_bytes(b"\xff\xfe<html>")
+            result = cd.read_deep_dives(folder, DIAGRAMS)
+        self.assertEqual([d["state"] for d in result], ["not stamped"])
 
     def test_no_diagrams_folder(self):
         with tempfile.TemporaryDirectory() as folder:

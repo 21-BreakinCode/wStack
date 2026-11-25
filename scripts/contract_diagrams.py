@@ -69,7 +69,7 @@ def read_deep_dives(contract_folder, diagrams):
     present = subjects(diagrams)
     result = []
     for path in sorted(glob.glob(os.path.join(contract_folder, "diagrams", "*.html"))):
-        with open(path, encoding="utf-8") as handle:
+        with open(path, encoding="utf-8", errors="replace") as handle:
             text = handle.read()
         stamp = {}
         for tag in META_TAG.findall(text):
@@ -102,38 +102,43 @@ def ascii_flow(flow):
     names = {n["id"]: short(n.get("label") or n["id"]) for n in parts + callers + dependencies}
     caller_ids = {c["id"] for c in callers}
     dependency_ids = {d["id"] for d in dependencies}
-    left_rows, right_rows, inside_rows = [], [], []
+    part_ids = [p["id"] for p in parts]
+    left_by_part = {pid: [] for pid in part_ids}
+    right_by_part = {pid: [] for pid in part_ids}
+    inside_rows = []
     for edge in flow.get("edges") or []:
         source, target, label = edge["from"], edge["to"], edge.get("label")
-        if source in caller_ids or target in caller_ids:
-            caller = source if source in caller_ids else target
-            body = edge_arrow(label, source in caller_ids)
-            left_rows.append("%s %s" % (names[caller], body))
-        elif source in dependency_ids or target in dependency_ids:
-            dependency = source if source in dependency_ids else target
-            body = edge_arrow(label, target in dependency_ids)
-            right_rows.append("%s %s" % (body, names[dependency]))
+        outer_is_caller = source in caller_ids or target in caller_ids
+        if outer_is_caller or source in dependency_ids or target in dependency_ids:
+            outer_ids = caller_ids if outer_is_caller else dependency_ids
+            outer, other = (source, target) if source in outer_ids else (target, source)
+            if not part_ids:
+                continue
+            owner = other if other in left_by_part else part_ids[0]
+            if outer_is_caller:
+                left_by_part[owner].append((names[outer], edge_arrow(label, source == outer), source == outer))
+            else:
+                right_by_part[owner].append("%s %s" % (edge_arrow(label, target == outer), names[outer]))
         else:
             middle = " ── %s ──▶ " % short(label) if label else " ──▶ "
             inside_rows.append("inside: %s%s%s" % (names[source], middle, names[target]))
-    part_labels = [names[p["id"]] for p in parts]
-    height = max(len(part_labels), len(left_rows), len(right_rows))
-    inner = max([display_width(t) for t in part_labels] + [1])
-    left_width = max([display_width(t) for t in left_rows] + [0])
-    lines = []
-    for index in range(height + 2):
-        if index == 0:
-            box = "┌" + "─" * (inner + 2) + "┐"
-        elif index == height + 1:
-            box = "└" + "─" * (inner + 2) + "┘"
-        else:
-            row = index - 1
-            label = part_labels[row] if row < len(part_labels) else ""
-            box = "│ " + pad(label, inner) + " │"
-        row = index - 1
-        left = left_rows[row] if 0 <= row < len(left_rows) else ""
-        right = right_rows[row] if 0 <= row < len(right_rows) else ""
-        lines.append((pad(left, left_width) + " " + box + " " + right).rstrip())
+    left_width = max([display_width(n) + 1 + display_width(b)
+                      for rows in left_by_part.values() for n, b, _ in rows] + [0])
+    inner = max([display_width(names[pid]) for pid in part_ids] + [1])
+    box_lines = [("┌" + "─" * (inner + 2) + "┐", "", "")]
+    for pid in part_ids:
+        left, right = left_by_part[pid], right_by_part[pid]
+        for row in range(max(1, len(left), len(right))):
+            label = names[pid] if row == 0 else ""
+            left_text = ""
+            if row < len(left):
+                name, body, forward = left[row]
+                extra = "─" * (left_width - display_width(name) - 1 - display_width(body))
+                body = body[:-1] + extra + body[-1] if forward else body + extra
+                left_text = "%s %s" % (name, body)
+            box_lines.append(("│ " + pad(label, inner) + " │", left_text, right[row] if row < len(right) else ""))
+    box_lines.append(("└" + "─" * (inner + 2) + "┘", "", ""))
+    lines = [(pad(left, left_width) + " " + box + " " + right).rstrip() for box, left, right in box_lines]
     return "\n".join(lines + inside_rows)
 
 
