@@ -41,6 +41,6 @@ clone_for() {  # <owner/repo>: print the local clone path, or nothing
   [ -n "$workspace_root" ] || return 0
   local candidate
   for candidate in "$workspace_root/$slug" "$workspace_root/${slug#*/}"; do  # <owner>/<repo> or <repo>
-    if [ -d "$candidate/.git" ]; then echo "$candidate"; return; fi
+    if [ -e "$candidate/.git" ]; then echo "$candidate"; return; fi  # a worktree has a .git file
   done
 }
