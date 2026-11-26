@@ -326,6 +326,12 @@ class Svg(Base):
         for caption in ("Component flow", "Sequence: Create an item", "States: Item status", "Architecture (clean)"):
             self.assertIn("<figcaption>%s</figcaption>" % caption, section)
 
+    def test_every_media_picture_fits_the_page(self):
+        section = cds.html_section(MEDIA, [])
+        self.assertEqual(section.count("<svg "), 1 + len(MEDIA["sequences"]) + len(MEDIA["states"]) + 1)
+        for width in re.findall(r'\swidth="([^"]*)"', section):
+            self.assertLessEqual(float(width), cds.PAGE_LIMIT)
+
     def test_text_width_counts_wide_characters_twice(self):
         self.assertEqual(cds.text_width("ab"), 2 * cds.COLUMN_PX)
         self.assertEqual(cds.text_width("漢字"), 4 * cds.COLUMN_PX)
