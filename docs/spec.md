@@ -509,7 +509,7 @@ The HTML page is for the laptop. A figure can grow to `min(1200px, calc(100vw - 
 - `flow`: an overview SVG drawn top to bottom, and a grid of part cards with the same lists as the note.
 - `sequences`: the arrows carry step numbers, and a key `<ol>` sits under the picture.
 - `states`: the ladder layout. An arrow between neighbor rows of one column runs straight up or down between the boxes. A back arrow to the previous column runs in the gap. A long back arrow keeps a lane under the boxes. An arrow between rows that are not neighbors uses a leg right of the column. Each arrow has a number, and a key `<ol>` sits under the picture.
-- `architecture`: pills wrap inside a layer past 1100 px, and siblings move under the nested group when the picture would pass 1100 px. Implements lanes are 8 px apart.
+- `architecture`: if a layer is wider than 1100 px, its pills wrap inside it. If the picture is wider than 1100 px, siblings move under the nested group. Implements lanes are 8 px apart.
 
 The key lists every transition of a lifecycle, grouped by source state. A key line is `<from> → <to>: <label>`, or `<from> → <to>` with no label. The page counts use real plurals, such as "1 ability" and "67 abilities".
 
