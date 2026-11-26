@@ -350,7 +350,7 @@ Purpose: turn the rough idea into one clear spec that the user approves.
 4. The agent sets `status: awaiting-approval` and waits. After the user approves, the agent sets `approved_at` and `status: executing`.
 5. Pages follow the layout rules in section 10.1. The default is a local HTML file on the Mac. In mobile mode, the agent also publishes the page as a Claude artifact.
 
-Done when: `spec.md` has all eight sections and `approved_at` is set.
+Done when: `spec.md` has all its sections (eight, or nine for a `contract` task, with `## Vault docs`) and `approved_at` is set.
 
 Contract gate. For a `code` or `ops` task, the gate runs before the spec is written:
 
