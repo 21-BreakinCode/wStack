@@ -640,10 +640,14 @@ def place_layers(layers, siblings, group_rows, sibling_rows, row_h, gap, row_pit
     """Boxes as (layer, pill rows, x, y, width, height), and the x where the lanes' vertical gap starts.
     Siblings sit right of the nested group, or under it when beside would pass PAGE_LIMIT."""
     heights_of = lambda rows: row_h + (len(rows) - 1) * row_pitch
+    # A band runs at most row_pitch + 8 below the line 12px above its pill row. No layer sits under a sibling or the
+    # innermost layer, so those boxes grow to keep their last band 4px inside.
+    holds_bands = lambda rows: max(heights_of(rows), len(rows) * row_pitch + 12)
     widths, heights, inner_w, inner_h = [0] * len(layers), [0] * len(layers), 0, 0
     for depth in reversed(range(len(layers))):
         widths[depth] = inner_w = max(layer_width(layers[depth], group_rows[depth]), inner_w + 48 if inner_w else 0)
-        heights[depth] = inner_h = heights_of(group_rows[depth]) + (inner_h + 24 if inner_h else 0)
+        own_rows = group_rows[depth]
+        heights[depth] = inner_h = heights_of(own_rows) + inner_h + 24 if inner_h else holds_bands(own_rows)
     placed, y = [], PAD
     for depth, layer in enumerate(layers):
         placed.append((layer, group_rows[depth], PAD + 24 * depth, y, widths[depth], heights[depth]))
@@ -654,9 +658,7 @@ def place_layers(layers, siblings, group_rows, sibling_rows, row_h, gap, row_pit
     under = bool(layers and siblings) and beside_width > PAGE_LIMIT
     x, top = (PAD, PAD + heights[0] + 24) if under else (group_right + gap if layers else PAD, PAD)
     for layer, rows, width in zip(siblings, sibling_rows, sibling_widths):
-        # A band runs at most row_pitch + 8 below the line 12px above its pill row. No inner layer sits under a
-        # sibling, so the sibling box grows to keep its last band 4px inside.
-        placed.append((layer, rows, x, top, width, max(heights_of(rows), len(rows) * row_pitch + 12)))
+        placed.append((layer, rows, x, top, width, holds_bands(rows)))
         x += width + 24
     return placed, max(group_right, x - 24) if under else group_right
 

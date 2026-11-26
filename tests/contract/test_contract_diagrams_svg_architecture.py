@@ -109,6 +109,26 @@ class Architecture(Base):
             lowest = max(y for _, _, _, _, points in shapes(text)[1] for _, y in points)
             self.assertLessEqual(lowest + 4, jobs_top + jobs_height, "%d lanes run below the sibling box" % count)
 
+    def test_each_layer_box_holds_its_bands(self):
+        for count in (3, 4, 6):  # a sibling beside one nested layer
+            architecture = {"layers": [
+                {"name": "core", "components": [{"id": "c%d" % k, "label": "C%d" % k} for k in range(count)]},
+                {"name": "jobs", "sibling": True, "components": [{"id": "j%d" % k, "label": "J%d" % k}
+                                                                 for k in range(count)]}],
+                "implements": [{"adapter": "j%d" % k, "port": "c%d" % k} for k in range(count)]}
+            self.assert_implements_cross_no_other_pill(architecture)
+            text = cds.svg_architecture(architecture, "a")
+            boxes, edges = shapes(text)
+            layers = rects_of_class(text, "layer")
+            self.assertGreater(layers[1][0], layers[0][0] + layers[0][2], "the sibling sits beside")
+            for source, target, _, _, points in edges:
+                for name, band_y in ((source, points[1][1]), (target, points[4][1])):
+                    (x, y, width, height), = boxes[name]
+                    holder = min((r for r in layers if r[0] <= x and x + width <= r[0] + r[2]
+                                  and r[1] <= y and y + height <= r[1] + r[3]), key=lambda r: r[3])
+                    self.assertLessEqual(band_y + 4, holder[1] + holder[3],
+                                         "%d lanes: the band under %s runs below its layer box" % (count, name))
+
     def test_media_architecture_fits(self):
         text = cds.svg_architecture(MEDIA["architecture"], "architecture")
         self.assertLessEqual(view_width(text), cds.PAGE_LIMIT)
