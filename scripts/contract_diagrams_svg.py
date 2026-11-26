@@ -5,10 +5,12 @@ The SVG carries classes only. The page CSS colors them with its theme variables.
 """
 import collections
 import html
+import math
 import re
 from urllib.parse import quote
 
-from contract_diagrams import display_width, flow_overview, key_line, part_cards, sequence_participants, state_columns, subject_slug, subjects
+from contract_diagrams import (display_width, flow_overview, key_line, part_cards, sequence_participants, state_columns,
+                               state_key, state_order, state_start, subject_slug, subjects)
 
 COLUMN_PX = 7.5  # estimated width of one display column of 13px text
 PAD = 12
@@ -20,10 +22,17 @@ CALLBACK_GAP = 36  # flow overview: space between a callback box and the zone
 LOOP_W = 28  # sequence: width of a self-step loop
 STEP = 36  # sequence: vertical distance between two steps
 STATE_H = 32
-STATE_ROW = 76
-LANE = 24  # states: vertical distance between two lanes below the boxes, and between two forward label rows
-LEG = 8  # states: horizontal distance between two vertical legs beside one column
+STATE_GAP = 44  # states: vertical gap between two boxes of one column
+BAND = 56  # states: distance between two columns while both side spaces next to it are at their minimum
+SIDE_MIN = 16  # states: smallest side space beside a column
+START_ROOM = 30  # states: left space of the first column, for the start dot
+END_GAP = 18  # states: smallest distance between two arrow ends on one box side
+LANE = 24  # states: vertical distance between two lanes below the boxes
+LEG = 10  # states: horizontal distance between two vertical legs beside one column
 FIRST_LEG = 12  # states: distance from a box side to the nearest leg
+BAND_MARK = 14  # states: distance of a band marker from its arrow's end on the right column of the band
+LOOP_ROOM = 48  # states: the right part of a box edge that a loop and its marker take
+LOOP_DEPTH = 24  # states: room above or below a box for a loop and its marker
 LAYER_HEAD = 56
 MARKER_R = 8  # radius of a step number marker
 NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
@@ -61,11 +70,11 @@ def rounded(*points):
 
 
 class Canvas:
-    """Collects SVG elements and grows the view box to hold them. Edge labels paint last."""
+    """Collects SVG elements and grows the view box to hold them. Number markers paint last."""
 
     def __init__(self, prefix, title):
         self.arrow_id, self.title = "%s-arrow" % prefix, title
-        self.shapes, self.labels, self.right, self.bottom = [], [], 0.0, 0.0
+        self.shapes, self.markers, self.right, self.bottom = [], [], 0.0, 0.0
 
     def grow(self, x, y):
         self.right, self.bottom = max(self.right, x), max(self.bottom, y)
@@ -85,12 +94,12 @@ class Canvas:
             self.grow(x + width, y + 4)
         element = '<text%s x="%s" y="%s" text-anchor="%s">%s</text>' % (
             ' class="%s"' % cls if cls else "", num(x), num(y), anchor, esc(value))
-        (self.labels if cls == "lbl" else self.shapes).append(element)
+        self.shapes.append(element)
 
     def marker(self, x, y, number):
         self.grow(x + MARKER_R, y + MARKER_R)
-        self.labels.append('<circle class="mk" data-n="%d" cx="%s" cy="%s" r="%d"/>' % (number, num(x), num(y), MARKER_R))
-        self.labels.append('<text class="mkt" x="%s" y="%s" text-anchor="middle">%d</text>' % (num(x), num(y + 4), number))
+        self.markers.append('<circle class="mk" data-n="%d" cx="%s" cy="%s" r="%d"/>' % (number, num(x), num(y), MARKER_R))
+        self.markers.append('<text class="mkt" x="%s" y="%s" text-anchor="middle">%d</text>' % (num(x), num(y + 4), number))
 
     def path(self, d, cls="edge", source=None, target=None, arrow=True, number=None):
         numbers = [float(v) for v in NUMBER.findall(d)]
@@ -107,7 +116,7 @@ class Canvas:
                   '</marker></defs>' % esc(self.arrow_id))
         return ('<svg xmlns="http://www.w3.org/2000/svg" role="img" viewBox="0 0 %s %s" width="%s" height="%s">'
                 '<title>%s</title>%s%s</svg>') % (
-            width, height, width, height, esc(self.title), marker, "".join(self.shapes + self.labels))
+            width, height, width, height, esc(self.title), marker, "".join(self.shapes + self.markers))
 
 
 def caption(kind, value):
@@ -267,198 +276,231 @@ def svg_sequence(sequence, prefix):
     return canvas.svg()
 
 
-def label_width(item):
-    return text_width(item.get("label", ""))
+SIDES_OF_ROUTE = {"forward": ("right", "left"), "back": ("left", "right"), "lane": ("left", "right"),
+                  "leg": ("right", "right")}  # the box side of the source end and of the target end
 
 
-def state_arrows(transitions, column, row):
-    """Split transitions into loops, forward arrows, back arrows and same-column arrows.
+class StatesLayout:
+    """Boxes and arrow ends of the states ladder.
 
-    One small loop sits on top of a state. A second loop on the same state is a same-column arrow.
-    Back arrows sort by span and same-column arrows by label width, so back + same is the order of the lanes below
-    the boxes, shallowest first.
+    A forward or back arrow is a curve in the band between two columns. A down or up arrow is a straight line between
+    two neighbor rows of one column. A leg runs beside its column, on the right. A lane runs below all boxes. A top or
+    bottom loop sits on that edge of its box. A side space is the part of a band next to a column, where legs run.
     """
-    loops, looped = [], set()
-    for t in transitions:
-        if t["from"] == t["to"] and t["from"] not in looped:
-            loops.append(t)
-            looped.add(t["from"])
-    forward = sorted([t for t in transitions if column[t["to"]] == column[t["from"]] + 1],
-                     key=lambda t: (column[t["from"]], row[t["to"]], row[t["from"]]))
-    back = sorted([t for t in transitions if column[t["to"]] < column[t["from"]]],
-                  key=lambda t: column[t["from"]] - column[t["to"]])
-    same = sorted([t for t in transitions if column[t["to"]] == column[t["from"]] and not any(t is o for o in loops)],
-                  key=label_width)
-    return loops, forward, back, same
+
+    def __init__(self, lifecycle):
+        transitions = lifecycle.get("transitions") or []
+        self.start = state_start(lifecycle)
+        names = state_order(lifecycle)
+        self.column = state_columns(transitions, self.start or (names[0] if names else None))
+        column_count = max(self.column.values(), default=-1) + 1
+        self.stacks = [[n for n in names if self.column[n] == c] for c in range(column_count)]
+        self.row = {name: stack.index(name) for stack in self.stacks for name in stack}
+        loops, self.routes = collections.Counter(), []  # each key transition with its route kind
+        for t in state_key(lifecycle):
+            source, target = t["from"], t["to"]
+            step = self.column[target] - self.column[source]  # breadth-first columns: at most one column forward
+            if source == target:
+                loops[source] += 1
+                kind = {1: "top", 2: "bottom"}.get(loops[source], "leg")
+            elif step:
+                kind = {1: "forward", -1: "back"}.get(step, "lane")
+            elif abs(self.row[target] - self.row[source]) == 1:
+                kind = "down" if self.row[target] > self.row[source] else "up"
+            else:
+                kind = "leg"
+            self.routes.append((t, kind))
+        self.kind = {t["number"]: kind for t, kind in self.routes}
+        self.lanes = sorted((t for t, kind in self.routes if kind == "lane"),
+                            key=lambda t: (self.column[t["from"]] - self.column[t["to"]], t["number"]))
+        self.ends = collections.defaultdict(list)
+        for t, kind in self.routes:
+            if kind in SIDES_OF_ROUTE:
+                self.ends[(t["from"], SIDES_OF_ROUTE[kind][0])].append((t, "from"))
+                self.ends[(t["to"], SIDES_OF_ROUTE[kind][1])].append((t, "to"))
+        self.place_legs()
+        self.place_boxes()
+        self.place_ends()
+
+    def place_legs(self):
+        """Each leg's distance from its column, keyed by number, and the side spaces that hold the legs.
+
+        A shorter leg sits nearer its column. A lane's down leg sits left of its source column, outside the band
+        markers there. Its up leg sits right of its target column, outside the legs there. A deeper lane takes the
+        nearer leg on both sides.
+        """
+        self.left_offset, self.right_offset = {}, {}
+        self.left_space = [START_ROOM if c == 0 and self.start else SIDE_MIN for c in range(len(self.stacks))]
+        self.right_space = [SIDE_MIN] * len(self.stacks)
+        first_down = BAND_MARK + MARKER_R + 4
+        for c in range(len(self.stacks)):
+            legs = sorted((t for t, kind in self.routes if kind == "leg" and self.column[t["from"]] == c),
+                          key=lambda t: (abs(self.row[t["from"]] - self.row[t["to"]]), t["number"]))
+            ups = [t for t in reversed(self.lanes) if self.column[t["to"]] == c]
+            downs = [t for t in reversed(self.lanes) if self.column[t["from"]] == c]
+            for k, t in enumerate(legs + ups):
+                self.right_offset[t["number"]] = FIRST_LEG + LEG * k
+            for k, t in enumerate(downs):
+                self.left_offset[t["number"]] = first_down + LEG * k
+            if legs or ups:
+                self.right_space[c] = max(SIDE_MIN, FIRST_LEG + LEG * (len(legs + ups) - 1) + MARKER_R + 4)
+            if downs:
+                self.left_space[c] = max(self.left_space[c], first_down + LEG * (len(downs) - 1) + 4)
+
+    def place_boxes(self):
+        """Each box as (x, y, w, h), and the y of the first lane.
+
+        A box grows taller when a side holds more ends than END_GAP allows. A column grows wider when its vertical
+        arrows would be less than END_GAP apart. Two columns are BAND apart, plus what their side spaces need over
+        SIDE_MIN.
+        """
+        self.loops = {(t["from"], kind) for t, kind in self.routes if kind in ("top", "bottom")}
+        self.verticals = collections.defaultdict(list)  # (column, upper row): down arrows, then up arrows
+        for t, kind in sorted(self.routes, key=lambda route: route[1] != "down"):
+            if kind in ("down", "up"):
+                self.verticals[(self.column[t["from"]], min(self.row[t["from"]], self.row[t["to"]]))].append(t)
+        ends = {name: max(len(self.ends[(name, "left")]), len(self.ends[(name, "right")])) for name in self.row}
+        heights = {name: max(STATE_H, END_GAP * (n + 1)) if n > 1 else STATE_H for name, n in ends.items()}
+        widths = [max([text_width(name) + 28 for name in stack]
+                      + [END_GAP * (len(self.verticals[(c, r)]) + 1) + self.loop_room(c, r)
+                         for r in range(len(stack) - 1) if self.verticals[(c, r)]])
+                  for c, stack in enumerate(self.stacks)]
+        top = PAD + (LOOP_DEPTH if any((stack[0], "top") in self.loops for stack in self.stacks) else 0)
+        x, self.box = PAD, {}
+        for c, stack in enumerate(self.stacks):
+            x, y = x + self.left_space[c], top
+            for name in stack:
+                self.box[name] = (x, y, widths[c], heights[name])
+                y += heights[name] + STATE_GAP
+            x += widths[c] + self.right_space[c] + BAND - 2 * SIDE_MIN
+        self.lane_top = LANE + max([y + h + (LOOP_DEPTH if (name, "bottom") in self.loops else 0)
+                                    for name, (_, y, _, h) in self.box.items()] + [0])
+
+    def loop_room(self, c, r):
+        """The width a loop takes on the facing edges of rows r and r + 1 of column c."""
+        upper, lower = self.stacks[c][r], self.stacks[c][r + 1]
+        return LOOP_ROOM if (upper, "bottom") in self.loops or (lower, "top") in self.loops else 0
+
+    def place_ends(self):
+        """The point of each side end, keyed (number, "from" or "to"). The ends spread evenly over their side."""
+        self.end = {}
+        for (name, side), ends in self.ends.items():
+            x, y, width, height = self.box[name]
+            for k, (t, which) in enumerate(sorted(ends, key=lambda end: self.end_order(name, end))):
+                self.end[(t["number"], which)] = (x + (width if side == "right" else 0),
+                                                  y + height * (k + 1) / (len(ends) + 1))
+
+    def end_order(self, name, end):
+        """The sort key of an end on one side of the box of name.
+
+        Curve ends follow the y of the far box, so the curves of one band do not cross. A leg end sits above them when
+        its far box is higher or is this box, and below them when its far box is lower. Leg ends sort from the lowest
+        far box up, and of two legs between one pair of boxes the outer one ends outside, so nested legs do not cross.
+        Lane ends sit between the curves and the lower legs, the shallowest lane highest.
+        """
+        t, which = end
+        far = t["to"] if which == "from" else t["from"]
+        kind, far_y = self.kind[t["number"]], self.box[far][1]
+        if kind in ("forward", "back"):
+            return (1, far_y, t["number"])
+        if kind == "lane":
+            return (2, self.lanes.index(t), 0)
+        if self.row[far] > self.row[name]:
+            return (3, -far_y, -t["number"])
+        return (0, -far_y, t["number"])
 
 
-def state_legs(same, back, column, widths):
-    """Each leg's distance from its box side, keyed (id(t), side), and each leg zone's width, keyed (column, side).
+def point_at_x(points, x):
+    """The point at x of a Bézier curve whose x only grows or only shrinks. It halves the range of t 30 times."""
+    def point_at(t):  # de Casteljau
+        level = points
+        while len(level) > 1:
+            level = [(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t) for a, b in zip(level, level[1:])]
+        return level[0]
 
-    A same-column label sits centered under its column, so each deeper same-column arrow puts its legs outside it.
-    Back legs go outside those, the shallowest one outermost, so no back lane crosses another back leg.
-    """
-    outermost, leg = [FIRST_LEG - LEG] * len(widths), {}
-    for t in same:
-        c = column[t["from"]]
-        outermost[c] = max(outermost[c] + LEG, (label_width(t) - widths[c]) / 2 + 8)
-        leg[(id(t), "left")] = leg[(id(t), "right")] = outermost[c]
-    backs_beside = collections.defaultdict(list)
-    for t in back:
-        backs_beside[(column[t["from"]], "left")].append(t)
-        backs_beside[(column[t["to"]], "right")].append(t)
-    for (c, side), items in backs_beside.items():
-        for k, t in enumerate(items):
-            leg[(id(t), side)] = outermost[c] + LEG * (len(items) - k)
-    zone = {(c, side): max(40, outermost[c] + LEG * len(backs_beside[(c, side)]) + 10)
-            for c in range(len(widths)) for side in ("left", "right")}
-    return leg, zone
+    low, high = 0.0, 1.0
+    for _ in range(30):
+        middle = (low + high) / 2
+        if (point_at(middle)[0] - x) * (points[-1][0] - points[0][0]) < 0:
+            low = middle
+        else:
+            high = middle
+    return point_at((low + high) / 2)
 
 
-def state_boxes(stacks, widths, zone, forward, back, column):
-    """Each box as (x, y, w, h), and each label band between two columns as (left, right).
-
-    A band holds the labels of the forward arrows that cross it and of the back arrows into the column on its left.
-    """
-    top = PAD + 16  # room above the first row for loop labels
-    x, box, band = PAD + zone.get((0, "left"), 0), {}, {}
-    for c, width in enumerate(widths):
-        for r, name in enumerate(stacks[c]):
-            box[name] = (x, top + STATE_ROW * r, width, STATE_H)
-        x += width + zone[(c, "right")]
-        room = max([label_width(t) for t in forward if column[t["from"]] == c]
-                   + [label_width(t) for t in back if column[t["to"]] == c] + [20]) + 16
-        band[c] = (x, x + room)
-        x += room + zone.get((c + 1, "left"), 0)
-    return box, band
+def band_route(layout, t):
+    """A curve from end to end. Its marker sits BAND_MARK from its end on the right column of the band."""
+    start, end = layout.end[(t["number"], "from")], layout.end[(t["number"], "to")]
+    middle = (start[0] + end[0]) / 2
+    points = (start, (middle, start[1]), (middle, end[1]), end)
+    return curve(*points), point_at_x(points, max(start[0], end[0]) - BAND_MARK)
 
 
-def state_ports(box, forward, below, leg):
-    """The y of each arrow end on a box side, keyed (id(t), "out" or "in").
-
-    Forward ends come first on a side. Below-lane ends follow, the one with the outermost leg highest, so the ends
-    of one side never cross each other. The ends of one side spread evenly over its height.
-    """
-    forward_ends, lane_ends = collections.defaultdict(list), collections.defaultdict(list)
-    for t in forward:
-        forward_ends[(t["from"], "right")].append((id(t), "out"))
-        forward_ends[(t["to"], "left")].append((id(t), "in"))
-    for t in below:
-        lane_ends[(t["from"], "left")].append((leg[(id(t), "left")], (id(t), "out")))
-        lane_ends[(t["to"], "right")].append((leg[(id(t), "right")], (id(t), "in")))
-    port = {}
-    for name, side in set(forward_ends) | set(lane_ends):
-        outermost_first = sorted(lane_ends[(name, side)], key=lambda end: -end[0])
-        order = forward_ends[(name, side)] + [key for _, key in outermost_first]
-        for k, key in enumerate(order):
-            port[key] = box[name][1] + STATE_H * (k + 1) / (len(order) + 1)
-    return port
+def vertical_route(layout, t):
+    """A straight line in the gap between two neighbor rows, clear of a loop there. Its marker sits in the middle of
+    the gap."""
+    c, upper = layout.column[t["from"]], min(layout.row[t["from"]], layout.row[t["to"]])
+    arrows = layout.verticals[(c, upper)]
+    x, top, width, height = layout.box[layout.stacks[c][upper]]
+    x += (width - layout.loop_room(c, upper)) * (arrows.index(t) + 1) / (len(arrows) + 1)
+    gap_top, gap_bottom = top + height, layout.box[layout.stacks[c][upper + 1]][1]
+    ends = (gap_top, gap_bottom) if layout.kind[t["number"]] == "down" else (gap_bottom, gap_top)
+    return line((x, ends[0]), (x, ends[1])), (x, (gap_top + gap_bottom) / 2)
 
 
-def forward_rows(forward, column, port):
-    """The y of the straight middle of each forward arrow: its target end, moved down to keep rows in one band
-    LANE apart."""
-    row_y, last = {}, {}
-    for t in forward:
-        c = column[t["from"]]
-        row_y[id(t)] = last[c] = max(port[(id(t), "in")], last.get(c, -LANE) + LANE)
-    return row_y
+def leg_route(layout, t):
+    """Out of a right side, along a leg beside the column, and into a right side. Its marker sits in the middle of the
+    leg."""
+    start, end = layout.end[(t["number"], "from")], layout.end[(t["number"], "to")]
+    leg_x = start[0] + layout.right_offset[t["number"]]
+    return rounded(start, (leg_x, start[1]), (leg_x, end[1]), end), (leg_x, (start[1] + end[1]) / 2)
 
 
-def forward_arrows(forward, box, band, column, port, row_y):
-    """Paths as (d, transition) and labels as (x, y, text, anchor) for forward arrows.
-
-    Each one bends inside the zone right of its source, runs straight across the band on its own row, and bends
-    inside the zone left of its target. Its label sits 6px above that row, centered in the band.
-    """
-    paths, labels = [], []
-    for t in forward:
-        x0, x1 = box[t["from"]][0] + box[t["from"]][2], box[t["to"]][0]
-        y0, y1, y = port[(id(t), "out")], port[(id(t), "in")], row_y[id(t)]
-        xa, xb = band[column[t["from"]]]
-        bend_a, bend_b = (x0 + xa) / 2, (xb + x1) / 2
-        paths.append(("M%s %s C%s %s %s %s %s %s L%s %s C%s %s %s %s %s %s" % tuple(num(v) for v in (
-            x0, y0, bend_a, y0, bend_a, y, xa, y, xb, y, bend_b, y, bend_b, y1, x1, y1)), t))
-        if t.get("label"):
-            labels.append(((xa + xb) / 2, y - 6, t["label"], "middle"))
-    return paths, labels
+def lane_route(layout, t):
+    """Down a leg left of the source column, along a lane below all boxes, and up a leg right of the target column.
+    Its marker sits in the middle of the lane."""
+    start, end = layout.end[(t["number"], "from")], layout.end[(t["number"], "to")]
+    down_x, up_x = start[0] - layout.left_offset[t["number"]], end[0] + layout.right_offset[t["number"]]
+    lane_y = layout.lane_top + LANE * layout.lanes.index(t)
+    return (rounded(start, (down_x, start[1]), (down_x, lane_y), (up_x, lane_y), (up_x, end[1]), end),
+            ((down_x + up_x) / 2, lane_y))
 
 
-def lane_arrows(back, same, box, band, column, port, leg, lane_top):
-    """Paths and labels for back and same-column arrows, one lane each below the boxes, shallowest first.
-
-    Each one leaves its source on the left side, goes down a leg, runs along its lane, goes up a leg, and enters its
-    target on the right side. A same-column label sits centered under its column. A back label sits centered in the
-    band right of its target column.
-    """
-    paths, labels = [], []
-    for k, t in enumerate(back + same):
-        y = lane_top + LANE * k
-        sx, _, sw, _ = box[t["from"]]
-        ex, _, ew, _ = box[t["to"]]
-        down_x, up_x = sx - leg[(id(t), "left")], ex + ew + leg[(id(t), "right")]
-        y0, y1 = port[(id(t), "out")], port[(id(t), "in")]
-        paths.append((rounded((sx, y0), (down_x, y0), (down_x, y), (up_x, y), (up_x, y1), (ex + ew, y1)), t))
-        if t.get("label"):
-            spot = sx + sw / 2 if any(t is s for s in same) else sum(band[column[t["to"]]]) / 2
-            labels.append((spot, y - 6, t["label"], "middle"))
-    return paths, labels
+def loop_route(layout, t):
+    """A small loop on the top or the bottom edge, near the right. Its marker sits just left of the loop."""
+    x, y, width, height = layout.box[t["from"]]
+    toward = -1 if layout.kind[t["number"]] == "top" else 1
+    edge, right = (y if toward < 0 else y + height), x + width - 8
+    reach = edge + 22 * toward
+    return (curve((right - 20, edge), (right - 20, reach), (right, reach), (right, edge)),
+            (right - 32, edge + 12 * toward))
 
 
-def loop_arrows(loops, box):
-    """Paths and labels for loops: a small loop on the top edge, its label above the box and left of the loop."""
-    paths, labels = [], []
-    for t in loops:
-        sx, sy, sw, _ = box[t["from"]]
-        right = sx + sw - 8
-        paths.append((curve((right - 20, sy), (right - 20, sy - 22), (right, sy - 22), (right, sy)), t))
-        if t.get("label"):
-            labels.append((right - 24 - label_width(t), sy - 6, t["label"], "start"))
-    return paths, labels
+ROUTES = {"forward": band_route, "back": band_route, "down": vertical_route, "up": vertical_route, "leg": leg_route,
+          "lane": lane_route, "top": loop_route, "bottom": loop_route}
 
 
 def svg_states(lifecycle, prefix):
-    """Columns by breadth-first distance, so every arrow goes one column forward, stays in its column, or goes back.
-
-    Beside each column is a zone for vertical legs. Between two zones is a band that holds only labels and the
-    straight middle of forward arrows, each on its own row. Back and same-column arrows each get a lane below all
-    boxes. The helpers above place each part.
-    """
-    transitions = lifecycle.get("transitions") or []
-    names = sequence_participants(transitions)
-    initial = lifecycle.get("initial") if lifecycle.get("initial") in names else None
-    column = state_columns(transitions, initial or (names[0] if names else None))
-    stacks = collections.defaultdict(list)
-    for name in names:
-        stacks[column[name]].append(name)
-    row = {name: stacks[column[name]].index(name) for name in names}
-    loops, forward, back, same = state_arrows(transitions, column, row)
-    # A loop label sits above its box, left of the loop, so the box is wide enough to hold it.
-    widths = [max([text_width(n) + 28 for n in stacks[c]]
-                  + [label_width(t) + 40 for t in loops if column[t["from"]] == c])
-              for c in range(max(stacks) + 1 if stacks else 0)]
-    leg, zone = state_legs(same, back, column, widths)
-    box, band = state_boxes(stacks, widths, zone, forward, back, column)
-    port = state_ports(box, forward, back + same, leg)
-    row_y = forward_rows(forward, column, port)
-    lane_top = max([by + bh for _, by, _, bh in box.values()] + list(row_y.values()) + [0]) + 26
-
+    """The states ladder: columns by breadth-first distance from the start, each arrow numbered as in the key."""
+    layout = StatesLayout(lifecycle)
     canvas = Canvas(prefix, caption("states", lifecycle))
-    for name, (bx, by, bw, bh) in box.items():
-        canvas.rect(bx, by, bw, bh, "node", rx=12, node=name)
-        canvas.text(bx + bw / 2, by + 20, name)
-    if initial:
-        bx, by = box[initial][:2]
-        canvas.shapes.append('<circle class="start" cx="%s" cy="%s" r="5"/>' % (num(bx - 25), num(by + STATE_H / 2)))
-        canvas.path(line((bx - 20, by + STATE_H / 2), (bx, by + STATE_H / 2)))
-    drawn = [forward_arrows(forward, box, band, column, port, row_y),
-             lane_arrows(back, same, box, band, column, port, leg, lane_top), loop_arrows(loops, box)]
-    for paths, _ in drawn:
-        for d, t in paths:
-            canvas.path(d, source=t["from"], target=t["to"])
-    for _, labels in drawn:
-        for x, y, text, anchor in labels:
-            canvas.text(x, y, text, "lbl", anchor=anchor)
+    for name, (x, y, width, height) in layout.box.items():
+        canvas.rect(x, y, width, height, "node", rx=12, node=name)
+        canvas.text(x + width / 2, y + height / 2 + 4, name)
+    if layout.start:
+        x, y, _, height = layout.box[layout.start]
+        canvas.shapes.append('<circle class="start" cx="%s" cy="%s" r="5"/>' % (num(x - 25), num(y + height / 2)))
+        canvas.path(line((x - 20, y + height / 2), (x, y + height / 2)))
+    spots = []
+    for t, kind in layout.routes:
+        d, (x, y) = ROUTES[kind](layout, t)
+        # shortcut: a leg marker steps down past earlier markers and can pass the end of a short leg, place it along
+        # the free part of the leg if that shows up
+        while kind == "leg" and any(math.dist((x, y), spot) < 2 * MARKER_R for spot in spots):
+            y += 2 * MARKER_R
+        spots.append((x, y))
+        canvas.path(d, source=t["from"], target=t["to"], number=t["number"])
+        canvas.marker(x, y, t["number"])
     return canvas.svg()
 
 
@@ -554,6 +596,8 @@ def html_section(diagrams, deep_dives):
         cards = flow_cards_html(value) if kind == "flow" else ""
         if kind == "sequence":
             cards = html_key([key_line(s["from"], s["to"], s.get("label")) for s in value.get("steps") or []])
+        elif kind == "states":
+            cards = html_key([key_line(t["from"], t["to"], t.get("label")) for t in state_key(value)])
         out.append('<figure class="diagram"><figcaption>%s</figcaption>%s%s</figure>' % (
             esc(caption(kind, value)), draw[kind](value, subject_slug(subject)), cards))
     if deep_dives:

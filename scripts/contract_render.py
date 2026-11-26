@@ -160,7 +160,6 @@ code { overflow-wrap: anywhere; }
 .diagram figcaption { font-weight: 600; margin: 0 0 6px; }
 .diagram svg { display: block; max-width: none; }
 .diagram text { font: 13px system-ui, sans-serif; fill: var(--fg); }
-.diagram .lbl { paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
 .diagram .layer-name { font-weight: 600; }
 .diagram .node, .diagram .pill { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
 .diagram .layer { fill: var(--card); fill-opacity: .5; stroke: var(--line); stroke-width: 1.5; }

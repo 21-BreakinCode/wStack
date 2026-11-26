@@ -1,6 +1,8 @@
 """Unit tests for scripts/contract_diagrams_svg.py: python3 tests/contract/test_contract_diagrams_svg.py"""
+import collections
 import copy
 import hashlib
+import itertools
 import json
 import math
 import re
@@ -87,6 +89,74 @@ TASK_STATUS = {"id": "tray-amoral", "title": "Task status", "initial": "queued",
     transition("waiting_result", "failed", "job fails or worker error"),
     transition("failed", "queued", "saker, saker_notum below 3")]}
 
+# Three arrows from one state into one column, and two of them back.
+SHARED_COLUMN = {"id": "fetch", "title": "Fetch", "initial": "queued", "transitions": [
+    transition("queued", "fetching", "worker picks it"), transition("queued", "parsing", "cached file"),
+    transition("queued", "failed", "bad input"), transition("fetching", "queued", "fetch timeout"),
+    transition("parsing", "queued", "parse retry")]}
+
+FORWARD_ONLY = {"id": "post", "title": "Post", "initial": "draft", "transitions": [
+    transition("draft", "review", "submit"), transition("review", "published", "approve")]}
+
+TWO_LOOPS = {"id": "link", "title": "Link", "initial": "idle", "transitions": [
+    transition("idle", "idle", "ping"), transition("idle", "idle", "tick"), transition("idle", "open", "connect")]}
+
+THREE_LOOPS = dict(TWO_LOOPS, id="link-3", transitions=TWO_LOOPS["transitions"] + [transition("idle", "idle", "sweep")])
+
+# Legs beside one column: two that share an end, and two between the same pair of boxes.
+NESTED_LEGS = {"id": "nested-legs", "initial": "s", "transitions": [
+    {"from": s, "to": t} for s, t in [("s", "a"), ("s", "b"), ("s", "c"), ("s", "d"), ("d", "a"), ("d", "b")]]}
+LEGS_BOTH_WAYS = {"id": "legs-both-ways", "initial": "s", "transitions": [
+    {"from": s, "to": t} for s, t in [("s", "a"), ("s", "b"), ("s", "c"), ("a", "c"), ("c", "a")]]}
+
+# Back arrows by one and by two columns, and arrows both ways between two neighbor rows.
+MANY_BACK_ROUTES = {"id": "many-back", "initial": "a", "transitions": [
+    {"from": s, "to": t} for s, t in [("a", "b"), ("b", "c"), ("b", "d"), ("d", "a"), ("d", "a"), ("c", "d"),
+                                      ("d", "c"), ("d", "b"), ("c", "b"), ("c", "b"), ("c", "b")]]}
+
+
+def item_status_with_more_arrows():
+    """The basic lifecycle plus a loop, a same-column pair, a second forward arrow, and a back arrow by two columns."""
+    lifecycle = copy.deepcopy(DIAGRAMS["states"][0])
+    lifecycle["transitions"] += [{"from": "queued", "to": "queued", "label": "wait"},
+                                 {"from": "failed", "to": "done", "label": "manual fix"},
+                                 {"from": "new", "to": "failed", "label": "fast fail"},
+                                 {"from": "done", "to": "new", "label": "reopen"}]
+    return lifecycle
+
+
+def state_fixtures():
+    with_second_loop = item_status_with_more_arrows()
+    with_second_loop["transitions"].append({"from": "queued", "to": "queued", "label": "heartbeat"})
+    return [MEDIA["states"][0], SHARED_COLUMN, TASK_STATUS, FORWARD_ONLY, TWO_LOOPS, THREE_LOOPS, MANY_BACK_ROUTES,
+            NESTED_LEGS, LEGS_BOTH_WAYS,
+            DIAGRAMS["states"][0], item_status_with_more_arrows(), with_second_loop]
+
+
+def box_side(point, box):
+    """The side of the box that the point is on, or None."""
+    if not on_border(point, box):
+        return None
+    x, y = point
+    left, top, width, height = box
+    distance = {"left": abs(x - left), "right": abs(x - left - width), "top": abs(y - top),
+                "bottom": abs(y - top - height)}
+    return min(distance, key=distance.get)
+
+
+def segments_meet(a, b, c, d):
+    """True when segment ab and segment cd share a point, touching included."""
+    def turn(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+
+    def within(p, q, r):
+        return min(p[0], q[0]) <= r[0] <= max(p[0], q[0]) and min(p[1], q[1]) <= r[1] <= max(p[1], q[1])
+
+    turns = (turn(c, d, a), turn(c, d, b), turn(a, b, c), turn(a, b, d))
+    if turns[0] * turns[1] < 0 and turns[2] * turns[3] < 0:
+        return True
+    return any(t == 0 and within(p, q, r) for t, (p, q, r) in zip(turns, ((c, d, a), (c, d, b), (a, b, c), (a, b, d))))
+
 
 def bezier(points, t):
     while len(points) > 1:
@@ -109,24 +179,9 @@ def path_samples(d):
     return out
 
 
-def label_rects(text):
-    """Edge labels as (text, (x, y, w, h)), with the width the module estimates for 13px text."""
-    out = []
-    for element in ET.fromstring(text).iter():
-        if element.get("class") == "lbl":
-            width, x = cds.text_width(element.text), float(element.get("x"))
-            left = {"start": x, "middle": x - width / 2, "end": x - width}[element.get("text-anchor")]
-            out.append((element.text, (left, float(element.get("y")) - 12, width, 16)))
-    return out
-
-
 def strictly_inside(point, rect, margin=0.5):
     x, y, w, h = rect
     return x + margin < point[0] < x + w - margin and y + margin < point[1] < y + h - margin
-
-
-def rects_overlap(a, b):
-    return a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
 
 
 class Base(unittest.TestCase):
@@ -149,45 +204,68 @@ class Base(unittest.TestCase):
                         self.assertFalse(crosses, "%s->%s crosses %s" % (source, target, name))
 
     def assert_clean_states(self, lifecycle):
-        """Each transition has one path and one label. No path crosses a box other than its ends.
-        No label touches another label, a box, or a path other than its own. All of it is inside the view box."""
+        """Each transition has one path and one marker with its key number, and the numbers are 1..n. No path passes
+        strictly inside a box other than its ends. No two markers overlap, and no marker overlaps a box. No other path
+        passes strictly inside a marker. All of it is inside the view box.
+
+        Returns paths as (number, (from, to), samples). The start arrow has no number."""
         text = cds.svg_states(lifecycle, "s")
         root = ET.fromstring(text)
         _, _, view_w, view_h = (float(v) for v in root.get("viewBox").split())
         boxes = {e.get("data-id"): tuple(float(e.get(k)) for k in ("x", "y", "width", "height"))
                  for e in root.iter() if e.get("data-id") is not None}
-        paths = [((e.get("data-from"), e.get("data-to")), path_samples(e.get("d")))
+        paths = [(e.get("data-n"), (e.get("data-from"), e.get("data-to")), path_samples(e.get("d")))
                  for e in root.iter() if e.tag.endswith("path") and e.get("class") == "edge"]
-        pairs = [(t["from"], t["to"]) for t in lifecycle["transitions"]]
-        self.assertEqual(sorted(owner for owner, _ in paths if owner[0] is not None), sorted(pairs))
-        labels = label_rects(text)
-        owner_of = {t["label"]: (t["from"], t["to"]) for t in lifecycle["transitions"] if t.get("label")}
-        self.assertEqual(sorted(name for name, _ in labels), sorted(owner_of))
+        circles = [e for e in root.iter() if e.get("class") == "mk"]
+        markers = {e.get("data-n"): (float(e.get("cx")), float(e.get("cy"))) for e in circles}
+        key = [(str(t["number"]), (t["from"], t["to"])) for t in cds.state_key(lifecycle)]
+        self.assertEqual([n for n, _ in key], [str(n) for n in range(1, len(lifecycle["transitions"]) + 1)])
+        self.assertEqual(sorted(((n, owner) for n, owner, _ in paths if n is not None), key=lambda p: int(p[0])), key)
+        self.assertEqual(sorted((e.get("data-n") for e in circles), key=int), [n for n, _ in key])
         in_view = lambda x, y: 0 <= x <= view_w and 0 <= y <= view_h
-        for owner, points in paths:
-            self.assertTrue(all(in_view(*p) for p in points), "%s->%s leaves the view box" % owner)
-            for name, box in boxes.items():
-                if name not in owner:
-                    self.assertFalse(any(strictly_inside(p, box) for p in points),
-                                     "%s->%s crosses %s" % (owner + (name,)))
-        for index, (name, rect) in enumerate(labels):
-            self.assertTrue(in_view(rect[0], rect[1]) and in_view(rect[0] + rect[2], rect[1] + rect[3]),
-                            "label %r leaves the view box" % name)
-            for other, other_rect in labels[index + 1:]:
-                self.assertFalse(rects_overlap(rect, other_rect), "label %r overlaps label %r" % (name, other))
+        radius = cds.MARKER_R
+        for number, owner, points in paths:
+            name = "%s->%s (%s)" % (owner + (number or "start",))
+            self.assertTrue(all(in_view(*p) for p in points), name + " leaves the view box")
             for box_name, box in boxes.items():
-                self.assertFalse(rects_overlap(rect, box), "label %r overlaps box %s" % (name, box_name))
-            # A label sits 6px above its own line. Skip that line, and keep the rest of its own path 2px away.
-            own_line_y, grown = rect[1] + rect[3] + 2, (rect[0] - 2, rect[1] - 2, rect[2] + 4, rect[3] + 4)
-            for owner, points in paths:
-                if owner != owner_of[name]:
-                    self.assertFalse(any(strictly_inside(p, rect) for p in points),
-                                     "label %r crosses the path %s->%s" % ((name,) + owner))
+                if box_name not in owner:
+                    self.assertFalse(any(strictly_inside(p, box) for p in points), "%s crosses %s" % (name, box_name))
+            for n, center in markers.items():
+                nearest = min(math.dist(center, p) for p in points)
+                if n == number:
+                    self.assertLessEqual(nearest, 2 * radius, "marker %s is far from its arrow" % n)
                 else:
-                    rest = [p for p in points if abs(p[1] - own_line_y) > 0.01]
-                    self.assertFalse(any(strictly_inside(p, grown) for p in rest),
-                                     "label %r crosses its own path" % name)
-        return text, boxes, paths, labels
+                    self.assertGreaterEqual(nearest, radius - 0.5, "%s passes inside marker %s" % (name, n))
+        for n, (x, y) in markers.items():
+            self.assertTrue(in_view(x - radius, y - radius) and in_view(x + radius, y + radius),
+                            "marker %s leaves the view box" % n)
+            for other, center in markers.items():
+                if other != n:
+                    self.assertGreaterEqual(math.dist((x, y), center), 2 * radius, "marker %s overlaps %s" % (n, other))
+            for box_name, (bx, by, bw, bh) in boxes.items():
+                gap = math.hypot(max(bx - x, 0, x - bx - bw), max(by - y, 0, y - by - bh))
+                self.assertGreaterEqual(gap, radius, "marker %s overlaps box %s" % (n, box_name))
+        return text, boxes, paths, markers
+
+    def assert_no_crossing(self, paths):
+        """No segment between two neighbor samples of one path meets such a segment of another path. A meeting within
+        2 px of an end point that the two paths share does not count. Segments are bucketed in 8 px cells."""
+        cells = collections.defaultdict(list)
+        for index, (_, _, points) in enumerate(paths):
+            for a, b in zip(points, points[1:]):
+                columns = range(int(min(a[0], b[0]) // 8), int(max(a[0], b[0]) // 8) + 1)
+                rows = range(int(min(a[1], b[1]) // 8), int(max(a[1], b[1]) // 8) + 1)
+                for cell in itertools.product(columns, rows):
+                    cells[cell].append((index, a, b))
+        for segments in cells.values():
+            for k, (i, a, b) in enumerate(segments):
+                for j, c, d in segments[k + 1:]:
+                    if i == j or not segments_meet(a, b, c, d):
+                        continue
+                    ends_i, ends_j = (paths[i][2][0], paths[i][2][-1]), (paths[j][2][0], paths[j][2][-1])
+                    shared = [p for p in ends_i for q in ends_j if math.dist(p, q) <= 2]
+                    self.assertTrue(any(math.dist(a, p) <= 2 for p in shared),
+                                    "path %s crosses path %s near %s" % (paths[i][0], paths[j][0], a))
 
 
 class Svg(Base):
@@ -206,8 +284,10 @@ class Svg(Base):
         for label in ("web-ui", "api", "worker", "postgres"):
             self.assertIn(">%s<" % label, sequence)
         self.assertNotIn('class="lbl"', sequence)
-        for label in ("new", "queued", "done", "failed", "a retry"):
+        for label in ("new", "queued", "done", "failed"):
             self.assertIn(">%s<" % label, states)
+        self.assertNotIn('class="lbl"', states)
+        self.assertNotIn("a retry", states)
         for label in ("adapters", "use-cases", "entities", "SQL store", "Store port"):
             self.assertIn(">%s<" % label, architecture)
 
@@ -380,7 +460,15 @@ class Geometry(Base):
     def test_section_holds_sequence_key(self):
         section = cds.html_section(DIAGRAMS, [])
         self.assertIn("<li>web-ui → api: ", section)
-        self.assertEqual(section.count('<ol class="key">'), len(DIAGRAMS["sequences"]))
+        self.assertEqual(section.count('<ol class="key">'), len(DIAGRAMS["sequences"]) + len(DIAGRAMS["states"]))
+
+    def test_section_holds_states_key(self):
+        section = cds.html_section(DIAGRAMS, [])
+        lifecycle = DIAGRAMS["states"][0]
+        lines = [cds.key_line(t["from"], t["to"], t.get("label")) for t in cds.state_key(lifecycle)]
+        self.assertEqual(len(lines), len(lifecycle["transitions"]))
+        self.assertIn(cds.svg_states(lifecycle, "states-item-status") + cds.html_key(lines), section)
+        self.assertIn("<li>failed → queued: a retry</li>", section)
 
     def test_states_edges_touch_their_boxes(self):
         lifecycle = DIAGRAMS["states"][0]
@@ -390,66 +478,141 @@ class Geometry(Base):
         self.assertEqual(columns, sorted(columns))
         self.assertEqual(boxes["done"][0][0], boxes["failed"][0][0])
         back = [e for e in edges if (e[0], e[1]) == ("failed", "queued")][0]
-        lowest_box = max(b[0][1] + b[0][3] for b in boxes.values())
-        self.assertGreater(max(p[1] for p in back[4]), lowest_box)
+        queued_right = boxes["queued"][0][0] + boxes["queued"][0][2]
+        self.assertTrue(all(queued_right <= x <= boxes["failed"][0][0] for x, _ in back[4]),
+                        "a back arrow by one column stays in the band between the two columns")
 
     def test_states_self_same_column_and_back_edges(self):
-        lifecycle = copy.deepcopy(DIAGRAMS["states"][0])
-        lifecycle["transitions"] += [{"from": "queued", "to": "queued", "label": "wait"},
-                                     {"from": "failed", "to": "done", "label": "manual fix"},
-                                     {"from": "new", "to": "failed", "label": "fast fail"},
-                                     {"from": "done", "to": "new", "label": "reopen"}]
+        lifecycle = item_status_with_more_arrows()
         boxes, edges = self.assert_edges_touch(cds.svg_states(lifecycle, "s"),
                                                [(t["from"], t["to"]) for t in lifecycle["transitions"]])
         self.assert_no_box_crossing(boxes, edges)
 
-    def test_states_many_back_routes_stay_in_their_gaps(self):
-        back = [("d", "a"), ("d", "a"), ("c", "d"), ("d", "c"), ("d", "b"), ("c", "b"), ("c", "b"), ("c", "b")]
-        lifecycle = {"initial": "a", "transitions": [{"from": "a", "to": "b"}, {"from": "b", "to": "c"},
-                                                     {"from": "b", "to": "d"}]
-                     + [{"from": s, "to": t} for s, t in back]}
-        boxes, edges = self.assert_edges_touch(cds.svg_states(lifecycle, "s"),
-                                               [(t["from"], t["to"]) for t in lifecycle["transitions"]])
-        self.assert_no_box_crossing(boxes, edges)
+    def test_many_back_routes_are_clean(self):
+        text, boxes, paths, _ = self.assert_clean_states(MANY_BACK_ROUTES)
+        self.assert_edges_touch(text, [(t["from"], t["to"]) for t in MANY_BACK_ROUTES["transitions"]])
+        floor = max(y + h for _, y, _, h in boxes.values())
+        depths = sorted(max(y for _, y in points) for _, owner, points in paths if owner == ("d", "a"))
+        self.assertEqual(len(depths), 2)
+        self.assertTrue(floor < depths[0] and depths[1] - depths[0] == cds.LANE, "two lanes under the boxes")
 
-    def test_states_task_lifecycle_is_clean(self):
-        text, _, _, _ = self.assert_clean_states(TASK_STATUS)
+    def test_media_lifecycle_is_clean_and_uncrossed(self):
+        text, _, paths, _ = self.assert_clean_states(MEDIA["states"][0])
+        self.assert_no_crossing(paths)
+        self.assertLessEqual(view_width(text), 600)
+
+    def test_shared_column_sample_is_uncrossed(self):
+        _, _, paths, _ = self.assert_clean_states(SHARED_COLUMN)
+        self.assert_no_crossing(paths)
+
+    def test_task_status_is_clean(self):
+        text, _, paths, _ = self.assert_clean_states(TASK_STATUS)
+        self.assert_no_crossing(paths)
         self.assert_edges_touch(text, [(t["from"], t["to"]) for t in TASK_STATUS["transitions"]])
 
+    def test_forward_only_is_not_wider_than_0_10_0(self):
+        text, _, _, _ = self.assert_clean_states(FORWARD_ONLY)
+        self.assertLessEqual(view_width(text), 457.5)
+
+    def test_second_loop_on_bottom_edge(self):
+        _, boxes, paths, _ = self.assert_clean_states(TWO_LOOPS)
+        x, y, _, h = boxes["idle"]
+        loops = [points for _, owner, points in paths if owner == ("idle", "idle")]
+        above = [p for p in loops if min(v for _, v in p) < y and max(v for _, v in p) <= y + 0.5]
+        below = [p for p in loops if max(v for _, v in p) > y + h and min(v for _, v in p) >= y + h - 0.5]
+        self.assertEqual((len(loops), len(above), len(below)), (2, 1, 1))
+        start_y = [points for n, _, points in paths if n is None][0][-1][1]
+        self.assertAlmostEqual(start_y, y + h / 2)
+        left_ends = [p for n, _, points in paths if n is not None for p in (points[0], points[-1])
+                     if box_side(p, boxes["idle"]) == "left"]
+        self.assertFalse([p for p in left_ends if abs(p[1] - start_y) < cds.END_GAP / 2])
+
+    def test_nested_legs_are_clean_and_uncrossed(self):
+        for lifecycle in (NESTED_LEGS, LEGS_BOTH_WAYS):
+            _, boxes, paths, _ = self.assert_clean_states(lifecycle)
+            self.assert_no_crossing(paths)
+            right = boxes["a"][0] + boxes["a"][2]
+            legs = [points for _, owner, points in paths if owner[0] != "s" and owner[0] is not None]
+            self.assertEqual(len(legs), 2)
+            self.assertTrue(all(x >= right - 0.5 for points in legs for x, _ in points), lifecycle["id"])
+
+    def test_third_loop_becomes_a_leg(self):
+        _, boxes, paths, _ = self.assert_clean_states(THREE_LOOPS)
+        x, _, width, _ = boxes["idle"]
+        sweep = [points for n, owner, points in paths if owner == ("idle", "idle")][2]
+        self.assertTrue(all(x + width - 0.5 <= px for px, _ in sweep), "the third loop runs right of its box")
+        self.assertGreaterEqual(max(px for px, _ in sweep), x + width + cds.FIRST_LEG - 0.5)
+
+    def test_ends_on_a_side_are_apart(self):
+        for lifecycle in state_fixtures():
+            root = ET.fromstring(cds.svg_states(lifecycle, "s"))
+            boxes = {e.get("data-id"): tuple(float(e.get(k)) for k in ("x", "y", "width", "height"))
+                     for e in root.iter() if e.get("data-id") is not None}
+            along = collections.defaultdict(list)
+            for element in (e for e in root.iter() if e.get("class") == "edge"):
+                points = path_samples(element.get("d"))
+                for end in (points[0], points[-1]):
+                    for name, box in boxes.items():
+                        side = box_side(end, box)
+                        if side:
+                            along[(name, side)].append(end[1] if side in ("left", "right") else end[0])
+            for (name, side), places in along.items():
+                places.sort()
+                gaps = [b - a for a, b in zip(places, places[1:])]
+                self.assertTrue(all(g >= cds.END_GAP - 0.5 for g in gaps),
+                                "%s: ends on the %s side of %s are %s apart" % (lifecycle["id"], side, name, gaps))
+
+    def test_missing_initial_has_no_start_dot(self):
+        without = {k: v for k, v in FORWARD_ONLY.items() if k != "initial"}
+        unknown = dict(FORWARD_ONLY, initial="nowhere")
+        for lifecycle in (without, unknown):
+            _, _, paths, _ = self.assert_clean_states(lifecycle)
+            self.assertNotIn('class="start"', cds.svg_states(lifecycle, "s"))
+            self.assertTrue(all(n is not None for n, _, _ in paths))
+
+    def test_media_ladder_routes(self):
+        lifecycle = MEDIA["states"][0]
+        _, boxes, paths, _ = self.assert_clean_states(lifecycle)
+        route = {owner + (n,): points for n, owner, points in paths}
+        column_1 = boxes["success"]
+        self.assertTrue(boxes["failed"][0] == boxes["earning_toozle"][0] == column_1[0])
+        pending_right = boxes["pending"][0] + boxes["pending"][2]
+        for (source, target, _), points in route.items():
+            if "pending" in (source, target) and source != target and source is not None:
+                self.assertTrue(all(pending_right <= x <= column_1[0] for x, _ in points), "%s->%s" % (source, target))
+        verticals = {key: points for key, points in route.items()
+                     if key[0] in ("failed", "earning_toozle") and key[1] in ("failed", "earning_toozle")}
+        self.assertEqual(len(verticals), 3)
+        self.assertEqual({len({round(x, 2) for x, _ in points}) for points in verticals.values()}, {1})
+        down_x = [points[0][0] for key, points in verticals.items() if key[0] == "failed"]
+        up_x = [points[0][0] for key, points in verticals.items() if key[0] == "earning_toozle"]
+        self.assertLess(max(down_x), min(up_x), "down arrows sit left of up arrows")
+        leg = [points for key, points in route.items() if key[:2] == ("earning_toozle", "success")][0]
+        beside = [x for x, y in leg if abs(y - leg[0][1]) > 1 and abs(y - leg[-1][1]) > 1]
+        self.assertGreater(min(beside), column_1[0] + column_1[2], "a leg runs right of its column")
+
     def test_states_other_lifecycles_are_clean(self):
-        lifecycle = copy.deepcopy(DIAGRAMS["states"][0])
-        self.assert_clean_states(lifecycle)
-        lifecycle["transitions"] += [{"from": "queued", "to": "queued", "label": "wait"},
-                                     {"from": "failed", "to": "done", "label": "manual fix"},
-                                     {"from": "new", "to": "failed", "label": "fast fail"},
-                                     {"from": "done", "to": "new", "label": "reopen"}]
+        self.assert_clean_states(DIAGRAMS["states"][0])
+        lifecycle = item_status_with_more_arrows()
         self.assert_clean_states(lifecycle)
         lifecycle["transitions"].append({"from": "queued", "to": "queued", "label": "heartbeat"})
         _, boxes, paths, _ = self.assert_clean_states(lifecycle)
-        floor = max(y + h for _, y, _, h in boxes.values())
-        loop_depths = sorted(max(y for _, y in points) for owner, points in paths if owner == ("queued", "queued"))
-        self.assertEqual(len(loop_depths), 2)
-        self.assertTrue(loop_depths[0] <= boxes["queued"][1] < floor < loop_depths[1])
+        _, top, _, height = boxes["queued"]
+        loops = [points for _, owner, points in paths if owner == ("queued", "queued")]
+        self.assertEqual(len(loops), 2)
+        self.assertLess(min(y for _, y in loops[0]), top)
+        self.assertGreater(max(y for _, y in loops[1]), top + height)
 
-    def test_states_back_and_same_column_arrows_get_own_lanes(self):
-        _, boxes, paths, labels = self.assert_clean_states(TASK_STATUS)
+    def test_far_back_arrow_keeps_a_lane_under_the_boxes(self):
+        lifecycle = item_status_with_more_arrows()
+        _, boxes, paths, markers = self.assert_clean_states(lifecycle)
         floor = max(y + h for _, y, _, h in boxes.values())
-        column_of = {name: box[0] for name, box in boxes.items()}
-        below = [t for t in TASK_STATUS["transitions"] if column_of[t["to"]] <= column_of[t["from"]]]
-        self.assertEqual(len(below), 5)
-        lowest = {}
-        for t in below:
-            points = [points for owner, points in paths if owner == (t["from"], t["to"])][0]
-            depth = max(y for _, y in points)
-            self.assertGreater(depth, floor, "%s->%s stays above the boxes" % (t["from"], t["to"]))
-            bottom = [x for x, y in points if abs(y - depth) < 0.01]
-            label = [rect for name, rect in labels if name == t["label"]][0]
-            self.assertTrue(min(bottom) <= label[0] and label[0] + label[2] <= max(bottom),
-                            "the label of %s->%s is off its lowest segment" % (t["from"], t["to"]))
-            self.assertTrue(0 < depth - (label[1] + label[3]) <= 4,
-                            "the label of %s->%s does not sit on its lowest segment" % (t["from"], t["to"]))
-            lowest[(t["from"], t["to"])] = depth
-        self.assertEqual(len(set(lowest.values())), len(below))
+        number, _, points = [p for p in paths if p[1] == ("done", "new")][0]
+        depth = max(y for _, y in points)
+        self.assertGreater(depth, floor)
+        lane = [x for x, y in points if abs(y - depth) < 0.01]
+        self.assertAlmostEqual(markers[number][1], depth)
+        self.assertAlmostEqual(markers[number][0], (min(lane) + max(lane)) / 2, delta=1)
 
     def test_architecture_nests_and_joins_pills(self):
         architecture = DIAGRAMS["architecture"]
