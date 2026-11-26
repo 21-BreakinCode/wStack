@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # contract-deliver.sh write|undo|rehearse <task_dir> <contract_file> <task_id>
 # Deliver "Contract files": copy <task_dir>/contract.draft.yaml and decisions.draft/* into the contract folder.
-#   write     Check decision ids, take the lock, move the old root files to _archive/<task_id>/ (once, marker
-#             .archived), copy the drafts, run set-verified (it renders). Safe to run again after a failure.
-#             Leaves diagrams/ (the deep dives) where it is. Prints one line per file: new:, replaced: (old copy: ...), moved: ... -> ..., unchanged:.
+#   write     Check decision ids, take the lock, move to _archive/<task_id>/ (once, marker .archived) the old
+#             contract files (<app_name>.contract.yaml, <app_name>.md, plan.md) and each path listed in
+#             <task_dir>/docs-archive.txt (one path per line, relative to the contract folder, kept with its
+#             subfolders). Then copy the drafts, run set-verified (it renders). Safe to run again after a failure.
+#             A vault doc is any other file outside handover/, decisions/, diagrams/, _archive/, *.lock and
+#             *.facts.md. A vault doc not in the list stays. No list file means no vault doc moves.
+#             A listed path that is missing, has .., starts with /, or is not a vault doc exits 1 before any change.
+#             Prints one line per file: new:, replaced: (old copy: ...), moved: ... -> ..., unchanged:.
 #             Exit 0 done, 4 lock busy, 1 a decision id clash or a failed step.
 #   undo      First restore the deep dives listed in diagrams.drawn.txt (backup back, new ones removed).
-#             Delete the contract, the note, the HTML page, and the copied decisions; move the archive back.
+#             Delete the contract, the note, the HTML page, and the copied decisions; move the archive back
+#             file by file at any depth (an archived docs/ merges into a live docs/). A live file with the same
+#             relative path makes it exit 1 before any change.
 #             A restored old contract is not rendered again: undo prints "rebuild the page: <command>". Exit 0 or 1.
 #   rehearse  Run write and undo on copies in a temp folder with a temp HOME, then diff -r against a clean copy.
 #             Prints the diff. Exit 0 empty diff, 1 a diff or a failed run.
@@ -29,6 +36,24 @@ note_name="$app_name.md"
 archive_dir="$contract_folder/_archive/$task_id"
 copied_list="$task_dir/decisions.copied.txt"
 drawn_list="$task_dir/diagrams.drawn.txt"
+
+docs_list="$task_dir/docs-archive.txt"
+
+is_vault_doc() {  # <path relative to the contract folder>
+  case "$1" in
+    handover/*|decisions/*|diagrams/*|_archive/*|.*|*/.*|*.lock|*.lock/*|*.facts.md|"$contract_name"|"$note_name"|plan.md) return 1 ;;
+  esac
+}
+each_file_under() {  # <folder>: print the relative path of every file under it, sorted
+  [ -d "$1" ] || return 0
+  (cd "$1" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
+}
+each_listed_doc() {  # the lines of docs-archive.txt, no blank lines
+  [ -f "$docs_list" ] || return 0
+  while IFS= read -r listed_rel || [ -n "$listed_rel" ]; do
+    [ -z "$listed_rel" ] || printf '%s\n' "$listed_rel"
+  done <"$docs_list"
+}
 
 print_written() {  # <root file name>
   if [ -e "$archive_dir/$1" ]; then echo "replaced: $contract_folder/$1 (old copy: $archive_dir/$1)"
@@ -53,13 +78,24 @@ case "$action" in
         fail "decision id ${draft_name%%-*} already exists in decisions/: $(basename "$same_id")"
       done
     done
+    while IFS= read -r listed_rel; do
+      case "$listed_rel" in /*|..|../*|*/../*|*/..) fail "bad path in docs-archive.txt: $listed_rel, so nothing changed" ;; esac
+      is_vault_doc "$listed_rel" || fail "not a vault doc in docs-archive.txt: $listed_rel, so nothing changed"
+      # A rerun finds a listed doc already in the archive.
+      [ -e "$archive_dir/.archived" ] || [ -f "$contract_folder/$listed_rel" ] || fail "missing path in docs-archive.txt: $listed_rel, so nothing changed"
+    done < <(each_listed_doc)
     mkdir -p "$archive_dir"
     if [ ! -e "$archive_dir/.archived" ]; then
-      for old_file in "$contract_folder"/*; do  # the glob skips dot files, so they stay
-        case "$(basename "$old_file")" in handover|decisions|diagrams|_archive|*.lock|*.facts.md) continue ;; esac
-        [ ! -e "$archive_dir/$(basename "$old_file")" ] || continue
-        mv "$old_file" "$archive_dir/"
-      done
+      move_to_archive() {  # <relative path>
+        [ -e "$contract_folder/$1" ] || return 0
+        [ ! -e "$archive_dir/$1" ] || return 0
+        mkdir -p "$(dirname "$archive_dir/$1")"
+        mv "$contract_folder/$1" "$archive_dir/$1"
+        local emptied; emptied="$(dirname "$contract_folder/$1")"
+        while [ "$emptied" != "$contract_folder" ] && rmdir "$emptied" 2>/dev/null; do emptied="$(dirname "$emptied")"; done
+      }
+      for old_name in "$contract_name" "$note_name" plan.md; do move_to_archive "$old_name"; done
+      while IFS= read -r listed_rel; do move_to_archive "$listed_rel"; done < <(each_listed_doc)
       touch "$archive_dir/.archived"
     fi
     cp "$draft_file" "$contract_file"
@@ -76,25 +112,27 @@ case "$action" in
       [ -e "$draft_decision" ] || continue
       echo "new: $contract_folder/decisions/$(basename "$draft_decision")"
     done
-    for archived in "$archive_dir"/*; do
-      [ -e "$archived" ] || continue
-      archived_name="$(basename "$archived")"
-      case "$archived_name" in "$contract_name"|"$note_name") [ ! -e "$contract_folder/$archived_name" ] || continue ;; esac
-      echo "moved: $contract_folder/$archived_name -> $archived"
-    done
+    while IFS= read -r archived_rel; do
+      [ "$archived_rel" != .archived ] || continue
+      case "$archived_rel" in "$contract_name"|"$note_name") [ ! -e "$contract_folder/$archived_rel" ] || continue ;; esac
+      echo "moved: $contract_folder/$archived_rel -> $archive_dir/$archived_rel"
+    done < <(each_file_under "$archive_dir")
     for kept in "$contract_folder"/*; do
       case "$(basename "$kept")" in handover|diagrams|*.facts.md) echo "unchanged: $kept" ;; esac
-    done ;;
+    done
+    while IFS= read -r vault_rel; do
+      ! is_vault_doc "$vault_rel" || echo "unchanged: $contract_folder/$vault_rel"
+    done < <(each_file_under "$contract_folder") ;;
 
   undo)
     # Without the marker, the old contract may still sit in the folder with no copy in the archive.
     [ -e "$archive_dir/.archived" ] || fail "nothing to undo: $archive_dir/.archived is missing"
     # Check every name before any change, so undo changes nothing or completes.
-    for archived in "$archive_dir"/*; do
-      [ -e "$archived" ] || continue
-      case "$(basename "$archived")" in "$contract_name"|"$note_name") continue ;; esac  # undo deletes these first
-      [ ! -e "$contract_folder/$(basename "$archived")" ] || fail "will not move over $contract_folder/$(basename "$archived"), so nothing changed"
-    done
+    while IFS= read -r archived_rel; do
+      [ "$archived_rel" != .archived ] || continue
+      case "$archived_rel" in "$contract_name"|"$note_name") continue ;; esac  # undo deletes these first
+      [ ! -e "$contract_folder/$archived_rel" ] || fail "will not move over $contract_folder/$archived_rel, so nothing changed"
+    done < <(each_file_under "$archive_dir")
     if [ -f "$drawn_list" ]; then  # restore checks this too, but only after undo started changing files
       while IFS=$'\t' read -r _ backup_path; do
         [ -z "$backup_path" ] || [ -f "$backup_path" ] || fail "deep dive backup missing: $backup_path, so nothing changed"
@@ -108,12 +146,14 @@ case "$action" in
       done <"$copied_list"
       rm -f "$copied_list"
     fi
-    for archived in "$archive_dir"/*; do
-      [ -e "$archived" ] || continue
-      mv "$archived" "$contract_folder/"
-    done
+    while IFS= read -r archived_rel; do
+      [ "$archived_rel" != .archived ] || continue
+      mkdir -p "$(dirname "$contract_folder/$archived_rel")"
+      mv "$archive_dir/$archived_rel" "$contract_folder/$archived_rel"
+    done < <(each_file_under "$archive_dir")
     rm -f "$archive_dir/.archived"
-    rmdir "$archive_dir" || fail "files are left in $archive_dir"
+    find "$archive_dir" -depth -type d -empty -exec rmdir {} \;
+    [ ! -e "$archive_dir" ] || fail "files are left in $archive_dir"
     for empty_folder in "$contract_folder/_archive" "$contract_folder/decisions"; do rmdir "$empty_folder" 2>/dev/null || true; done
     # No render here: a page under the real HOME would make the rehearsal diff differ.
     [ ! -f "$contract_file" ] || echo "rebuild the page: bash '$scripts/contract-render.sh' '$contract_file'" ;;

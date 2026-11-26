@@ -81,7 +81,7 @@ new_world; keep_copy
 run "$deliver" undo "$task" "$CONTRACT" "$task_id"
 assert "undo without a write exits 1 and deletes nothing ($out)" '[ $rc = 1 ] && printf "%s\n" "$out" | grep -qF "nothing to undo" && same_as_copy'
 
-new_world; echo '# old notes' >"$folder/zz-notes.md"; keep_copy
+new_world; echo '# old notes' >"$folder/zz-notes.md"; echo 'zz-notes.md' >"$task/docs-archive.txt"; keep_copy
 run "$deliver" write "$task" "$CONTRACT" "$task_id"; write_rc=$rc
 echo '# user notes' >"$folder/zz-notes.md"
 rm -rf "$work_dir/after-write"; cp -R "$folder" "$work_dir/after-write"
@@ -91,6 +91,47 @@ rm "$folder/zz-notes.md"
 run "$deliver" undo "$task" "$CONTRACT" "$task_id"
 assert "undo with a name clash changes nothing, and a second undo restores the folder ($clash_out | $out)" '[ $write_rc = 0 ] && [ $clash_rc = 1 ] &&
   printf "%s\n" "$clash_out" | grep -qF "will not move over $folder/zz-notes.md" && [ $clash_unchanged = yes ] && [ $rc = 0 ] && same_as_copy'
+
+new_world; mkdir -p "$folder/docs"; echo '# rules' >"$folder/docs/do-and-dont.md"; echo '# prd' >"$folder/PRD.md"; keep_copy
+run "$deliver" write "$task" "$CONTRACT" "$task_id"
+assert "write with no list keeps vault docs in place and prints unchanged ($out)" '[ $rc = 0 ] && [ -f "$folder/docs/do-and-dont.md" ] && [ -f "$folder/PRD.md" ] &&
+  [ ! -e "$archive/docs" ] && [ ! -e "$archive/PRD.md" ] && has_line "unchanged: $folder/docs/do-and-dont.md" && has_line "unchanged: $folder/PRD.md"'
+
+new_world; mkdir -p "$folder/docs"; echo '# flow' >"$folder/docs/flow.md"; echo '# rules' >"$folder/docs/rules.md"; echo '# prd' >"$folder/PRD.md"
+printf 'docs/flow.md\n' >"$task/docs-archive.txt"
+run "$deliver" write "$task" "$CONTRACT" "$task_id"
+assert "write with a list archives only the listed doc, with its subfolder ($out)" '[ $rc = 0 ] && [ -f "$archive/docs/flow.md" ] && [ ! -e "$folder/docs/flow.md" ] &&
+  [ -f "$folder/docs/rules.md" ] && [ -f "$folder/PRD.md" ] && has_line "moved: $folder/docs/flow.md -> $archive/docs/flow.md" &&
+  has_line "unchanged: $folder/docs/rules.md" && has_line "unchanged: $folder/PRD.md"'
+
+new_world; echo '# prd' >"$folder/PRD.md"; printf 'PRD.md\ndocs/gone.md\n' >"$task/docs-archive.txt"; keep_copy
+run "$deliver" write "$task" "$CONTRACT" "$task_id"
+assert "a listed missing path exits 1 and changes nothing ($out)" '[ $rc = 1 ] && printf "%s\n" "$out" | grep -qF "docs/gone.md" && [ ! -e "$archive" ] && same_as_copy'
+
+for bad_path in '../x' '/x' 'handover/a.md' 'decisions/a.md' 'diagrams/a.html' '_archive/a.md' 'docs/../../x'; do
+  new_world; mkdir -p "$folder/handover"; echo a >"$folder/handover/a.md"; printf '%s\n' "$bad_path" >"$task/docs-archive.txt"; keep_copy
+  run "$deliver" write "$task" "$CONTRACT" "$task_id"
+  assert "a bad list path $bad_path exits 1 and changes nothing ($out)" '[ $rc = 1 ] && [ ! -e "$archive" ] && same_as_copy'
+done
+
+new_world; mkdir -p "$folder/docs"; echo '# x' >"$folder/docs/x.md"; echo '# y' >"$folder/docs/y.md"; echo '# prd' >"$folder/PRD.md"
+printf 'docs/x.md\nPRD.md\n' >"$task/docs-archive.txt"; keep_copy
+run "$deliver" write "$task" "$CONTRACT" "$task_id"; write_rc=$rc
+run "$deliver" undo "$task" "$CONTRACT" "$task_id"
+assert "undo merges an archived docs/x.md back into a live docs/ ($out)" '[ $write_rc = 0 ] && [ $rc = 0 ] && same_as_copy && [ ! -e "$folder/_archive" ]'
+
+new_world; mkdir -p "$folder/docs" "$archive/docs"; echo '# y' >"$folder/docs/y.md"; echo '# x' >"$archive/docs/x.md"; touch "$archive/.archived"
+keep_copy
+run "$deliver" undo "$task" "$CONTRACT" "$task_id"
+assert "undo of an old-style archive holding a whole docs/ merges into a live docs/ ($out)" '[ $rc = 0 ] && [ -f "$folder/docs/x.md" ] && [ -f "$folder/docs/y.md" ] && [ ! -e "$folder/_archive" ]'
+
+new_world; mkdir -p "$archive/docs" "$folder/docs"; echo old >"$archive/docs/x.md"; echo live >"$folder/docs/x.md"; touch "$archive/.archived"; keep_copy
+run "$deliver" undo "$task" "$CONTRACT" "$task_id"
+assert "undo with a same-name file clash exits 1 and changes nothing ($out)" '[ $rc = 1 ] && printf "%s\n" "$out" | grep -qF "will not move over $folder/docs/x.md" && same_as_copy'
+
+new_world; mkdir -p "$folder/docs"; echo '# x' >"$folder/docs/x.md"; printf 'docs/x.md\n' >"$task/docs-archive.txt"; keep_copy
+run "$deliver" rehearse "$task" "$CONTRACT" "$task_id"
+assert "rehearse with a list exits 0 and leaves the real folder unchanged ($out)" '[ $rc = 0 ] && same_as_copy'
 
 new_world; mkdir -p "$folder/diagrams"; echo '<p>flow</p>' >"$folder/diagrams/flow.html"
 run "$deliver" write "$task" "$CONTRACT" "$task_id"

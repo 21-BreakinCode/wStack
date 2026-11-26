@@ -3,6 +3,8 @@
 ## 0.10.1 - 2026-11-26
 
 - **fix:** wStack needs mikefarah `yq` version 4.30.8 or later, not 4.22.1. The scripts use `-r` (yq 4.25.3) and `"\n"` in an expression (yq 4.30.3). 4.30.8 is the oldest yq that the full test suite passed on. On yq 4.22.1, 99 checks failed.
+- **change:** A rebuild no longer archives every file of the contract folder. The task asks about each vault doc (a file such as `PRD.md` or `docs/*.md`): keep it or archive it. The spec records the answers in `## Vault docs`. Deliver writes `docs-archive.txt`, and `contract-deliver.sh write` archives the old contract files and only the listed docs. A doc that stays prints `unchanged:`.
+- **fix:** `contract-deliver.sh undo` moves archived files back one by one, so an archived `docs/` merges into a live `docs/`. Before, it refused a live `docs/`. A live file with the same path still stops it with no change. It also reads archives made by 0.8.0 to 0.10.0.
 - **fix:** Preflight now reports an old mikefarah `yq` as `OLD yq <version> (need 4.30.8)`. Before, a yq older than 4.30.3 was reported as `MISSING`, because it prints its version with no `v`.
 
 ## 0.10.0 - 2026-11-26

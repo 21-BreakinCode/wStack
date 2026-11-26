@@ -176,6 +176,9 @@ assert "execute: org_kebab uses the handover kebab rule" 'has "$step6_line" "ins
 assert "execute: org_kebab is defined" 'has "$step6_line" "\`{{org_kebab}}\` is the \`<ORG>\` folder of the contract path"'
 
 # Deliver: Contract files
+assert "confirmation has the Vault docs spec section" 'grep -qF "## Vault docs" "$confirmation"'
+assert "deliver Contract files names docs-archive.txt" 'has "$files_part" "docs-archive.txt"'
+assert "contract-deliver.sh names docs-archive.txt" 'grep -qF "docs-archive.txt" "$repo_root/scripts/contract-deliver.sh"'
 assert "deliver has Contract files heading" 'grep -qxF "### Contract files" "$deliver"'
 for needle in 'contract-path.sh' 'contract-deliver.sh" write' 'contract-files.txt' 'contract.draft.yaml' 'decisions.draft/' 'disagreements.md' '## Doc and code disagree' 'Exit 4'; do
   assert "deliver Contract files names $needle" 'has "$files_part" "$needle"'
