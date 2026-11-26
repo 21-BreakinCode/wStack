@@ -409,6 +409,24 @@ class StatesLayout:
             return (3, -far_y, -t["number"])
         return (0, -far_y, t["number"])
 
+    def band_curve(self, t):
+        """The control points of the curve of a forward or back arrow, from end to end."""
+        start, end = self.end[(t["number"], "from")], self.end[(t["number"], "to")]
+        middle = (start[0] + end[0]) / 2
+        return start, (middle, start[1]), (middle, end[1]), end
+
+    def leg_crossings(self, t, leg_x):
+        """The points where the arrows from the right sides of the rows between the two ends of a leg meet the x of
+        the leg, and MARKER_R to either side of it."""
+        low, high = sorted((self.row[t["from"]], self.row[t["to"]]))
+        spots = []
+        for name in self.stacks[self.column[t["from"]]][low + 1:high]:
+            for other, which in self.ends[(name, "right")]:
+                is_curve, y = self.kind[other["number"]] in ("forward", "back"), self.end[(other["number"], which)][1]
+                spots += [point_at_x(self.band_curve(other), x) if is_curve else (x, y)
+                          for x in (leg_x - MARKER_R, leg_x, leg_x + MARKER_R)]
+        return spots
+
 
 def point_at_x(points, x):
     """The point at x of a Bézier curve whose x only grows or only shrinks. It halves the range of t 30 times."""
@@ -430,10 +448,8 @@ def point_at_x(points, x):
 
 def band_route(layout, t):
     """A curve from end to end. Its marker sits BAND_MARK from its end on the right column of the band."""
-    start, end = layout.end[(t["number"], "from")], layout.end[(t["number"], "to")]
-    middle = (start[0] + end[0]) / 2
-    points = (start, (middle, start[1]), (middle, end[1]), end)
-    return curve(*points), point_at_x(points, max(start[0], end[0]) - BAND_MARK)
+    points = layout.band_curve(t)
+    return curve(*points), point_at_x(points, max(points[0][0], points[-1][0]) - BAND_MARK)
 
 
 def vertical_route(layout, t):
@@ -456,7 +472,7 @@ def leg_route(layout, t):
     return rounded(start, (leg_x, start[1]), (leg_x, end[1]), end), (leg_x, (start[1] + end[1]) / 2)
 
 
-def lane_route(layout, t):
+def under_lane_route(layout, t):
     """Down a leg left of the source column, along a lane below all boxes, and up a leg right of the target column.
     Its marker sits in the middle of the lane."""
     start, end = layout.end[(t["number"], "from")], layout.end[(t["number"], "to")]
@@ -477,7 +493,7 @@ def loop_route(layout, t):
 
 
 ROUTES = {"forward": band_route, "back": band_route, "down": vertical_route, "up": vertical_route, "leg": leg_route,
-          "lane": lane_route, "top": loop_route, "bottom": loop_route}
+          "lane": under_lane_route, "top": loop_route, "bottom": loop_route}
 
 
 def svg_states(lifecycle, prefix):
@@ -494,9 +510,10 @@ def svg_states(lifecycle, prefix):
     spots = []
     for t, kind in layout.routes:
         d, (x, y) = ROUTES[kind](layout, t)
-        # shortcut: a leg marker steps down past earlier markers and can pass the end of a short leg, place it along
+        taken = (spots + layout.leg_crossings(t, x)) if kind == "leg" else spots
+        # shortcut: a leg marker steps down past taken spots and can pass the end of a short leg, place it along
         # the free part of the leg if that shows up
-        while kind == "leg" and any(math.dist((x, y), spot) < 2 * MARKER_R for spot in spots):
+        while kind == "leg" and any(math.dist((x, y), spot) < 2 * MARKER_R for spot in taken):
             y += 2 * MARKER_R
         spots.append((x, y))
         canvas.path(d, source=t["from"], target=t["to"], number=t["number"])

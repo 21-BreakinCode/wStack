@@ -1,4 +1,5 @@
 """Unit tests for scripts/contract_diagrams_svg.py: python3 tests/contract/test_contract_diagrams_svg.py"""
+import ast
 import collections
 import copy
 import hashlib
@@ -109,6 +110,20 @@ NESTED_LEGS = {"id": "nested-legs", "initial": "s", "transitions": [
 LEGS_BOTH_WAYS = {"id": "legs-both-ways", "initial": "s", "transitions": [
     {"from": s, "to": t} for s, t in [("s", "a"), ("s", "b"), ("s", "c"), ("a", "c"), ("c", "a")]]}
 
+
+def legs_over_a_row(name, pairs):
+    """Column 1 holds a, b and c. The pairs add legs between a and c, past b, and the arrow b -> d."""
+    return {"id": name, "initial": "q", "transitions": [
+        {"from": s, "to": t} for s, t in [("q", "a"), ("q", "b"), ("q", "c")] + pairs]}
+
+
+LEGS_OVER_A_ROW = [legs_over_a_row("leg-up-over-a-row", [("b", "d"), ("c", "a")]),
+                   legs_over_a_row("leg-down-over-a-row", [("b", "d"), ("a", "c")]),
+                   legs_over_a_row("two-legs-over-a-row", [("b", "d"), ("a", "c"), ("c", "a")]),
+                   # x sits above d, so b -> d is nearly flat where it meets the outer leg
+                   legs_over_a_row("two-legs-over-a-flat-row",
+                                   [("q", "e"), ("e", "x"), ("b", "d"), ("a", "c"), ("c", "a")])]
+
 # Back arrows by one and by two columns, and arrows both ways between two neighbor rows.
 MANY_BACK_ROUTES = {"id": "many-back", "initial": "a", "transitions": [
     {"from": s, "to": t} for s, t in [("a", "b"), ("b", "c"), ("b", "d"), ("d", "a"), ("d", "a"), ("c", "d"),
@@ -129,8 +144,8 @@ def state_fixtures():
     with_second_loop = item_status_with_more_arrows()
     with_second_loop["transitions"].append({"from": "queued", "to": "queued", "label": "heartbeat"})
     return [MEDIA["states"][0], SHARED_COLUMN, TASK_STATUS, FORWARD_ONLY, TWO_LOOPS, THREE_LOOPS, MANY_BACK_ROUTES,
-            NESTED_LEGS, LEGS_BOTH_WAYS,
-            DIAGRAMS["states"][0], item_status_with_more_arrows(), with_second_loop]
+            NESTED_LEGS, LEGS_BOTH_WAYS, DIAGRAMS["states"][0], item_status_with_more_arrows(),
+            with_second_loop] + LEGS_OVER_A_ROW
 
 
 def box_side(point, box):
@@ -535,6 +550,22 @@ class Geometry(Base):
             legs = [points for _, owner, points in paths if owner[0] != "s" and owner[0] is not None]
             self.assertEqual(len(legs), 2)
             self.assertTrue(all(x >= right - 0.5 for points in legs for x, _ in points), lifecycle["id"])
+
+    def test_leg_marker_clears_the_arrows_of_the_rows_it_passes(self):
+        for lifecycle in LEGS_OVER_A_ROW:
+            _, _, paths, markers = self.assert_clean_states(lifecycle)
+            for number, owner, points in paths:
+                if owner in (("a", "c"), ("c", "a")):
+                    leg_x = max(x for x, _ in points)
+                    leg_ys = [y for x, y in points if abs(x - leg_x) < 0.01]
+                    (x, y), name = markers[number], "%s: marker %s is off its leg" % (lifecycle["id"], number)
+                    self.assertAlmostEqual(x, leg_x, msg=name)
+                    self.assertTrue(min(leg_ys) < y < max(leg_ys), name)
+
+    def test_module_functions_have_unique_names(self):
+        tree = ast.parse(Path(cds.__file__).read_text(encoding="utf-8"))
+        names = [node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.ClassDef))]
+        self.assertEqual(sorted({name for name in names if names.count(name) > 1}), [])
 
     def test_third_loop_becomes_a_leg(self):
         _, boxes, paths, _ = self.assert_clean_states(THREE_LOOPS)
