@@ -450,6 +450,12 @@ class Geometry(Base):
                         item = "%s: %s" % (name, edge["label"]) if edge.get("label") else name
                         self.assertIn("<li>%s</li>" % cds.esc(item), body)
 
+    def test_cards_and_key_show_inline_code(self):
+        flow = {"parts": [{"id": "a"}], "callers": [{"id": "c"}], "edges": [{"from": "c", "to": "a", "label": "POST `/x<y>`"}]}
+        self.assertIn("<li>c: POST <code>/x&lt;y&gt;</code></li>", cds.flow_cards_html(flow))
+        self.assertEqual(cds.html_key(["`a` to `b`", "one ` left"]),
+                         '<ol class="key"><li><code>a</code> to <code>b</code></li><li>one ` left</li></ol>')
+
     def test_cards_escape_and_skip_empty_lists(self):
         flow = {"parts": [{"id": "a", "label": NASTY}, {"id": "b"}], "edges": [{"from": "a", "to": "b"}]}
         section = cds.flow_cards_html(flow)

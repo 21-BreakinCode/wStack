@@ -27,7 +27,7 @@ sections:
   abilities:
     sources: ["cmd/**"]
     items:
-      - text: A folder is read-only when a bucket is set.
+      - text: A folder is read-only when \`bucket\` is set, and \`a\` < \`b\`.
         refs: ["app/a.py:12,40-42", "app/b.py:98, 131, 146"]
       - text: "# Starts with a hash and says: yes"
         refs: [app/c.py:1]
@@ -66,7 +66,7 @@ sections:
 planned:
   - id: ack-after-commit
     title: Ack after the commit
-    why: A failed commit loses the message.
+    why: A failed \`commit()\` loses the message.
     refs: [app/w.py:52-56]
 YAML
 
@@ -96,6 +96,9 @@ assert "link to a removed plan item says plan item removed" 'grep -q "plan item 
 assert "leading hash is neutralized" '! grep -qE "^- # Starts" "$note" && grep -qF "Starts with a hash and says: yes" "$note"'
 assert "leading quote and dash are neutralized" '! grep -qE "^- (>|-) " "$note" && grep -qF "quoted start" "$note" && grep -qF "dash start" "$note"'
 
+assert "html shows inline code as <code>" 'grep -qF "read-only when <code>bucket</code> is set, and <code>a</code> &lt; <code>b</code>." "$page" && grep -qF "A failed <code>commit()</code> loses" "$page"'
+assert "html has no raw backtick" '! grep -qF '"'"'`'"'"' "$page"'
+assert "a card has no margin above its first child or below its last" 'grep -qF ".card > :first-child { margin-top: 0; }" "$page" && grep -qF ".card > :last-child { margin-bottom: 0; }" "$page"'
 assert "html escapes text" 'grep -qF "&lt;script&gt;" "$page" && ! grep -q "<script" "$page"'
 assert "html has the summary card counts" 'grep -q "5 gotchas" "$page" && grep -q "1 planned" "$page" && grep -q "main" "$page"'
 assert "html pluralizes the ability and dependency counts" 'grep -q "2 abilities" "$page" && grep -q "1 dependency" "$page"'

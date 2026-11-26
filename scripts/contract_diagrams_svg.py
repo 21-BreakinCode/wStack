@@ -45,6 +45,11 @@ def esc(text):
     return html.escape(str(text))
 
 
+def prose_html(text):
+    """Escape contract prose, and show each `code` span as <code>, as the vault note does."""
+    return re.sub(r"`([^`]+)`", r"<code>\1</code>", esc(text))
+
+
 def text_width(text):
     return display_width(str(text)) * COLUMN_PX
 
@@ -245,7 +250,7 @@ def svg_flow_overview(flow, prefix):
 
 def flow_cards_html(flow):
     def items(pairs):
-        return "<ul>%s</ul>" % "".join("<li>%s</li>" % esc("%s: %s" % pair if pair[1] else pair[0]) for pair in pairs)
+        return "<ul>%s</ul>" % "".join("<li>%s</li>" % prose_html("%s: %s" % pair if pair[1] else pair[0]) for pair in pairs)
 
     cards = []
     for card in part_cards(flow):
@@ -585,7 +590,7 @@ from contract_diagrams_arch_svg import PAGE_LIMIT, svg_architecture  # noqa: E40
 
 
 def html_key(lines):
-    return '<ol class="key">%s</ol>' % "".join("<li>%s</li>" % esc(text) for text in lines)
+    return '<ol class="key">%s</ol>' % "".join("<li>%s</li>" % prose_html(text) for text in lines)
 
 
 def html_section(diagrams, deep_dives):

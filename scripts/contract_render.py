@@ -149,6 +149,8 @@ h2 { font-size: 1.15rem; margin: 28px 0 8px; border-bottom: 1px solid var(--line
 h3 { font-size: 1rem; margin: 16px 0 4px; }
 a { color: var(--link); }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 12px 0; }
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
 .counts { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 8px 0 0; padding: 0; list-style: none; }
 .muted { color: var(--muted); }
 ul.items { padding-left: 20px; }
@@ -181,6 +183,9 @@ def esc(text):
     return html.escape(str(text))
 
 
+prose_html = contract_diagrams_svg.prose_html
+
+
 def html_refs(refs, repo, commit):
     if not refs:
         return ""
@@ -189,7 +194,7 @@ def html_refs(refs, repo, commit):
 
 
 def html_item(item, repo, commit, plans_by_id):
-    parts = [esc(item.get("text", ""))]
+    parts = [prose_html(item.get("text", ""))]
     if item.get("app"):
         parts.append('<div class="muted">mapped service: <code>%s</code>%s</div>' % (
             esc(item["app"]), " at <code>%s</code>" % esc(item["mapped_commit"]) if item.get("mapped_commit") else ""))
@@ -197,7 +202,7 @@ def html_item(item, repo, commit, plans_by_id):
     if plan_id:
         plan = plans_by_id.get(plan_id)
         parts.append('<div class="muted">planned: %s</div>' % (
-            '<a href="#plan-%s">%s</a>' % (esc(quote(plan_id)), esc(plan.get("title", ""))) if plan
+            '<a href="#plan-%s">%s</a>' % (esc(quote(plan_id)), prose_html(plan.get("title", ""))) if plan
             else "plan item removed (%s)" % esc(plan_id)))
     parts.append(html_refs(item.get("refs") or [], repo, commit))
     return "<li>%s</li>" % "".join(parts)
@@ -219,7 +224,7 @@ def render_html(data, deep_dives):
         for key, singular, plural_form in CARD_ORDER)
     body = [
         "<h1>%s</h1>" % esc(data.get("app_name", "")),
-        "<p>%s</p>" % esc(data.get("summary", "")),
+        "<p>%s</p>" % prose_html(data.get("summary", "")),
         '<div class="card"><div class="muted">verified <code>%s</code> at %s on branch <code>%s</code></div>'
         '<ul class="counts">%s</ul></div>' % (
             esc(commit), esc(data.get("verified_at") or "unknown time"), esc(data.get("base_branch", "")), count_html),
@@ -237,7 +242,7 @@ def render_html(data, deep_dives):
         if key == "planned":
             for plan in planned:
                 body.append('<h3 id="plan-%s">%s</h3><p>%s</p>%s' % (
-                    esc(quote(str(plan.get("id", "")))), esc(plan.get("title", "")), esc(plan.get("why", "")),
+                    esc(quote(str(plan.get("id", "")))), prose_html(plan.get("title", "")), prose_html(plan.get("why", "")),
                     html_refs(plan.get("refs") or [], repo, commit)))
             continue
         items = "".join(html_item(i, repo, commit, plans_by_id) for i in items_of(key))
