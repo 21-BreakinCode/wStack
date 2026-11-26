@@ -155,6 +155,38 @@ mutate_diagrams stepnorefs 'del(.diagrams.sequences[0].steps[0].refs)'
 expect_error "a step without refs fails" "diagram entry without refs: diagrams.sequences[0].steps[0]"
 mutate_diagrams transitionnorefs 'del(.diagrams.states[0].transitions[0].refs)'
 expect_error "a transition without refs fails" "diagram entry without refs: diagrams.states[0].transitions[0]"
+mutate_diagrams wrongtypeflow '.diagrams.flow = ["x"]'
+expect_error "wrong type flow fails" "diagrams.flow must be a map: diagrams.flow"
+mutate_diagrams wrongtypearchitecture '.diagrams.architecture = "clean"'
+expect_error "wrong type architecture fails" "diagrams.architecture must be a map: diagrams.architecture"
+mutate_diagrams wrongtypeparts '.diagrams.flow.parts = "x"'
+expect_error "wrong type parts fails" "diagrams.flow.parts must be a list: diagrams.flow.parts"
+mutate_diagrams wrongtypecallers '.diagrams.flow.callers = "x"'
+expect_error "wrong type callers fails" "diagrams.flow.callers must be a list: diagrams.flow.callers"
+mutate_diagrams wrongtypedependencies '.diagrams.flow.dependencies = "x"'
+expect_error "wrong type dependencies fails" "diagrams.flow.dependencies must be a list: diagrams.flow.dependencies"
+mutate_diagrams wrongtypeedges '.diagrams.flow.edges = "x"'
+expect_error "wrong type edges fails" "diagrams.flow.edges must be a list: diagrams.flow.edges"
+mutate_diagrams wrongtypesequences '.diagrams.sequences = {"a": 1}'
+expect_error "wrong type sequences fails" "diagrams.sequences must be a list: diagrams.sequences"
+mutate_diagrams wrongtypestates '.diagrams.states = "x"'
+expect_error "wrong type states fails" "diagrams.states must be a list: diagrams.states"
+mutate_diagrams wrongtypelayers '.diagrams.architecture.layers = "x"'
+expect_error "wrong type layers fails" "diagrams.architecture.layers must be a list: diagrams.architecture.layers"
+mutate_diagrams wrongtypecomponents '.diagrams.architecture.layers[0].components = "x"'
+expect_error "wrong type components fails" "diagrams.architecture.layers[0].components must be a list: diagrams.architecture.layers[0].components"
+mutate_diagrams wrongtypeimplements '.diagrams.architecture.implements = "x"'
+expect_error "wrong type implements fails" "diagrams.architecture.implements must be a list: diagrams.architecture.implements"
+mutate_diagrams wrongtypesteps '.diagrams.sequences[0].steps = "x"'
+expect_error "wrong type steps fails" "diagrams.sequences[0].steps must be a list: diagrams.sequences[0].steps"
+mutate_diagrams wrongtypetransitions '.diagrams.states[0].transitions = "x"'
+expect_error "wrong type transitions fails" "diagrams.states[0].transitions must be a list: diagrams.states[0].transitions"
+mutate_diagrams wrongtypepartrefs '.diagrams.flow.parts[0].refs = "x"'
+expect_error "wrong type partrefs fails" "diagrams.flow.parts[0].refs must be a list: diagrams.flow.parts[0].refs"
+mutate_diagrams wrongtypecallerrefs '.diagrams.flow.callers[0].refs = "x"'
+expect_error "wrong type callerrefs fails" "diagrams.flow.callers[0].refs must be a list: diagrams.flow.callers[0].refs"
+mutate_diagrams wrongtypedependencyrefs '.diagrams.flow.dependencies[0].refs = "x"'
+expect_error "wrong type dependencyrefs fails" "diagrams.flow.dependencies[0].refs must be a list: diagrams.flow.dependencies[0].refs"
 mutate_diagrams componentnorefs 'del(.diagrams.architecture.layers[0].components[0].refs)'
 expect_error "an architecture component without refs fails" "diagram entry without refs: diagrams.architecture.layers[0].components[0]"
 mutate_diagrams callernorefs 'del(.diagrams.flow.callers[0].refs)'

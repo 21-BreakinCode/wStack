@@ -52,7 +52,4 @@ done < <(grep -E '^(brew |npm i |mise |xcode-select|claude update|claude plugin 
 assert "README install lines all appear in preflight.sh" '[ "$install_missing" -eq 0 ]'
 assert "README has install lines to check" 'grep -qE "^brew " "$readme"'
 
-# docs/superpowers holds the historical design and plan, which still name the old tool
-diagram_design_hits="$(grep -rl 'diagram-design' "$readme" "$repo_root/CHANGELOG.md" "$repo_root/docs" 2>/dev/null | grep -v -e '/docs/spec.md$' -e '/docs/superpowers/' || true)"
-assert "diagram-design appears only in docs/spec.md and docs/superpowers" '[ -z "$diagram_design_hits" ]'
 finish

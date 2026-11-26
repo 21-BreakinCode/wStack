@@ -141,4 +141,9 @@ fresh_hash="$(yq -o=json "$diagram_vault/svc.contract.yaml" | /usr/bin/python3 "
 sed -i.bak "s/0000/$fresh_hash/" "$diagram_vault/diagrams/flow.html"
 "$render" "$diagram_vault/svc.contract.yaml" >/dev/null
 assert "a fresh deep dive has no mark" 'grep -qF -- "- [flow.html](diagrams/flow.html)" "$diagram_note" && ! grep -qF "flow.html](diagrams/flow.html) (" "$diagram_note"'
+
+note_before="$(cat "$diagram_note")"
+yq -i '.diagrams.architecture = "clean"' "$diagram_vault/svc.contract.yaml"
+rc=0; "$render" "$diagram_vault/svc.contract.yaml" >/dev/null 2>&1 || rc=$?
+assert "a render crash exits non-zero and keeps the old note" '[ "$rc" != "0" ] && [ "$(cat "$diagram_note")" = "$note_before" ]'
 finish

@@ -256,10 +256,12 @@ def main():
         sys.exit("contract is not a mapping")
     deep_dives = contract_diagrams.read_deep_dives(
         os.path.dirname(os.path.abspath(note_path)), data.get("diagrams") or {})
+    note_text = render_note(data, contract_name, deep_dives)
+    page_text = render_html(data, deep_dives)
     with open(note_path, "w", encoding="utf-8") as note:
-        note.write(render_note(data, contract_name, deep_dives))
+        note.write(note_text)
     with open(html_path, "w", encoding="utf-8") as page:
-        page.write(render_html(data, deep_dives))
+        page.write(page_text)
 
 
 if __name__ == "__main__":

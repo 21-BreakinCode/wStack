@@ -19,8 +19,9 @@ Set `scripts="${CLAUDE_PLUGIN_ROOT}/scripts"`.
 
 Four callers run the Draw steps in a task: Deliver, gate step 9 of Confirmation, "Pending items" of deliver-task, and the retro. Each passes the contract path, `--backup-dir`, and `--record`. So skip step 1 and the vault work in Config. In this mode, a problem never stops the task. Ask the user nothing.
 
-- If diagram-design is not installed (step 3), write the `step` line `deep dive <subject> skipped: diagram-design is not installed` in `run-log.md` and return.
-- If any other step fails, write the `step` line `deep dive <subject> failed: <reason>` in `run-log.md` and return. A failure is any non-zero exit, or a step that says to ask the user. `<reason>` is the first line of stderr.
+- If diagram-design is not installed (step 3), write the `step` line `deep dive <subject> skipped: diagram-design is not installed` in the caller's log and return.
+- If any other step fails, write the `step` line `deep dive <subject> failed: <reason>` in the caller's log and return. A failure is any non-zero exit, or a step that says to ask the user. `<reason>` is the first line of stderr.
+- The caller's log is `run-log.md` in a task and the `## Contract` section of the retro file in the retro.
 - Use `flow` or the subject that the caller names.
 
 In every step below, "stop" means: outside a task, print the stderr text and stop. Inside a task, write the log line above and return.

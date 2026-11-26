@@ -28,6 +28,8 @@ findings="$(printf '%s' "$contract_json" | jq -r '
   def as_obj: if type == "object" then . else {} end;
   def items($where): (if type == "array" then . else [] end) | to_entries
     | map({where: "\($where)[\(.key)]", e: (.value | as_obj)});
+  def must_be_list($where): select(. != null and type != "array") | "E \($where) must be a list: \($where)";
+  def must_be_map($where): select(. != null and type != "object") | "E \($where) must be a map: \($where)";
   def id_findings: .[] | select(.e.id | kebab | not) | "E bad diagram id: \(.where): \(.e.id)";
   def dup_findings: . as $l | to_entries[]
     | select(.key as $k | .value.e.id as $id | ($id | type) == "string" and ($l[:$k] | map(.e.id) | index($id)))
@@ -35,6 +37,7 @@ findings="$(printf '%s' "$contract_json" | jq -r '
   def entry_findings($refs_required; $label_required): .where as $w | .e as $e
     | (if $refs_required and (($e.refs | type) != "array" or ($e.refs | length) == 0)
        then "E diagram entry without refs: \($w)" else empty end),
+      ($e.refs | must_be_list("\($w).refs")),
       ($e.refs | arrays | .[] | select((type == "string" and valid_ref) | not) | "E bad ref form: \($w): \(.)"),
       (if $label_required and (($e.label | type) != "string" or ($e.label | length) == 0)
        then "E diagram entry without label: \($w)" else empty end),
@@ -42,7 +45,22 @@ findings="$(printf '%s' "$contract_json" | jq -r '
   def node_count_warning($where; $count): if $count > 30 then "W warning: \($where) has \($count) nodes" else empty end;
   def diagram_findings:
     (.flow | as_obj) as $flow
-    | ($flow.parts | items("diagrams.flow.parts")) as $parts
+    | (.flow | must_be_map("diagrams.flow")),
+      (.architecture | must_be_map("diagrams.architecture")),
+      ($flow.parts | must_be_list("diagrams.flow.parts")),
+      ($flow.callers | must_be_list("diagrams.flow.callers")),
+      ($flow.dependencies | must_be_list("diagrams.flow.dependencies")),
+      ($flow.edges | must_be_list("diagrams.flow.edges")),
+      (.sequences | must_be_list("diagrams.sequences")),
+      (.states | must_be_list("diagrams.states")),
+      ((.architecture | as_obj) as $arch_shape
+       | ($arch_shape.layers | must_be_list("diagrams.architecture.layers")),
+         ($arch_shape.implements | must_be_list("diagrams.architecture.implements")),
+         ($arch_shape.layers | items("diagrams.architecture.layers")[]
+          | .where as $w | .e.components | must_be_list("\($w).components"))),
+      ((.sequences | items("diagrams.sequences")[]) | .where as $w | .e.steps | must_be_list("\($w).steps")),
+      ((.states | items("diagrams.states")[]) | .where as $w | .e.transitions | must_be_list("\($w).transitions")),
+      ($flow.parts | items("diagrams.flow.parts")) as $parts
     | ($flow.callers | items("diagrams.flow.callers")) as $callers
     | ($flow.dependencies | items("diagrams.flow.dependencies")) as $dependencies
     | ($parts + $callers + $dependencies) as $nodes

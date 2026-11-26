@@ -72,6 +72,12 @@ bash "$script" install "$CONTRACT" flow "$drawn" --record "$record" >/dev/null
 bash "$script" restore "$record" >/dev/null
 assert "restore removes the empty diagrams folder" '[ ! -d "$folder/diagrams" ]'
 
+twice_backups="$work_dir/twice-backups"; twice_record="$work_dir/twice-record.txt"
+bash "$script" install "$CONTRACT" flow "$drawn" --backup-dir "$twice_backups" --record "$twice_record" >/dev/null
+twice_out="$(bash "$script" install "$CONTRACT" flow "$drawn" --backup-dir "$twice_backups" --record "$twice_record")"
+assert "a second install of a new subject makes no backup" '[ ! -e "$twice_backups" ] && ! printf "%s\n" "$twice_out" | grep -q "^backup:"'
+bash "$script" restore "$twice_record" >/dev/null
+
 mkdir "$CONTRACT.lock"
 set +e; bash "$script" install "$CONTRACT" flow "$drawn" >/dev/null 2>&1; rc=$?; set -e
 rmdir "$CONTRACT.lock"

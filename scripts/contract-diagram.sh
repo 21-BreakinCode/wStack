@@ -51,7 +51,8 @@ case "$command" in
     target="$(cd "$(dirname "$contract")" && pwd)/diagrams/${subject//:/-}.html"
     mkdir -p "$(dirname "$target")"
 
-    if [ -f "$target" ] && [ -n "$backup_dir" ] && [ ! -e "$backup_dir/$(basename "$target")" ]; then
+    if [ -f "$target" ] && [ -n "$backup_dir" ] && [ ! -e "$backup_dir/$(basename "$target")" ] \
+        && ! grep -qF "$target$tab" "$record" 2>/dev/null; then
       mkdir -p "$backup_dir"
       cp "$target" "$backup_dir/$(basename "$target")"
       backup="$backup_dir/$(basename "$target")"
