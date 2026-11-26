@@ -129,6 +129,19 @@ new_world; mkdir -p "$archive/docs" "$folder/docs"; echo old >"$archive/docs/x.m
 run "$deliver" undo "$task" "$CONTRACT" "$task_id"
 assert "undo with a same-name file clash exits 1 and changes nothing ($out)" '[ $rc = 1 ] && printf "%s\n" "$out" | grep -qF "will not move over $folder/docs/x.md" && same_as_copy'
 
+new_world; mkdir -p "$archive/docs"; echo old >"$archive/docs/x.md"; echo live >"$folder/docs"; touch "$archive/.archived"; keep_copy
+run "$deliver" undo "$task" "$CONTRACT" "$task_id"
+assert "undo exits 1 and changes nothing when a live file sits where an archived folder must go ($out)" '[ $rc = 1 ] && same_as_copy'
+
+new_world; mkdir -p "$archive/docs"; echo old >"$archive/docs/x.md"; ln -s x.md "$archive/docs/link.md"; touch "$archive/.archived"
+run "$deliver" undo "$task" "$CONTRACT" "$task_id"
+assert "undo moves a symlink in the archive back like a file ($out)" '[ $rc = 0 ] && [ -f "$folder/docs/x.md" ] && [ -L "$folder/docs/link.md" ] && [ ! -e "$folder/_archive" ]'
+
+new_world; outside="$work_dir/outside $case_count"; mkdir -p "$outside"; echo secret >"$outside/a.md"; ln -s "$outside" "$folder/ext"
+printf 'ext/a.md\n' >"$task/docs-archive.txt"; keep_copy
+run "$deliver" write "$task" "$CONTRACT" "$task_id"
+assert "a listed path under a symlinked folder exits 1 and moves nothing ($out)" '[ $rc = 1 ] && [ -f "$outside/a.md" ] && [ ! -e "$archive" ] && same_as_copy'
+
 new_world; mkdir -p "$folder/docs"; echo '# x' >"$folder/docs/x.md"; printf 'docs/x.md\n' >"$task/docs-archive.txt"; keep_copy
 run "$deliver" rehearse "$task" "$CONTRACT" "$task_id"
 assert "rehearse with a list exits 0 and leaves the real folder unchanged ($out)" '[ $rc = 0 ] && same_as_copy'

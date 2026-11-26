@@ -46,7 +46,7 @@ is_vault_doc() {  # <path relative to the contract folder>
 }
 each_file_under() {  # <folder>: print the relative path of every file under it, sorted
   [ -d "$1" ] || return 0
-  (cd "$1" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
+  (cd "$1" && find . \( -type f -o -type l \) | sed 's|^\./||' | LC_ALL=C sort)
 }
 each_listed_doc() {  # the lines of docs-archive.txt, no blank lines
   [ -f "$docs_list" ] || return 0
@@ -80,6 +80,11 @@ case "$action" in
     done
     while IFS= read -r listed_rel; do
       case "$listed_rel" in /*|..|../*|*/../*|*/..) fail "bad path in docs-archive.txt: $listed_rel, so nothing changed" ;; esac
+      listed_prefix=""
+      while IFS= read -r listed_part; do
+        listed_prefix="${listed_prefix:+$listed_prefix/}$listed_part"
+        [ ! -L "$contract_folder/$listed_prefix" ] || fail "path in docs-archive.txt passes through a symlink: $listed_rel, so nothing changed"
+      done < <(printf '%s\n' "$listed_rel" | tr '/' '\n')
       is_vault_doc "$listed_rel" || fail "not a vault doc in docs-archive.txt: $listed_rel, so nothing changed"
       # A rerun finds a listed doc already in the archive.
       [ -e "$archive_dir/.archived" ] || [ -f "$contract_folder/$listed_rel" ] || fail "missing path in docs-archive.txt: $listed_rel, so nothing changed"
@@ -131,7 +136,12 @@ case "$action" in
     while IFS= read -r archived_rel; do
       [ "$archived_rel" != .archived ] || continue
       case "$archived_rel" in "$contract_name"|"$note_name") continue ;; esac  # undo deletes these first
-      [ ! -e "$contract_folder/$archived_rel" ] || fail "will not move over $contract_folder/$archived_rel, so nothing changed"
+      [ ! -e "$contract_folder/$archived_rel" ] && [ ! -L "$contract_folder/$archived_rel" ] || fail "will not move over $contract_folder/$archived_rel, so nothing changed"
+      archived_parent="$(dirname "$archived_rel")"  # a live file where a folder must go would fail the move after undo started
+      while [ "$archived_parent" != . ]; do
+        { [ ! -e "$contract_folder/$archived_parent" ] || [ -d "$contract_folder/$archived_parent" ]; } || fail "will not move into $contract_folder/$archived_parent: it is a file, so nothing changed"
+        archived_parent="$(dirname "$archived_parent")"
+      done
     done < <(each_file_under "$archive_dir")
     if [ -f "$drawn_list" ]; then  # restore checks this too, but only after undo started changing files
       while IFS=$'\t' read -r _ backup_path; do
