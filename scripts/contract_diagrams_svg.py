@@ -769,7 +769,7 @@ def html_section(diagrams, deep_dives):
             cards = html_key([key_line(s["from"], s["to"], s.get("label")) for s in value.get("steps") or []])
         elif kind == "states":
             cards = html_key([key_line(t["from"], t["to"], t.get("label")) for t in state_key(value)])
-        out.append('<figure class="diagram"><figcaption>%s</figcaption>%s%s</figure>' % (
+        out.append('<figure class="diagram"><figcaption>%s</figcaption><div class="scroll">%s</div>%s</figure>' % (
             esc(caption(kind, value)), draw[kind](value, subject_slug(subject)), cards))
     if deep_dives:
         items = "".join('<li><a href="%s">%s</a>%s</li>' % (

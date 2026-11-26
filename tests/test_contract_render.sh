@@ -134,8 +134,10 @@ done
 assert "the sequence in the note is a numbered list" '[ "$(grep -A2 -F "### Sequence: Create an item" "$diagram_note" | sed -n 3p)" = "1. web-ui → api: POST /items" ]'
 assert "the states in the note start with the initial state" '[ "$(grep -A2 -F "### States: Item status" "$diagram_note" | sed -n 3p)" = "Start: new" ]'
 assert "the page has four SVG diagrams" 'grep -qF "<h2>Diagrams</h2>" "$page" && [ "$(grep -o "<svg" "$page" | wc -l | tr -d " ")" = "4" ]'
-assert "the page lists the flow parts as cards" 'grep -qF "class=\"cards\"" "$page" && grep -qF "minmax(320px, 1fr)" "$page"'
-assert "the page wraps diagrams for horizontal scroll" 'grep -qF ".diagram { overflow-x: auto;" "$page"'
+assert "the page lists the flow parts as cards, at most 2 columns, top aligned" 'grep -qF "class=\"cards\"" "$page" && grep -qF ".cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; }" "$page"'
+assert "the figure stays in the column" 'grep -qF "main { max-width: 760px; margin: 0 auto; }" "$page" && grep -qF ".diagram { margin: 12px 0; }" "$page"'
+assert "each SVG sits in a centered scroll box up to 1200 px" '[ "$(grep -o "<div class=\"scroll\"><svg" "$page" | wc -l | tr -d " ")" = "4" ] && grep -qF ".diagram .scroll { overflow-x: auto; position: relative; left: 50%; transform: translateX(-50%); width: min(1200px, calc(100vw - 32px)); }" "$page"'
+assert "each SVG is centered at full size" 'grep -qF ".diagram svg { display: block; max-width: none; margin: 0 auto; }" "$page"'
 
 cat > "$diagram_vault/diagrams/flow.html" <<HTML
 <html><head><meta name="wstack-subject" content="flow"><meta name="wstack-subject-hash" content="0000"></head></html>

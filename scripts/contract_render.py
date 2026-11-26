@@ -156,10 +156,11 @@ ul.items li { margin: 8px 0; }
 details { margin: 4px 0; }
 summary { cursor: pointer; color: var(--muted); }
 code { overflow-wrap: anywhere; }
-.diagram { overflow-x: auto; position: relative; left: 50%; transform: translateX(-50%); width: min(1200px, calc(100vw - 32px)); margin: 12px 0; }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.diagram { margin: 12px 0; }
+.diagram .scroll { overflow-x: auto; position: relative; left: 50%; transform: translateX(-50%); width: min(1200px, calc(100vw - 32px)); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; }
 .diagram figcaption { font-weight: 600; margin: 0 0 6px; }
-.diagram svg { display: block; max-width: none; }
+.diagram svg { display: block; max-width: none; margin: 0 auto; }
 .diagram text { font: 13px system-ui, sans-serif; fill: var(--fg); }
 .diagram .layer-name { font-weight: 600; }
 .diagram .node, .diagram .pill { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }

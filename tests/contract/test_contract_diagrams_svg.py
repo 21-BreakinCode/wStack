@@ -507,7 +507,7 @@ class Geometry(Base):
         lifecycle = DIAGRAMS["states"][0]
         lines = [cds.key_line(t["from"], t["to"], t.get("label")) for t in cds.state_key(lifecycle)]
         self.assertEqual(len(lines), len(lifecycle["transitions"]))
-        self.assertIn(cds.svg_states(lifecycle, "states-item-status") + cds.html_key(lines), section)
+        self.assertIn('<div class="scroll">%s</div>%s' % (cds.svg_states(lifecycle, "states-item-status"), cds.html_key(lines)), section)
         self.assertIn("<li>failed → queued: a retry</li>", section)
 
     def test_states_edges_touch_their_boxes(self):
