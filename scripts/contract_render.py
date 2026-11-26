@@ -21,9 +21,10 @@ SECTIONS = [
     ("consumers", "Consumers"),
 ]
 CARD_ORDER = [
-    ("gotchas", "gotcha"), ("abilities", "ability"), ("interfaces", "interface"),
-    ("depends_on", "dependency"), ("consumers", "consumer"),
-    ("planned", "planned"), ("open_questions", "open question"),
+    ("gotchas", "gotcha", "gotchas"), ("abilities", "ability", "abilities"),
+    ("interfaces", "interface", "interfaces"), ("depends_on", "dependency", "dependencies"),
+    ("consumers", "consumer", "consumers"), ("planned", "planned", "planned"),
+    ("open_questions", "open question", "open questions"),
 ]
 CROSS_REPO = re.compile(r"^([^/@:]+/[^/@:]+)@([0-9a-f]+):(.+)$")
 LINES = re.compile(r"^\d+(-\d+)?(\s*,\s*\d+(-\d+)?)*$")
@@ -52,8 +53,8 @@ def ref_url(ref, repo, commit):
     return url
 
 
-def plural(count, noun):
-    return "%d %s%s" % (count, noun, "" if count == 1 else "s")
+def plural(count, singular, plural_form):
+    return "%d %s" % (count, singular if count == 1 else plural_form)
 
 
 def heading_text(title):
@@ -210,9 +211,11 @@ def render_html(data, deep_dives):
     def items_of(key):
         return (sections.get(key) or {}).get("items") or []
 
-    counts = {key: len(items_of(key)) for key, _ in CARD_ORDER}
+    counts = {key: len(items_of(key)) for key, _, _ in CARD_ORDER}
     counts["planned"] = len(planned)
-    count_html = "".join("<li>%s</li>" % plural(counts[key], noun) for key, noun in CARD_ORDER)
+    count_html = "".join(
+        "<li>%s</li>" % plural(counts[key], singular, plural_form)
+        for key, singular, plural_form in CARD_ORDER)
     body = [
         "<h1>%s</h1>" % esc(data.get("app_name", "")),
         "<p>%s</p>" % esc(data.get("summary", "")),

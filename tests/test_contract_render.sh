@@ -98,6 +98,8 @@ assert "leading quote and dash are neutralized" '! grep -qE "^- (>|-) " "$note" 
 
 assert "html escapes text" 'grep -qF "&lt;script&gt;" "$page" && ! grep -q "<script" "$page"'
 assert "html has the summary card counts" 'grep -q "5 gotchas" "$page" && grep -q "1 planned" "$page" && grep -q "main" "$page"'
+assert "html pluralizes the ability and dependency counts" 'grep -q "2 abilities" "$page" && grep -q "1 dependency" "$page"'
+assert "html has no invented plurals" '! grep -qE "abilitys|dependencys|planneds" "$page"'
 assert "html refs sit in details" 'grep -q "<details" "$page" && grep -qF "https://github.com/acme-org/svc/blob/$sha/api/routes.go#L3-L5" "$page"'
 assert "html is self-contained with viewport" 'grep -q "name=\"viewport\"" "$page" && grep -q "overflow-wrap: anywhere" "$page" && ! grep -qE "<script|<link" "$page"'
 
