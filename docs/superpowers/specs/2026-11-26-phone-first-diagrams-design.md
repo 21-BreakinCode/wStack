@@ -95,7 +95,7 @@ The key lists every transition of a lifecycle. It is grouped by source state, st
 - An arrow back by two or more columns keeps a lane under the boxes, as today.
 - An arrow between two rows of one column that are not neighbors runs as a leg beside the column, on its right side.
 - The ends on each box side are ordered by the row of the far end, so arrows in one gap do not cross.
-- Each number marker sits near one end of its arrow. Two markers must not overlap. The ends on a side are at least 18 px apart. If a side needs more room, its box grows taller.
+- Each number marker sits near one end of its arrow. A lane or leg marker sits at the middle of its long segment. Two markers must not overlap. The ends on a side are at least 18 px apart. If a side needs more room, its box grows taller.
 - One self-loop sits on the top edge, as today. A second self-loop on the same state is drawn as a loop on the bottom edge.
 - The start arrow keeps its own slot on the left side of the start state. No arrow end on that side uses its height. This fixes 0.11.0 limit 4.
 - A side space is only as wide as the lines in it, with at least 16 px. The left side of the first column keeps room for the start dot. This fixes 0.11.0 limit 1. A forward-only lifecycle is no wider than in 0.10.0.

@@ -43,5 +43,10 @@ In every step below, "stop" means: outside a task, print the stderr text and sto
    - Skip its plan approval step.
 
    Write the HTML to a new file in `mktemp -d`. Never write a `.diagram-design` marker into a repository.
+
+   To look at an HTML file with `playwright-cli`:
+   - `playwright-cli` blocks `file://` URLs. Serve the folder of the file with `python3 -m http.server --bind 127.0.0.1`.
+   - A node in a page SVG has a `data-id` attribute, not a DOM id. Find it with `querySelector('[data-id="<id>"]')`.
+   - In `playwright-cli eval`, use the `() => { ...; return x }` form.
 5. Run `contract-diagram.sh install` as `bash "$scripts/contract-diagram.sh" install "<contract>" <subject> "<drawn file>"`. If the caller gave `--backup-dir <dir>` and `--record <list>`, add them. The script prints `installed: <path>` and maybe `backup: <path>`. Exit 1 means the subject is gone: stop. Exit 2 means the drawn file is bad: stop. Exit 4 means the lock is busy: stop, and outside a task tell the user to try again in a moment.
 6. Run `bash "$scripts/contract-render.sh" "<contract>"`. It renders the note and the page again, so the page links the new deep dive. If it exits non-zero, stop. Otherwise print the installed path.

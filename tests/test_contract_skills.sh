@@ -254,6 +254,10 @@ assert "draw-contract allows the caller merge" 'grep -qF "the count" "$draw_skil
 assert "draw-contract draws a sibling layer beside the nested layers" 'grep -qF "sibling: true" "$draw_skill" && grep -qF "never as a ring around them" "$draw_skill"'
 assert "execute fills diagrams.flow and architecture" 'has "$(cat "$execute")" "diagrams.flow" && has "$(cat "$execute")" "architecture"'
 assert "reviewer judges diagrams.flow" 'grep -qF "diagrams.flow" "$reviewer_agent"'
+assert "reviewer checks every network peer in depends_on" 'grep -qF "network peer" "$reviewer_agent"'
+for needle in 'http.server' 'file://' 'data-id'; do
+  assert "draw-contract browser note names $needle" 'grep -qF -- "$needle" "$draw_skill"'
+done
 assert "verify names diagrams" 'grep -qF "diagrams" "$verify"'
 for needle in 'contract-diagram.sh stale' 'diagrams.backup' 'diagrams.drawn.txt' '/wstack:draw-contract'; do
   assert "deliver names $needle" 'has "$(cat "$deliver")" "$needle"'

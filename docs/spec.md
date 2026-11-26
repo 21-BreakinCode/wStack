@@ -495,7 +495,23 @@ The contract YAML has an optional top-level `diagrams` block. A contract with no
 
 An architecture layer can carry `sibling`, a boolean and optional. A layer with `sibling: true` is drawn beside the nested layers in both views. `contract-validate.sh` rejects any other value with `bad sibling flag`.
 
-The ASCII view cuts an arrow label over 32 display columns and ends it with `…[n]`. An arrow label is a flow edge, a sequence step, or a state transition. The full arrow labels are listed under `labels:` in the same block. A flow node name or an architecture component label is cut by display width and ends in `…` with no footnote. A wide character counts as two columns. So a wide-character name is cut at about 15 characters.
+The vault note is for the phone. No line in a note code block is wider than 40 columns (`NOTE_COLUMNS`), and a wide character counts as two columns. Each subject has one note view:
+
+- `flow`: an overview drawing with the parts box, one `N callers` node, the part links, the dependency callbacks, and one `N dependencies` node. Under it, one list per part holds its "called by" and "calls" lines, `<name>: <edge label>`.
+- `sequences`: a numbered list, `1. <from> → <to>: <label>`.
+- `states`: `Start: <state>` and a key grouped by source state, `<n>. → <to>: <label>`.
+- `architecture`: a tree in a code block, then an `Implements:` list.
+
+A cut text in a code block ends in `…[n]`. The full text is listed under `labels:`, wrapped at 40 columns. A wide-character name is cut at about 15 characters.
+
+The HTML page is for the laptop. A figure can grow to `min(1200px, calc(100vw - 32px))`, and every SVG of a media-center-shaped contract is at most 1100 px wide (`PAGE_LIMIT`). The page views are:
+
+- `flow`: an overview SVG drawn top to bottom, and a grid of part cards with the same lists as the note.
+- `sequences`: the arrows carry step numbers, and a key `<ol>` sits under the picture.
+- `states`: the ladder layout. An arrow between neighbor rows of one column runs straight up or down between the boxes. A back arrow to the previous column runs in the gap. A long back arrow keeps a lane under the boxes. An arrow between rows that are not neighbors uses a leg right of the column. Each arrow has a number, and a key `<ol>` sits under the picture.
+- `architecture`: pills wrap inside a layer past 1100 px, and siblings move under the nested group when the picture would pass 1100 px. Implements lanes are 8 px apart.
+
+The key lists every transition of a lifecycle, grouped by source state. A key line is `<from> → <to>: <label>`, or `<from> → <to>` with no label. The page counts use real plurals, such as "1 ability" and "67 abilities".
 
 Every part, edge, step, transition, and architecture component cites `refs`. `contract-refs.sh` proves them like any other ref. `contract-validate.sh` checks the shape of the block.
 

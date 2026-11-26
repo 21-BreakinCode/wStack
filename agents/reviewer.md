@@ -41,7 +41,7 @@ Read each item in `contract.draft.yaml`, in every section and in `planned`. Read
 Judge each entry of the `diagrams` block like an item, with the entry as `Where`, for example `diagrams.sequences[0].steps[2]`:
 
 - A ref that does not show its claim is a blocking finding of kind `spec-mismatch`.
-- A flow that misses a caller in `consumers`, or a network service in `depends_on`, is a blocking finding. `Where` is `diagrams.flow`.
+- A flow that misses a caller in `consumers`, or any service, database, queue, or other network peer in `depends_on`, is a blocking finding. `Where` is `diagrams.flow`.
 - An `architecture` block for code with no clean, hexagonal, or layered layers is a blocking finding. `Where` is `diagrams.architecture`.
 - Judge a `sibling` flag like any other diagram claim. A layer drawn as a sibling must match the code and the team docs. A mismatch is a blocking finding. `Where` is `diagrams.architecture.layers[<n>]`.
 
