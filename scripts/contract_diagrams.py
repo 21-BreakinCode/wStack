@@ -65,12 +65,10 @@ def short(text, notes=None):
     text = " ".join(str(text).split())
     if display_width(text) <= MAX_LABEL:
         return text
-    if notes is None:
-        return text[:MAX_LABEL - 1] + "…"
-    marker = "…[%d]" % notes.setdefault(text, len(notes) + 1)
+    marker = "…" if notes is None else "…[%d]" % notes.setdefault(text, len(notes) + 1)
     kept = ""
     for ch in text:
-        if display_width(kept + ch) + len(marker) > MAX_LABEL:
+        if display_width(kept + ch) + display_width(marker) > MAX_LABEL:
             break
         kept += ch
     return kept + marker

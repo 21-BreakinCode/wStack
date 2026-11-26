@@ -125,6 +125,55 @@ class Ascii(unittest.TestCase):
         self.assertNotIn("labels:", cd.ascii_flow(DIAGRAMS["flow"]))
         self.assertNotIn("labels:", cd.ascii_sequence(DIAGRAMS["sequences"][0]))
 
+    def test_short_label_width_limits(self):
+        exact = "圖" * 16
+        self.assertEqual(cd.short(exact), exact)
+        self.assertEqual(cd.short(exact, {}), exact)
+        notes = {}
+        cut = cd.short("圖" * 20, notes)
+        self.assertEqual(cut, "圖" * 14 + "…[1]")
+        self.assertEqual(cd.display_width(cut), 32)
+        plain = cd.short("圖" * 20)
+        self.assertEqual(plain, "圖" * 15 + "…")
+        self.assertEqual(cd.display_width(plain), 31)
+
+    def test_ascii_footnote_from_inside_edge(self):
+        flow = copy.deepcopy(DIAGRAMS["flow"])
+        flow["edges"][2]["label"] = "i" * 40
+        text = cd.ascii_flow(flow)
+        self.assertTrue(any(l.startswith("inside:") and "…[1]" in l for l in text.split("\n")))
+        self.assertIn("[1] " + "i" * 40, text)
+
+    def test_ascii_footnote_numbers_follow_edge_order(self):
+        flow = copy.deepcopy(DIAGRAMS["flow"])
+        for index, letter in ((0, "a"), (3, "b"), (4, "c")):
+            flow["edges"][index]["label"] = letter * 40
+        text = cd.ascii_flow(flow)
+        self.assertIn("[1] " + "a" * 40 + "\n[2] " + "b" * 40 + "\n[3] " + "c" * 40, text)
+
+    def test_ascii_flow_wide_node_name_is_cut(self):
+        flow = copy.deepcopy(DIAGRAMS["flow"])
+        flow["parts"][0]["label"] = "圖" * 20
+        text = cd.ascii_flow(flow)
+        lines = [l for l in text.split("\n") if "│" in l]
+        self.assertIn("圖" * 15 + "…", text)
+        self.assertNotIn("labels:", text)
+        self.assertEqual(len({cd.display_width(l[:l.rindex("│")]) for l in lines}), 1)
+        self.assertTrue(all(cd.display_width(l[l.index("│"):l.rindex("│") + 1]) <= cd.MAX_LABEL + 4 for l in lines))
+
+    def test_ascii_sequence_self_step_footnote(self):
+        sequence = copy.deepcopy(DIAGRAMS["sequences"][0])
+        step = next(st for st in sequence["steps"] if st["from"] == st["to"])
+        step["label"] = "z" * 50
+        text = cd.ascii_sequence(sequence)
+        self.assertTrue(any("┐" in l and "…[1]" in l for l in text.split("\n")))
+        self.assertTrue(text.endswith("labels:\n[1] " + "z" * 50))
+
+    def test_ascii_states_footnote(self):
+        text = cd.ascii_states({"initial": "a", "transitions": [{"from": "a", "to": "b", "label": "k" * 45}]})
+        self.assertIn("k" * 27 + "…[1]", text)
+        self.assertTrue(text.endswith("labels:\n[1] " + "k" * 45))
+
     def test_ascii_sequence(self):
         lines = cd.ascii_sequence(DIAGRAMS["sequences"][0]).split("\n")
         header = lines[0]
