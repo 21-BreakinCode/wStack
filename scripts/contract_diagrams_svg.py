@@ -27,6 +27,10 @@ BAND = 56  # states: distance between two columns while both side spaces next to
 SIDE_MIN = 16  # states: smallest side space beside a column
 START_ROOM = 30  # states: left space of the first column, for the start dot
 END_GAP = 18  # states: smallest distance between two arrow ends on one box side
+MARKER_GAP = 8  # states: smallest gap between the circles of two markers
+# states: smallest distance between two curve ends on a left side. Their markers sit BAND_MARK in, where a curve
+# has moved up to a tenth of the way to its far end, and still keep MARKER_GAP.
+BAND_END_GAP = 28
 LANE = 24  # states: vertical distance between two lanes below the boxes
 LEG = 10  # states: horizontal distance between two vertical legs beside one column
 FIRST_LEG = 12  # states: distance from a box side to the nearest leg
@@ -383,8 +387,9 @@ class StatesLayout:
     def place_boxes(self):
         """Each box as (x, y, w, h), and the y of the first lane.
 
-        A box grows taller when a side holds more ends than END_GAP allows. A column grows wider when its vertical
-        arrows or the lane ends on its bottom edge would be less than END_GAP apart. Two columns are BAND apart, plus
+        A box grows taller when a side holds more ends than END_GAP allows, or more curve ends on its left side than
+        BAND_END_GAP allows. A column grows wider when the markers of its vertical arrows would be less than
+        MARKER_GAP apart, or the lane ends on its bottom edge less than END_GAP apart. Two columns are BAND apart, plus
         what their side spaces need over SIDE_MIN.
         """
         self.loops = {(t["from"], kind) for t, kind in self.routes if kind in ("top", "bottom")}
@@ -392,13 +397,18 @@ class StatesLayout:
         for t, kind in sorted(self.routes, key=lambda route: route[1] != "down"):
             if kind in ("down", "up"):
                 self.verticals[(self.column[t["from"]], min(self.row[t["from"]], self.row[t["to"]]))].append(t)
-        ends = {name: max(len(self.ends[(name, "left")]), len(self.ends[(name, "right")])) for name in self.row}
-        heights = {name: max(STATE_H, END_GAP * (n + 1)) if n > 1 else STATE_H for name, n in ends.items()}
+        def side_height(name, side):  # band markers sit near the curve ends on a left side
+            ends = self.ends[(name, side)]
+            curves = sum(self.kind[t["number"]] in ("forward", "back") for t, _ in ends) if side == "left" else 0
+            return (BAND_END_GAP if curves > 1 else END_GAP) * (len(ends) + 1) if len(ends) > 1 else STATE_H
+
+        heights = {name: max(STATE_H, side_height(name, "left"), side_height(name, "right")) for name in self.row}
         widths = []
         for c, stack in enumerate(self.stacks):  # the arrows through the bottom edge of each row
-            counts = [len(self.verticals[(c, r)]) for r in range(len(stack) - 1)] + [len(self.bottom[stack[-1]])]
+            spans = [(len(self.verticals[(c, r)]), 2 * MARKER_R + MARKER_GAP) for r in range(len(stack) - 1)]
+            spans.append((len(self.bottom[stack[-1]]), END_GAP))  # vertical arrows hold markers, lane ends do not
             widths.append(max([text_width(name) + 28 for name in stack]
-                              + [END_GAP * (n + 1) + self.loop_room(c, r) for r, n in enumerate(counts) if n]))
+                              + [gap * (n + 1) + self.loop_room(c, r) for r, (n, gap) in enumerate(spans) if n]))
         top = PAD + (LOOP_DEPTH if any((stack[0], "top") in self.loops for stack in self.stacks) else 0)
         x, self.box = PAD, {}
         for c, stack in enumerate(self.stacks):
@@ -562,10 +572,11 @@ def svg_states(lifecycle, prefix):
     spots = []
     for t, kind in layout.routes:
         d, (x, y) = ROUTES[kind](layout, t)
-        taken = (spots + layout.leg_crossings(t, x)) if kind == "leg" else spots
-        # shortcut: a leg marker steps down past taken spots and can pass the end of a short leg, place it along
-        # the free part of the leg if that shows up
-        while kind == "leg" and any(math.dist((x, y), spot) < 2 * MARKER_R for spot in taken):
+        crossings = layout.leg_crossings(t, x) if kind == "leg" else []
+        # shortcut: a leg marker steps down past other markers and crossings and can pass the end of a short leg,
+        # place it along the free part of the leg if that shows up
+        while kind == "leg" and (any(math.dist((x, y), spot) < 2 * MARKER_R + MARKER_GAP for spot in spots)
+                                 or any(math.dist((x, y), spot) < 2 * MARKER_R for spot in crossings)):
             y += 2 * MARKER_R
         spots.append((x, y))
         canvas.path(d, source=t["from"], target=t["to"], number=t["number"])

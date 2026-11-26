@@ -611,6 +611,13 @@ class Geometry(Base):
         for lifecycle in state_fixtures():
             self.assert_clean_states(lifecycle)
 
+    def test_markers_keep_an_8_px_gap(self):
+        for lifecycle in state_fixtures():
+            _, _, _, markers = self.assert_clean_states(lifecycle)
+            for (n, a), (m, b) in itertools.combinations(markers.items(), 2):
+                self.assertGreaterEqual(math.dist(a, b) - 2 * cds.MARKER_R, 8 - 0.01,
+                                        "%s: markers %s and %s are too close" % (lifecycle["id"], n, m))
+
     def test_ends_on_a_side_are_apart(self):
         for lifecycle in state_fixtures():
             root = ET.fromstring(cds.svg_states(lifecycle, "s"))
