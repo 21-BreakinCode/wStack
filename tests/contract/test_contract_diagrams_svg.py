@@ -126,6 +126,10 @@ LANE_PAST_FANS = {"id": "lane-past-fans", "initial": "q", "transitions": [
     {"from": s, "to": t} for s, t in [("q", "a"), ("q", "b"), ("q", "c"), ("a", "d"), ("b", "d"), ("c", "d"),
                                       ("d", "q")]]}
 
+# Two lanes over overlapping column ranges: s2 back to s0, and s3 back to s1 past the first lane's marker.
+OVERLAPPING_LANES = {"id": "overlapping-lanes", "initial": "s0", "transitions": [
+    {"from": s, "to": t} for s, t in [("s0", "s1"), ("s1", "s2"), ("s2", "s3"), ("s2", "s0"), ("s3", "s1")]]}
+
 # Back arrows by one and by two columns, and arrows both ways between two neighbor rows.
 MANY_BACK_ROUTES = {"id": "many-back", "initial": "a", "transitions": [
     {"from": s, "to": t} for s, t in [("a", "b"), ("b", "c"), ("b", "d"), ("d", "a"), ("d", "a"), ("c", "d"),
@@ -147,7 +151,7 @@ def state_fixtures():
     with_second_loop["transitions"].append({"from": "queued", "to": "queued", "label": "heartbeat"})
     return [MEDIA["states"][0], SHARED_COLUMN, TASK_STATUS, FORWARD_ONLY, TWO_LOOPS, THREE_LOOPS, MANY_BACK_ROUTES,
             NESTED_LEGS, LEGS_BOTH_WAYS, DIAGRAMS["states"][0], item_status_with_more_arrows(),
-            with_second_loop, LANE_PAST_FANS] + LEGS_OVER_A_ROW
+            with_second_loop, LANE_PAST_FANS, OVERLAPPING_LANES] + LEGS_OVER_A_ROW
 
 
 def box_side(point, box):
@@ -602,6 +606,10 @@ class Geometry(Base):
         sweep = [points for n, owner, points in paths if owner == ("idle", "idle")][2]
         self.assertTrue(all(x + width - 0.5 <= px for px, _ in sweep), "the third loop runs right of its box")
         self.assertGreaterEqual(max(px for px, _ in sweep), x + width + cds.FIRST_LEG - 0.5)
+
+    def test_every_state_fixture_is_clean(self):
+        for lifecycle in state_fixtures():
+            self.assert_clean_states(lifecycle)
 
     def test_ends_on_a_side_are_apart(self):
         for lifecycle in state_fixtures():

@@ -518,15 +518,20 @@ def leg_route(layout, t):
 def under_lane_route(layout, t):
     """Down from the source, along a lane below all boxes, and up into the target. A side end runs on a leg left of
     the source column or right of the target column. An end on a bottom edge runs straight down. Its marker sits in
-    the middle of the lane."""
+    the middle of the lane, and steps toward the source while the vertical of a deeper lane passes it."""
+    # a lane end on a bottom edge has no leg offset, so it runs down at its end's x
+    lane_xs = lambda lane: (layout.end[(lane["number"], "from")][0] - layout.left_offset.get(lane["number"], 0),
+                            layout.end[(lane["number"], "to")][0] + layout.right_offset.get(lane["number"], 0))
     start, end = layout.end[(t["number"], "from")], layout.end[(t["number"], "to")]
     source_leg, target_leg = ((t["number"], which) not in layout.bottom_ends for which in ("from", "to"))
-    down_x = start[0] - layout.left_offset[t["number"]] if source_leg else start[0]
-    up_x = end[0] + layout.right_offset[t["number"]] if target_leg else end[0]
-    lane_y = layout.lane_top + LANE * layout.lanes.index(t)
+    (down_x, up_x), lane_y = lane_xs(t), layout.lane_top + LANE * layout.lanes.index(t)
     points = ([start] + ([(down_x, start[1])] if source_leg else []) + [(down_x, lane_y), (up_x, lane_y)]
               + ([(up_x, end[1])] if target_leg else []) + [end])
-    return rounded(*points), ((down_x + up_x) / 2, lane_y)
+    verticals = [x for deeper in layout.lanes[layout.lanes.index(t) + 1:] for x in lane_xs(deeper)]
+    mark_x = (down_x + up_x) / 2
+    while any(abs(mark_x - x) < 2 * MARKER_R for x in verticals) and mark_x + 2 * MARKER_R < down_x - MARKER_R:
+        mark_x += 2 * MARKER_R
+    return rounded(*points), (mark_x, lane_y)
 
 
 def loop_route(layout, t):
