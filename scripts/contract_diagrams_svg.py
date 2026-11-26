@@ -545,8 +545,9 @@ def lane_route(adapter, port, lane, lane_count, group_right, gap, ends_x):
 
 
 def spread_lane_ends(crossing, pills):
-    """The x of each lane end. Lanes that meet one pill spread LANE_PITCH apart around its center, the lane
-    with the lowest band leftmost, so they do not cross each other. A narrow pill squeezes them."""
+    """The x of each lane end. Lanes that meet one pill spread LANE_PITCH apart around its center. The lane
+    with the lowest band is leftmost, because its stem would cross the higher lanes' bands otherwise.
+    A narrow pill squeezes them."""
     lanes_at = collections.defaultdict(list)
     for lane, pair in enumerate(crossing):
         lanes_at[pair["adapter"]].append((lane, "adapter"))
@@ -629,7 +630,9 @@ def svg_architecture(architecture, prefix):
     lane_room = 34 + LANE_PITCH * (len(crossing) - 1)
     row_h, row_pitch, gap = max(LAYER_HEAD, lane_room), max(PILL_ROW, lane_room), max(24, LANE_PITCH * (len(crossing) + 1))
     budget = PAGE_LIMIT - 2 * PAD - (gap if crossing else 0)
-    group_rows = [pill_rows(layer, labels, budget - 24 * depth) for depth, layer in enumerate(layers)]
+    # an outer layer is 48px wider than its inner layer, so each level takes 48px of budget
+    group_rows = [pill_rows(layer, labels, budget - 48 * depth)
+                  for depth, layer in enumerate(layers)]
     sibling_rows = [pill_rows(layer, labels, budget) for layer in siblings]
     canvas = Canvas(prefix, caption("architecture", architecture))
     placed, group_right = place_layers(layers, siblings, group_rows, sibling_rows, row_h, gap, row_pitch)

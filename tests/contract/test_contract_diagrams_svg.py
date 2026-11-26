@@ -757,6 +757,27 @@ class Geometry(Base):
         self.assertEqual(len(starts), 2)
         self.assertAlmostEqual(starts[1] - starts[0], cds.LANE_PITCH)
 
+    def test_deep_nested_wide_layer_fits(self):
+        pills = [{"id": "p%02d" % k, "label": "8 chars!"} for k in range(14)]
+        architecture = {"layers": [{"name": "outer", "components": []}, {"name": "middle", "components": []},
+                                   {"name": "inner", "components": pills}]}
+        self.assertLessEqual(view_width(cds.svg_architecture(architecture, "x")), cds.PAGE_LIMIT)
+
+    def test_lanes_leaving_one_pill_do_not_cross(self):
+        architecture = {"layers": [
+            {"name": "ports", "components": [{"id": "pa", "label": "Port A"}, {"id": "pb", "label": "Port B"}]},
+            {"name": "mid", "components": [{"id": "m", "label": "Middle"}]},
+            {"name": "adapters", "components": [{"id": "ad", "label": "Adapter"}]}],
+            "implements": [{"adapter": "ad", "port": "pa"}, {"adapter": "ad", "port": "pb"}]}
+        _, edges = shapes(cds.svg_architecture(architecture, "a"))
+        first, second = [points for _, _, _, _, points in edges]
+        # the first lane has the higher band, so it leaves right of the second lane
+        self.assertGreater(first[0][0], second[0][0])
+        leaving_first, leaving_second = first[:3], second[:3]  # pill, own band, gap: the part the spread orders
+        for a, b in zip(leaving_first, leaving_first[1:]):
+            for c, d in zip(leaving_second, leaving_second[1:]):
+                self.assertFalse(segments_meet(a, b, c, d), "lanes cross at %s-%s and %s-%s" % (a, b, c, d))
+
     def assert_implements_cross_no_other_pill(self, architecture):
         text = cds.svg_architecture(architecture, "architecture")
         boxes, edges = self.assert_edges_touch(text, [(p["adapter"], p["port"]) for p in architecture["implements"]])
