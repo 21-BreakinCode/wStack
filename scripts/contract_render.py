@@ -155,7 +155,8 @@ ul.items li { margin: 8px 0; }
 details { margin: 4px 0; }
 summary { cursor: pointer; color: var(--muted); }
 code { overflow-wrap: anywhere; }
-.diagram { overflow-x: auto; margin: 12px 0; }
+.diagram { overflow-x: auto; position: relative; left: 50%; transform: translateX(-50%); width: min(1200px, calc(100vw - 32px)); margin: 12px 0; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
 .diagram figcaption { font-weight: 600; margin: 0 0 6px; }
 .diagram svg { display: block; max-width: none; }
 .diagram text { font: 13px system-ui, sans-serif; fill: var(--fg); }

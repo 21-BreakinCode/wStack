@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import contract_diagrams_svg as cds  # noqa: E402
 
 DIAGRAMS = {}
+MEDIA = {}
 NASTY = '<b>&"x"'
 NASTY_ESCAPED = "&lt;b&gt;&amp;&quot;x&quot;"
 
@@ -24,10 +25,13 @@ def setUpModule():
     out = subprocess.check_output(
         ["yq", "-o=json", str(ROOT / "tests/fixtures/contract/diagrams-block.yaml")])
     DIAGRAMS.update(json.loads(out)["diagrams"])
+    media = subprocess.check_output(
+        ["yq", "-o=json", str(ROOT / "tests/fixtures/contract/media-shaped-diagrams.yaml")])
+    MEDIA.update(json.loads(media)["diagrams"])
 
 
 def drawings():
-    return [cds.svg_flow(DIAGRAMS["flow"], "flow"),
+    return [cds.svg_flow_overview(DIAGRAMS["flow"], "flow"),
             cds.svg_sequence(DIAGRAMS["sequences"][0], "sequence-create"),
             cds.svg_states(DIAGRAMS["states"][0], "states-item-status"),
             cds.svg_architecture(DIAGRAMS["architecture"], "architecture")]
@@ -192,7 +196,7 @@ class Svg(Base):
 
     def test_labels_present_and_escaped(self):
         flow, sequence, states, architecture = drawings()
-        for label in ("API", "Worker", "web-ui", "batch-job", "postgres", "other-svc", "GET /items", "items.created"):
+        for label in ("API", "Worker", "2 callers", "2 dependencies"):
             self.assertIn(">%s<" % label, flow)
         for label in ("web-ui", "api", "worker", "postgres", "validate the body"):
             self.assertIn(">%s<" % label, sequence)
@@ -209,7 +213,7 @@ class Svg(Base):
         lifecycle["transitions"][0]["to"] = NASTY
         architecture = copy.deepcopy(DIAGRAMS["architecture"])
         architecture["layers"][0]["name"] = NASTY
-        for text in (cds.svg_flow(flow, "flow"), cds.svg_sequence(sequence, "s"),
+        for text in (cds.svg_flow_overview(flow, "flow"), cds.svg_sequence(sequence, "s"),
                      cds.svg_states(lifecycle, "t"), cds.svg_architecture(architecture, "a")):
             self.assertIn(NASTY_ESCAPED, text)
             self.assertNotIn("<b>", text)
@@ -232,7 +236,8 @@ class Svg(Base):
     def test_long_label_widens(self):
         flow = copy.deepcopy(DIAGRAMS["flow"])
         flow["parts"][0]["label"] = "x" * 40
-        self.assertGreater(view_width(cds.svg_flow(flow, "flow")), view_width(cds.svg_flow(DIAGRAMS["flow"], "flow")))
+        self.assertGreater(view_width(cds.svg_flow_overview(flow, "flow")),
+                           view_width(cds.svg_flow_overview(DIAGRAMS["flow"], "flow")))
 
     def test_unreachable_state(self):
         lifecycle = copy.deepcopy(DIAGRAMS["states"][0])
@@ -257,33 +262,60 @@ class Svg(Base):
 
 
 class Geometry(Base):
-    def test_flow_edges_touch_their_boxes(self):
-        flow = DIAGRAMS["flow"]
-        text = cds.svg_flow(flow, "flow")
-        boxes, edges = self.assert_edges_touch(text, [(e["from"], e["to"]) for e in flow["edges"]])
-        service = rects_of_class(text, "svc")[0]
-        inner = [e for e in edges if (e[0], e[1]) == ("api", "worker")][0]
-        for point in inner[4]:
-            self.assertTrue(on_border(point, service) or (
-                service[0] < point[0] < service[0] + service[2] and service[1] < point[1] < service[1] + service[3]))
-        self.assertLess(boxes["web-ui"][0][0], service[0])
-        self.assertGreater(boxes["postgres"][0][0], service[0] + service[2])
-        outer = [e for e in edges if "api" != e[0] or "worker" != e[1]]
-        self.assertTrue(all(e[2][1] == e[3][1] for e in outer))
+    def test_flow_overview_edges_touch(self):
+        text = cds.svg_flow_overview(MEDIA["flow"], "flow")
+        self.assert_edges_touch(text, [("_callers", "api"), ("api", "abuna-secesh"), ("ticky-let-2", "ticky-secesh"),
+                                       ("abuna-let-2", "abuna-toozle-secesh"), ("_zone", "_dependencies")])
 
-    def test_flow_reverse_self_and_skip_edges(self):
+    def test_flow_overview_texts(self):
+        text = cds.svg_flow_overview(MEDIA["flow"], "flow")
+        for label in ["8 callers", "9 dependencies"] + [p["label"] for p in MEDIA["flow"]["parts"]]:
+            self.assertIn(">%s<" % cds.esc(label), text)
+
+    def test_flow_overview_fits(self):
+        self.assertLessEqual(view_width(cds.svg_flow_overview(MEDIA["flow"], "flow")), 760)
+
+    def test_flow_overview_without_callers_or_dependencies(self):
+        flow = copy.deepcopy(MEDIA["flow"])
+        flow["callers"], flow["dependencies"] = [], []
+        flow["edges"] = [e for e in flow["edges"] if e["from"] in {p["id"] for p in flow["parts"]}]
+        boxes, _ = shapes(cds.svg_flow_overview(flow, "flow"))
+        self.assertNotIn("_callers", boxes)
+        self.assertNotIn("_dependencies", boxes)
+        self.assertIn("_zone", boxes)
+
+    def test_flow_overview_one_caller_and_self_link(self):
         flow = copy.deepcopy(DIAGRAMS["flow"])
-        flow["parts"].append({"id": "cache", "label": "Cache", "refs": ["cmd/main.go:1"]})
-        flow["edges"] += [{"from": "api", "to": "web-ui", "label": "callback"},
-                          {"from": "worker", "to": "worker", "label": "retry"},
-                          {"from": "api", "to": "cache"},
-                          {"from": "cache", "to": "postgres", "label": "warm"}]
-        text = cds.svg_flow(flow, "flow")
-        boxes, edges = self.assert_edges_touch(text, [(e["from"], e["to"]) for e in flow["edges"]])
-        self.assertEqual(len(boxes["web-ui"]), 1)
-        self.assertGreater(boxes["web-ui"][0][3], boxes["batch-job"][0][3])
-        outer = [e for e in edges if "web-ui" in e[:2] or "postgres" in e[:2]]
-        self.assertTrue(all(e[2][1] == e[3][1] for e in outer))
+        flow["callers"] = flow["callers"][:1]
+        flow["edges"] = [e for e in flow["edges"] if e["from"] != "batch-job"] + [{"from": "api", "to": "api"}]
+        text = cds.svg_flow_overview(flow, "flow")
+        self.assertIn(">1 caller<", text)
+        self.assert_edges_touch(text, [("_callers", "api"), ("api", "worker"), ("api", "api"), ("other-svc", "worker"),
+                                       ("_zone", "_dependencies")])
+
+    def test_cards_list_every_edge(self):
+        flow = MEDIA["flow"]
+        labels = {n["id"]: n.get("label") or n["id"] for k in ("parts", "callers", "dependencies") for n in flow[k]}
+        section = cds.flow_cards_html(flow)
+        self.assertIn('<div class="cards">', section)
+        for card in section.split('<section class="card part-card">')[1:]:
+            part = [p for p in flow["parts"] if "<h4>%s</h4>" % cds.esc(labels[p["id"]]) in card][0]["id"]
+            called_by, _, calls = card.partition('<p class="muted">calls</p>')
+            for edge in flow["edges"]:
+                for end, other, body in (("to", "from", called_by), ("from", "to", calls)):
+                    if edge[end] == part:
+                        name = labels[edge[other]]
+                        item = "%s: %s" % (name, edge["label"]) if edge.get("label") else name
+                        self.assertIn("<li>%s</li>" % cds.esc(item), body)
+
+    def test_cards_escape_and_skip_empty_lists(self):
+        flow = {"parts": [{"id": "a", "label": NASTY}, {"id": "b"}], "edges": [{"from": "a", "to": "b"}]}
+        section = cds.flow_cards_html(flow)
+        self.assertIn("<h4>%s</h4>" % NASTY_ESCAPED, section)
+        self.assertNotIn("<b>", section)
+        first, second = section.split('<section class="card part-card">')[1:]
+        self.assertNotIn("called by", first)
+        self.assertNotIn(">calls<", second)
 
     def test_sequence_steps_join_lifelines(self):
         sequence = DIAGRAMS["sequences"][0]

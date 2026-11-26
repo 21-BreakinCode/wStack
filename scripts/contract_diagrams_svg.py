@@ -8,12 +8,14 @@ import html
 import re
 from urllib.parse import quote
 
-from contract_diagrams import display_width, sequence_participants, state_columns, subject_slug, subjects
+from contract_diagrams import display_width, flow_overview, part_cards, sequence_participants, state_columns, subject_slug, subjects
 
 COLUMN_PX = 7.5  # estimated width of one display column of 13px text
 PAD = 12
 BOX_H = 30
-SLOT = 44  # flow: vertical distance between two edge ends on one side of a part
+SLOT = 36  # flow overview: vertical distance between two edge ends on the right side of a part
+LANE_GAP = 10  # flow overview: space between a part and its nearest lane, and between the last lane and the zone edge
+LANE_PITCH = 8  # flow overview: distance between two lanes
 STEP = 36  # sequence: vertical distance between two steps
 STATE_H = 32
 STATE_ROW = 76
@@ -108,130 +110,89 @@ def caption(kind, value):
     return "Architecture (%s)" % style if style else "Architecture"
 
 
-def lane_width(edge):
-    return text_width(edge["label"]) + 24 if edge.get("label") else 16
+def count_label(count, singular, plural):
+    return "%d %s" % (count, singular if count == 1 else plural)
 
 
-def other_end(end, edge):
-    return edge["to"] if end == "from" else edge["from"]
+def svg_flow_overview(flow, prefix):
+    """Callers on top, the service zone with one box per part, dependencies below, all in a narrow column.
 
-
-def outer_column(canvas, nodes, sides, labels, slot, box_x, box_w, part_x, label_x):
-    """Draw caller or dependency boxes beside the parts they touch, with a horizontal arrow for each edge.
-
-    One box spans each run of consecutive edge ends of one node.
-    A node whose ends are not consecutive gets one box for each run.
+    Arrows from callers run down lanes on the left of the parts.
+    Part-to-part arrows run down lanes on the right. A callback comes from a dependency box beside its part.
     """
-    ids = {n["id"] for n in nodes}
-    ends = sorted(((slot[(id(edge), end)], end, edge) for items in sides for end, edge in items
-                   if other_end(end, edge) in ids), key=lambda e: e[0])
-    runs = []
-    for y, end, edge in ends:
-        if runs and runs[-1][0] == other_end(end, edge):
-            runs[-1][2] = y
-        else:
-            runs.append([other_end(end, edge), y, y])
-    linked = {r[0] for r in runs}
-    bottom = runs[-1][2] if runs else PAD + 31 - SLOT
-    runs += [[n["id"], bottom + SLOT * k, bottom + SLOT * k] for k, n in enumerate(
-        [n for n in nodes if n["id"] not in linked], 1)]
-    for node, first, last in runs:
-        canvas.rect(box_x, first - BOX_H / 2, box_w, last - first + BOX_H, "node", node=node)
-        canvas.text(box_x + box_w / 2, (first + last) / 2 + 4, labels[node])
-    near_x = box_x + box_w if box_x < part_x else box_x
-    for y, end, edge in ends:
-        start, finish = ((part_x, y), (near_x, y)) if end == "from" else ((near_x, y), (part_x, y))
-        canvas.path(line(start, finish), source=edge["from"], target=edge["to"])
-        if edge.get("label"):
-            canvas.text(label_x, y - 6, edge["label"], "lbl")
-
-
-def svg_flow(flow, prefix):
-    parts, callers, dependencies = (flow.get(k) or [] for k in ("parts", "callers", "dependencies"))
-    labels = {n["id"]: str(n.get("label") or n["id"]) for n in parts + callers + dependencies}
-    index = {p["id"]: i for i, p in enumerate(parts)}
-    caller_ids = {c["id"] for c in callers}
-    left, right, gaps, loops = [[] for _ in parts], [[] for _ in parts], [[] for _ in parts], []
-    for edge in flow.get("edges") or []:
-        source, target = edge["from"], edge["to"]
-        if source in index and target in index:
-            if abs(index[source] - index[target]) == 1:
-                gaps[min(index[source], index[target])].append(edge)
-            else:
-                loops.append(edge)
-                right[index[source]].append(("from", edge))
-                right[index[target]].append(("to", edge))
-        elif source in index or target in index:
-            end, outer = ("from", target) if source in index else ("to", source)
-            if outer in labels:
-                (left if outer in caller_ids else right)[index[edge[end]]].append((end, edge))
-    order = {n["id"]: k for k, n in enumerate(callers + dependencies)}
-    touches = collections.defaultdict(set)
-    for side in (left, right):
-        for i, items in enumerate(side):
-            for end, edge in items:
-                touches[other_end(end, edge)].add(i)
-
-    def slot_key(i, item):
-        outer = other_end(*item)
-        if outer not in order:
-            return (2, 0, 0)
-        # A node that also touches the part above goes first, and one that touches the part below goes last.
-        # Then its ends on two parts can share one box.
-        return (i - 1 not in touches[outer], i + 1 in touches[outer], order[outer])
-
-    left = [sorted(items, key=lambda item: slot_key(i, item)) for i, items in enumerate(left)]
-    right = [sorted(items, key=lambda item: slot_key(i, item)) for i, items in enumerate(right)]
-    rows = [max(1, len(l), len(r)) for l, r in zip(left, right)]
-    part_w = max([text_width(labels[p["id"]]) + 28 for p in parts]
-                 + [16 + sum(map(lane_width, g)) for g in gaps] + [60])
-    caller_w = max([text_width(labels[c["id"]]) + 24 for c in callers] + [0])
-    dependency_w = max([text_width(labels[d["id"]]) + 24 for d in dependencies] + [0])
-    side_gap = [max([text_width(e.get("label", "")) for items in side for _, e in items] + [16]) + 32
-                for side in (left, right)]
-    service_x = PAD + caller_w + side_gap[0] if callers else PAD
-    part_x = service_x + 16
-    part_right = part_x + part_w
-    service_right = part_right + 16 + sum(map(lane_width, loops))
-    tops, heights, y = [], [], PAD + 16
-    for i in range(len(parts)):
-        tops.append(y)
-        heights.append(rows[i] * SLOT - 14)
-        y += heights[i] + (SLOT if gaps[i] else 14)
-    service_bottom = (tops[-1] + heights[-1] if parts else PAD + 46) + 16
-    slot = {}
-    for side in (left, right):
-        for i, items in enumerate(side):
-            for r, (end, edge) in enumerate(items):
-                slot[(id(edge), end)] = tops[i] + 15 + SLOT * (r + (rows[i] - len(items)) / 2)
+    overview = flow_overview(flow)
+    parts = overview["parts"]
+    labels = {n["id"]: str(n.get("label") or n["id"]) for kind in ("parts", "dependencies") for n in flow.get(kind) or []}
+    index = {part: i for i, part in enumerate(parts)}
+    links = sorted(overview["links"], key=lambda link: abs(index[link[0]] - index[link[1]]))
+    right_slots = [[] for _ in parts]  # per part: the edges that end on its right side, in slot order
+    for source, target in links:
+        right_slots[index[source]].append((source, target, "from"))
+        right_slots[index[target]].append((source, target, "to"))
+    for source, target in overview["callbacks"]:
+        right_slots[index[target]].append((source, target, "to"))
+    callers_text = count_label(overview["callers"], "caller", "callers") if overview["callers"] else ""
+    dependencies_text = count_label(overview["dependencies"], "dependency", "dependencies") \
+        if overview["dependencies"] else ""
+    caller_lanes = len(overview["caller_targets"])
+    part_w = max([text_width(labels[p]) + 28 for p in parts] + [text_width(callers_text) + 24,
+                                                                  text_width(dependencies_text) + 24, 60])
+    part_x_offset = LANE_GAP + caller_lanes * LANE_PITCH + LANE_GAP
+    zone_w = part_x_offset + part_w + LANE_GAP + len(links) * LANE_PITCH + LANE_GAP
+    zone_top = PAD + (BOX_H + SLOT if callers_text else 0)
+    tops, heights, y = {}, {}, zone_top + 16
+    for part, slots in zip(parts, right_slots):
+        tops[part], heights[part] = y, max(BOX_H, SLOT * len(slots))
+        y += heights[part] + 14
+    zone_bottom = (y - 14 if parts else zone_top + 30) + 16
+    part_x, part_right = PAD + part_x_offset, PAD + part_x_offset + part_w
 
     canvas = Canvas(prefix, caption("flow", flow))
-    canvas.rect(service_x, PAD, service_right - service_x, service_bottom - PAD, "svc", rx=10)
-    for i, part in enumerate(parts):
-        canvas.rect(part_x, tops[i], part_w, heights[i], "node", node=part["id"])
-        canvas.text(part_x + part_w / 2, tops[i] + heights[i] / 2 + 4, labels[part["id"]])
-    dependency_x = service_right + side_gap[1]
-    outer_column(canvas, callers, left, labels, slot, PAD, caller_w, part_x, (PAD + caller_w + service_x) / 2)
-    outer_column(canvas, dependencies, right, labels, slot, dependency_x, dependency_w, part_right,
-                 (service_right + dependency_x) / 2)
-    for i, gap in enumerate(gaps):
-        x = part_x + 16
-        for edge in gap:
-            upper, lower = (x, tops[i] + heights[i]), (x, tops[i + 1])
-            down = index[edge["from"]] < index[edge["to"]]
-            canvas.path(line(upper, lower) if down else line(lower, upper), source=edge["from"], target=edge["to"])
-            if edge.get("label"):
-                canvas.text(x + 6, (upper[1] + lower[1]) / 2 + 4, edge["label"], "lbl", anchor="start")
-            x += lane_width(edge)
-    x = part_right + 16
-    for edge in loops:
-        y_from, y_to = slot[(id(edge), "from")], slot[(id(edge), "to")]
-        canvas.path(line((part_right, y_from), (x, y_from), (x, y_to), (part_right, y_to)),
-                    source=edge["from"], target=edge["to"])
-        if edge.get("label"):
-            canvas.text(x + 6, (y_from + y_to) / 2 + 4, edge["label"], "lbl", anchor="start")
-        x += lane_width(edge)
+    if callers_text:
+        canvas.rect(PAD, PAD, zone_w, BOX_H, "node", node="_callers")
+        canvas.text(PAD + zone_w / 2, PAD + BOX_H / 2 + 4, callers_text)
+    canvas.rect(PAD, zone_top, zone_w, zone_bottom - zone_top, "svc", rx=10, node="_zone")
+    for part in parts:
+        canvas.rect(part_x, tops[part], part_w, heights[part], "node", node=part)
+        canvas.text(part_x + part_w / 2, tops[part] + heights[part] / 2 + 4, labels[part])
+    for k, target in enumerate(overview["caller_targets"]):  # a later target gets a lane further left, so no lane crosses
+        lane_x = PAD + LANE_GAP + LANE_PITCH * (caller_lanes - 1 - k)
+        target_y = tops[target] + heights[target] / 2
+        canvas.path(line((lane_x, PAD + BOX_H), (lane_x, target_y), (part_x, target_y)), source="_callers", target=target)
+
+    def slot_y(part, edge, end):
+        return tops[part] + SLOT * (right_slots[index[part]].index((*edge, end)) + 0.5)
+
+    for rank, (source, target) in enumerate(links):
+        lane_x = part_right + LANE_GAP + LANE_PITCH * rank
+        y_from, y_to = slot_y(source, (source, target), "from"), slot_y(target, (source, target), "to")
+        canvas.path(line((part_right, y_from), (lane_x, y_from), (lane_x, y_to), (part_right, y_to)),
+                    source=source, target=target)
+    dependency_x = PAD + zone_w + 36
+    for dependency, target in overview["callbacks"]:
+        y_to = slot_y(target, (dependency, target), "to")
+        box_w = text_width(labels[dependency]) + 24
+        canvas.rect(dependency_x, y_to - BOX_H / 2, box_w, BOX_H, "node", node=dependency)
+        canvas.text(dependency_x + box_w / 2, y_to + 4, labels[dependency])
+        canvas.path(line((dependency_x, y_to), (part_right, y_to)), source=dependency, target=target)
+    if dependencies_text:
+        box_top = zone_bottom + SLOT
+        canvas.rect(PAD, box_top, zone_w, BOX_H, "node", node="_dependencies")
+        canvas.text(PAD + zone_w / 2, box_top + BOX_H / 2 + 4, dependencies_text)
+        canvas.path(line((PAD + zone_w / 2, zone_bottom), (PAD + zone_w / 2, box_top)), source="_zone", target="_dependencies")
     return canvas.svg()
+
+
+def flow_cards_html(flow):
+    def items(pairs):
+        return "<ul>%s</ul>" % "".join("<li>%s</li>" % esc("%s: %s" % pair if pair[1] else pair[0]) for pair in pairs)
+
+    cards = []
+    for card in part_cards(flow):
+        body = "".join('<p class="muted">%s</p>%s' % (title, items(pairs))
+                       for title, pairs in (("called by", card["called_by"]), ("calls", card["calls"])) if pairs)
+        cards.append('<section class="card part-card"><h4>%s</h4>%s</section>' % (esc(card["label"]), body))
+    return '<div class="cards">%s</div>' % "".join(cards)
 
 
 def svg_sequence(sequence, prefix):
@@ -555,12 +516,13 @@ def html_section(diagrams, deep_dives):
     present = subjects(diagrams)
     if not present and not deep_dives:
         return ""
-    draw = {"flow": svg_flow, "sequence": svg_sequence, "states": svg_states, "architecture": svg_architecture}
+    draw = {"flow": svg_flow_overview, "sequence": svg_sequence, "states": svg_states, "architecture": svg_architecture}
     out = ["<h2>Diagrams</h2>"]
     for subject, value in present.items():
         kind = subject.partition(":")[0]
-        out.append('<figure class="diagram"><figcaption>%s</figcaption>%s</figure>' % (
-            esc(caption(kind, value)), draw[kind](value, subject_slug(subject))))
+        cards = flow_cards_html(value) if kind == "flow" else ""
+        out.append('<figure class="diagram"><figcaption>%s</figcaption>%s%s</figure>' % (
+            esc(caption(kind, value)), draw[kind](value, subject_slug(subject)), cards))
     if deep_dives:
         items = "".join('<li><a href="%s">%s</a>%s</li>' % (
             esc("file://" + quote(d["path"])), esc(d["name"]),

@@ -132,6 +132,7 @@ done
 assert "the sequence in the note is a numbered list" '[ "$(grep -A2 -F "### Sequence: Create an item" "$diagram_note" | sed -n 3p)" = "1. web-ui → api: POST /items" ]'
 assert "the states in the note start with the initial state" '[ "$(grep -A2 -F "### States: Item status" "$diagram_note" | sed -n 3p)" = "Start: new" ]'
 assert "the page has four SVG diagrams" 'grep -qF "<h2>Diagrams</h2>" "$page" && [ "$(grep -o "<svg" "$page" | wc -l | tr -d " ")" = "4" ]'
+assert "the page lists the flow parts as cards" 'grep -qF "class=\"cards\"" "$page" && grep -qF "minmax(320px, 1fr)" "$page"'
 assert "the page wraps diagrams for horizontal scroll" 'grep -qF ".diagram { overflow-x: auto;" "$page"'
 
 cat > "$diagram_vault/diagrams/flow.html" <<HTML
