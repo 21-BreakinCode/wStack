@@ -168,10 +168,16 @@ class Base(unittest.TestCase):
                 self.assertFalse(rects_overlap(rect, other_rect), "label %r overlaps label %r" % (name, other))
             for box_name, box in boxes.items():
                 self.assertFalse(rects_overlap(rect, box), "label %r overlaps box %s" % (name, box_name))
+            # A label sits 6px above its own line. Skip that line, and keep the rest of its own path 2px away.
+            own_line_y, grown = rect[1] + rect[3] + 2, (rect[0] - 2, rect[1] - 2, rect[2] + 4, rect[3] + 4)
             for owner, points in paths:
                 if owner != owner_of[name]:
                     self.assertFalse(any(strictly_inside(p, rect) for p in points),
                                      "label %r crosses the path %s->%s" % ((name,) + owner))
+                else:
+                    rest = [p for p in points if abs(p[1] - own_line_y) > 0.01]
+                    self.assertFalse(any(strictly_inside(p, grown) for p in rest),
+                                     "label %r crosses its own path" % name)
         return text, boxes, paths, labels
 
 
@@ -217,6 +223,11 @@ class Svg(Base):
         self.assertEqual(section.count('<figure class="diagram">'), 4)
         for caption in ("Component flow", "Sequence: Create an item", "States: Item status", "Architecture (clean)"):
             self.assertIn("<figcaption>%s</figcaption>" % caption, section)
+
+    def test_text_width_counts_wide_characters_twice(self):
+        self.assertEqual(cds.text_width("ab"), 2 * cds.COLUMN_PX)
+        self.assertEqual(cds.text_width("漢字"), 4 * cds.COLUMN_PX)
+        self.assertEqual(cds.text_width("a漢"), 3 * cds.COLUMN_PX)
 
     def test_long_label_widens(self):
         flow = copy.deepcopy(DIAGRAMS["flow"])
@@ -415,6 +426,25 @@ class Geometry(Base):
         without_siblings["implements"] = without_siblings["implements"][2:]
         for architecture in (with_siblings, without_siblings):
             self.assert_implements_cross_no_other_pill(architecture)
+
+    def many_lanes_architecture(self, count):
+        workers, ports = ["w%d" % k for k in range(count)], ["port-a", "port-b", "port-c"]
+        return {"layers": [
+            {"name": "adapters", "components": [{"id": "http-in", "label": "HTTP in", "kind": "adapter"}]},
+            {"name": "workers", "sibling": True, "components": [{"id": w, "label": w.upper()} for w in workers]},
+            {"name": "ports", "components": [{"id": p, "label": p, "kind": "port"} for p in ports]},
+            {"name": "domain", "components": [{"id": n, "label": "Wide domain entity " + n}
+                                              for n in ("one", "two", "three", "four")]}],
+            "implements": [{"adapter": w, "port": ports[k % 3]} for k, w in enumerate(workers)]}
+
+    def test_many_crossing_implements_get_own_bands(self):
+        for count in (6, 12):
+            architecture = self.many_lanes_architecture(count)
+            self.assert_implements_cross_no_other_pill(architecture)
+            _, edges = shapes(cds.svg_architecture(architecture, "a"))
+            bands = [y0 for _, _, _, _, points in edges for (_, y0), (_, y1) in zip(points, points[1:]) if y0 == y1]
+            self.assertEqual(len(bands), 2 * count)
+            self.assertEqual(len(bands), len(set(bands)), "%d crossing edges share a band" % count)
 
     def assert_implements_cross_no_other_pill(self, architecture):
         text = cds.svg_architecture(architecture, "architecture")

@@ -19,6 +19,7 @@ STATE_H = 32
 STATE_ROW = 76
 LANE = 24  # states: vertical distance between two lanes below the boxes, and between two forward label rows
 LEG = 8  # states: horizontal distance between two vertical legs beside one column
+FIRST_LEG = 12  # states: distance from a box side to the nearest leg
 LAYER_HEAD = 56
 NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
 
@@ -295,12 +296,162 @@ def state_columns(transitions, start):
     return column
 
 
+def label_width(item):
+    return text_width(item.get("label", ""))
+
+
+def state_arrows(transitions, column, row):
+    """Split transitions into loops, forward arrows, back arrows and same-column arrows.
+
+    One small loop sits on top of a state. A second loop on the same state is a same-column arrow.
+    Back arrows sort by span and same-column arrows by label width, so back + same is the order of the lanes below
+    the boxes, shallowest first.
+    """
+    loops, looped = [], set()
+    for t in transitions:
+        if t["from"] == t["to"] and t["from"] not in looped:
+            loops.append(t)
+            looped.add(t["from"])
+    forward = sorted([t for t in transitions if column[t["to"]] == column[t["from"]] + 1],
+                     key=lambda t: (column[t["from"]], row[t["to"]], row[t["from"]]))
+    back = sorted([t for t in transitions if column[t["to"]] < column[t["from"]]],
+                  key=lambda t: column[t["from"]] - column[t["to"]])
+    same = sorted([t for t in transitions if column[t["to"]] == column[t["from"]] and not any(t is o for o in loops)],
+                  key=label_width)
+    return loops, forward, back, same
+
+
+def state_legs(same, back, column, widths):
+    """Each leg's distance from its box side, keyed (id(t), side), and each leg zone's width, keyed (column, side).
+
+    A same-column label sits centered under its column, so each deeper same-column arrow puts its legs outside it.
+    Back legs go outside those, the shallowest one outermost, so no back lane crosses another back leg.
+    """
+    outermost, leg = [FIRST_LEG - LEG] * len(widths), {}
+    for t in same:
+        c = column[t["from"]]
+        outermost[c] = max(outermost[c] + LEG, (label_width(t) - widths[c]) / 2 + 8)
+        leg[(id(t), "left")] = leg[(id(t), "right")] = outermost[c]
+    backs_beside = collections.defaultdict(list)
+    for t in back:
+        backs_beside[(column[t["from"]], "left")].append(t)
+        backs_beside[(column[t["to"]], "right")].append(t)
+    for (c, side), items in backs_beside.items():
+        for k, t in enumerate(items):
+            leg[(id(t), side)] = outermost[c] + LEG * (len(items) - k)
+    zone = {(c, side): max(40, outermost[c] + LEG * len(backs_beside[(c, side)]) + 10)
+            for c in range(len(widths)) for side in ("left", "right")}
+    return leg, zone
+
+
+def state_boxes(stacks, widths, zone, forward, back, column):
+    """Each box as (x, y, w, h), and each label band between two columns as (left, right).
+
+    A band holds the labels of the forward arrows that cross it and of the back arrows into the column on its left.
+    """
+    top = PAD + 16  # room above the first row for loop labels
+    x, box, band = PAD + zone.get((0, "left"), 0), {}, {}
+    for c, width in enumerate(widths):
+        for r, name in enumerate(stacks[c]):
+            box[name] = (x, top + STATE_ROW * r, width, STATE_H)
+        x += width + zone[(c, "right")]
+        room = max([label_width(t) for t in forward if column[t["from"]] == c]
+                   + [label_width(t) for t in back if column[t["to"]] == c] + [20]) + 16
+        band[c] = (x, x + room)
+        x += room + zone.get((c + 1, "left"), 0)
+    return box, band
+
+
+def state_ports(box, forward, below, leg):
+    """The y of each arrow end on a box side, keyed (id(t), "out" or "in").
+
+    Forward ends come first on a side. Below-lane ends follow, the one with the outermost leg highest, so the ends
+    of one side never cross each other. The ends of one side spread evenly over its height.
+    """
+    forward_ends, lane_ends = collections.defaultdict(list), collections.defaultdict(list)
+    for t in forward:
+        forward_ends[(t["from"], "right")].append((id(t), "out"))
+        forward_ends[(t["to"], "left")].append((id(t), "in"))
+    for t in below:
+        lane_ends[(t["from"], "left")].append((leg[(id(t), "left")], (id(t), "out")))
+        lane_ends[(t["to"], "right")].append((leg[(id(t), "right")], (id(t), "in")))
+    port = {}
+    for name, side in set(forward_ends) | set(lane_ends):
+        outermost_first = sorted(lane_ends[(name, side)], key=lambda end: -end[0])
+        order = forward_ends[(name, side)] + [key for _, key in outermost_first]
+        for k, key in enumerate(order):
+            port[key] = box[name][1] + STATE_H * (k + 1) / (len(order) + 1)
+    return port
+
+
+def forward_rows(forward, column, port):
+    """The y of the straight middle of each forward arrow: its target end, moved down to keep rows in one band
+    LANE apart."""
+    row_y, last = {}, {}
+    for t in forward:
+        c = column[t["from"]]
+        row_y[id(t)] = last[c] = max(port[(id(t), "in")], last.get(c, -LANE) + LANE)
+    return row_y
+
+
+def forward_arrows(forward, box, band, column, port, row_y):
+    """Paths as (d, transition) and labels as (x, y, text, anchor) for forward arrows.
+
+    Each one bends inside the zone right of its source, runs straight across the band on its own row, and bends
+    inside the zone left of its target. Its label sits 6px above that row, centered in the band.
+    """
+    paths, labels = [], []
+    for t in forward:
+        x0, x1 = box[t["from"]][0] + box[t["from"]][2], box[t["to"]][0]
+        y0, y1, y = port[(id(t), "out")], port[(id(t), "in")], row_y[id(t)]
+        xa, xb = band[column[t["from"]]]
+        bend_a, bend_b = (x0 + xa) / 2, (xb + x1) / 2
+        paths.append(("M%s %s C%s %s %s %s %s %s L%s %s C%s %s %s %s %s %s" % tuple(num(v) for v in (
+            x0, y0, bend_a, y0, bend_a, y, xa, y, xb, y, bend_b, y, bend_b, y1, x1, y1)), t))
+        if t.get("label"):
+            labels.append(((xa + xb) / 2, y - 6, t["label"], "middle"))
+    return paths, labels
+
+
+def lane_arrows(back, same, box, band, column, port, leg, lane_top):
+    """Paths and labels for back and same-column arrows, one lane each below the boxes, shallowest first.
+
+    Each one leaves its source on the left side, goes down a leg, runs along its lane, goes up a leg, and enters its
+    target on the right side. A same-column label sits centered under its column. A back label sits centered in the
+    band right of its target column.
+    """
+    paths, labels = [], []
+    for k, t in enumerate(back + same):
+        y = lane_top + LANE * k
+        sx, _, sw, _ = box[t["from"]]
+        ex, _, ew, _ = box[t["to"]]
+        down_x, up_x = sx - leg[(id(t), "left")], ex + ew + leg[(id(t), "right")]
+        y0, y1 = port[(id(t), "out")], port[(id(t), "in")]
+        paths.append((rounded((sx, y0), (down_x, y0), (down_x, y), (up_x, y), (up_x, y1), (ex + ew, y1)), t))
+        if t.get("label"):
+            spot = sx + sw / 2 if any(t is s for s in same) else sum(band[column[t["to"]]]) / 2
+            labels.append((spot, y - 6, t["label"], "middle"))
+    return paths, labels
+
+
+def loop_arrows(loops, box):
+    """Paths and labels for loops: a small loop on the top edge, its label above the box and left of the loop."""
+    paths, labels = [], []
+    for t in loops:
+        sx, sy, sw, _ = box[t["from"]]
+        right = sx + sw - 8
+        paths.append((curve((right - 20, sy), (right - 20, sy - 22), (right, sy - 22), (right, sy)), t))
+        if t.get("label"):
+            labels.append((right - 24 - label_width(t), sy - 6, t["label"], "start"))
+    return paths, labels
+
+
 def svg_states(lifecycle, prefix):
     """Columns by breadth-first distance, so every arrow goes one column forward, stays in its column, or goes back.
 
     Beside each column is a zone for vertical legs. Between two zones is a band that holds only labels and the
-    straight middle of forward arrows, each on its own row. Back and same-column arrows leave a box on its left side,
-    each runs along its own lane below all boxes, and enters its target on the right side.
+    straight middle of forward arrows, each on its own row. Back and same-column arrows each get a lane below all
+    boxes. The helpers above place each part.
     """
     transitions = lifecycle.get("transitions") or []
     names = sequence_participants(transitions)
@@ -309,67 +460,17 @@ def svg_states(lifecycle, prefix):
     stacks = collections.defaultdict(list)
     for name in names:
         stacks[column[name]].append(name)
-    count = max(stacks) + 1 if stacks else 0
     row = {name: stacks[column[name]].index(name) for name in names}
-    label_width = lambda t: text_width(t.get("label", ""))
-    # One small loop on top of a state. A second loop on the same state takes a lane below like a same-column arrow.
-    loops = list({t["from"]: t for t in reversed(transitions) if t["from"] == t["to"]}.values())
-    forward = sorted([t for t in transitions if column[t["to"]] == column[t["from"]] + 1],
-                     key=lambda t: (column[t["from"]], row[t["to"]], row[t["from"]]))
-    # Lanes, shallowest first: back arrows by span, then same-column arrows by label width.
-    back = sorted([t for t in transitions if column[t["to"]] < column[t["from"]]],
-                  key=lambda t: column[t["from"]] - column[t["to"]])
-    same = sorted([t for t in transitions if column[t["to"]] == column[t["from"]] and all(t is not o for o in loops)],
-                  key=label_width)
+    loops, forward, back, same = state_arrows(transitions, column, row)
     # A loop label sits above its box, left of the loop, so the box is wide enough to hold it.
     widths = [max([text_width(n) + 28 for n in stacks[c]]
-                  + [label_width(t) + 40 for t in loops if column[t["from"]] == c]) for c in range(count)]
-
-    # A same-column label sits centered under its column, so each deeper same-column arrow puts its legs outside it.
-    # Back legs go outside those, the shallowest one outermost, so no back lane crosses another back leg.
-    # The first leg is 12px from the box.
-    leg, outer = {}, collections.defaultdict(lambda: 12 - LEG)
-    for t in same:
-        c = column[t["from"]]
-        outer[c] = max(outer[c] + LEG, (label_width(t) - widths[c]) / 2 + 8)
-        leg[(id(t), "left")] = leg[(id(t), "right")] = outer[c]
-    back_legs = collections.defaultdict(list)
-    for t in back:
-        back_legs[(column[t["from"]], "left")].append(t)
-        back_legs[(column[t["to"]], "right")].append(t)
-    for (c, side), items in back_legs.items():
-        for k, t in enumerate(items):
-            leg[(id(t), side)] = outer[c] + LEG * (len(items) - k)
-    zone = {(c, side): max(40, outer[c] + LEG * len(back_legs[(c, side)]) + 10)
-            for c in range(count) for side in ("left", "right")}
-
-    top, x, box, band = PAD + 16, PAD + zone.get((0, "left"), 0), {}, {}
-    for c in range(count):
-        for r, name in enumerate(stacks[c]):
-            box[name] = (x, top + STATE_ROW * r, widths[c], STATE_H)
-        x += widths[c] + zone[(c, "right")]
-        room = max([label_width(t) for t in forward if column[t["from"]] == c]
-                   + [label_width(t) for t in back if column[t["to"]] == c] + [20]) + 16
-        band[c] = (x, x + room)
-        x += room + zone.get((c + 1, "left"), 0)
-    # Ports: forward ends at the top of a side, then below-lane ends with the outermost leg highest, so ends of one
-    # side never cross each other.
-    ends = collections.defaultdict(list)
-    for t in forward:
-        ends[(t["from"], "right")].append(((0, 0), (id(t), "out")))
-        ends[(t["to"], "left")].append(((0, 0), (id(t), "in")))
-    for t in back + same:
-        ends[(t["from"], "left")].append(((1, -leg[(id(t), "left")]), (id(t), "out")))
-        ends[(t["to"], "right")].append(((1, -leg[(id(t), "right")]), (id(t), "in")))
-    port = {}
-    for (name, _), items in ends.items():
-        for k, (_, key) in enumerate(sorted(items, key=lambda item: item[0])):
-            port[key] = box[name][1] + STATE_H * (k + 1) / (len(items) + 1)
-    level, last = {}, collections.defaultdict(lambda: -LANE)
-    for t in forward:
-        c = column[t["from"]]
-        level[id(t)] = last[c] = max(port[(id(t), "in")], last[c] + LANE)
-    lane_top = max([by + bh for _, by, _, bh in box.values()] + list(level.values()) + [0]) + 26
+                  + [label_width(t) + 40 for t in loops if column[t["from"]] == c])
+              for c in range(max(stacks) + 1 if stacks else 0)]
+    leg, zone = state_legs(same, back, column, widths)
+    box, band = state_boxes(stacks, widths, zone, forward, back, column)
+    port = state_ports(box, forward, back + same, leg)
+    row_y = forward_rows(forward, column, port)
+    lane_top = max([by + bh for _, by, _, bh in box.values()] + list(row_y.values()) + [0]) + 26
 
     canvas = Canvas(prefix, caption("states", lifecycle))
     for name, (bx, by, bw, bh) in box.items():
@@ -379,35 +480,25 @@ def svg_states(lifecycle, prefix):
         bx, by = box[initial][:2]
         canvas.shapes.append('<circle class="start" cx="%s" cy="%s" r="5"/>' % (num(bx - 25), num(by + STATE_H / 2)))
         canvas.path(line((bx - 20, by + STATE_H / 2), (bx, by + STATE_H / 2)))
-    for t in forward:
-        x0, x1 = box[t["from"]][0] + box[t["from"]][2], box[t["to"]][0]
-        y0, y1, y = port[(id(t), "out")], port[(id(t), "in")], level[id(t)]
-        xa, xb = band[column[t["from"]]]
-        bend_a, bend_b = (x0 + xa) / 2, (xb + x1) / 2
-        d = "M%s %s C%s %s %s %s %s %s L%s %s C%s %s %s %s %s %s" % tuple(num(v) for v in (
-            x0, y0, bend_a, y0, bend_a, y, xa, y, xb, y, bend_b, y, bend_b, y1, x1, y1))
-        canvas.path(d, source=t["from"], target=t["to"])
-        if t.get("label"):
-            canvas.text((xa + xb) / 2, y - 6, t["label"], "lbl")
-    for k, t in enumerate(back + same):
-        y = lane_top + LANE * k
-        sx, _, sw, _ = box[t["from"]]
-        ex, _, ew, _ = box[t["to"]]
-        down_x, up_x = sx - leg[(id(t), "left")], ex + ew + leg[(id(t), "right")]
-        y0, y1 = port[(id(t), "out")], port[(id(t), "in")]
-        canvas.path(rounded((sx, y0), (down_x, y0), (down_x, y), (up_x, y), (up_x, y1), (ex + ew, y1)),
-                    source=t["from"], target=t["to"])
-        if t.get("label"):
-            spot = sx + sw / 2 if t in same else sum(band[column[t["to"]]]) / 2
-            canvas.text(spot, y - 6, t["label"], "lbl")
-    for t in loops:
-        sx, sy, sw, _ = box[t["from"]]
-        right = sx + sw - 8
-        canvas.path(curve((right - 20, sy), (right - 20, sy - 22), (right, sy - 22), (right, sy)),
-                    source=t["from"], target=t["to"])
-        if t.get("label"):
-            canvas.text(right - 24 - label_width(t), sy - 6, t["label"], "lbl", anchor="start")
+    drawn = [forward_arrows(forward, box, band, column, port, row_y),
+             lane_arrows(back, same, box, band, column, port, leg, lane_top), loop_arrows(loops, box)]
+    for paths, _ in drawn:
+        for d, t in paths:
+            canvas.path(d, source=t["from"], target=t["to"])
+    for _, labels in drawn:
+        for x, y, text, anchor in labels:
+            canvas.text(x, y, text, "lbl", anchor=anchor)
     return canvas.svg()
+
+
+def lane_pairs(implements, layers, siblings):
+    """The implements pairs that need their own lanes: a sibling pill with a nested pill, or two nested pills more
+    than one layer apart. A straight line between those can cross the pills of the rows between them."""
+    row_of = {c["id"]: (depth, False) for depth, layer in enumerate(layers) for c in layer.get("components") or []}
+    row_of.update({c["id"]: (0, True) for layer in siblings for c in layer.get("components") or []})
+    ends = [(pair, row_of.get(pair["adapter"]), row_of.get(pair["port"])) for pair in implements]
+    return [pair for pair, adapter, port in ends
+            if adapter and port and (adapter[1] != port[1] or abs(adapter[0] - port[0]) > 1)]
 
 
 def svg_architecture(architecture, prefix):
@@ -417,20 +508,24 @@ def svg_architecture(architecture, prefix):
                               + sum(text_width(labels[c["id"]]) + 34 for c in layer.get("components") or []) for layer in group]
     siblings = [layer for layer in layers if layer.get("sibling")]
     layers = [layer for layer in layers if not layer.get("sibling")]
+    crossing = lane_pairs(architecture.get("implements") or [], layers, siblings)
+    # Lane k runs 42 + 3k below its row's top and 3px from its neighbors in the gap beside the nested group.
+    # The rows and the gap grow so the last band stays 4px above the next row's pills.
+    row_h, gap = max(LAYER_HEAD, 31 + 3 * len(crossing)), max(24, 3 * (len(crossing) + 1))
     heads = heads_of(layers)
     widths, heights, inner_w, inner_h = [0] * len(layers), [0] * len(layers), 0, 0
     for depth in reversed(range(len(layers))):
         widths[depth] = inner_w = max(heads[depth], inner_w + 48 if inner_w else 0)
-        heights[depth] = inner_h = LAYER_HEAD + (inner_h + 24 if inner_h else 0)
+        heights[depth] = inner_h = row_h + (inner_h + 24 if inner_h else 0)
     canvas = Canvas(prefix, caption("architecture", architecture))
     pills = {}
     # Each sibling is a head-high box to the right of the nested group, top-aligned with it.
-    next_x = PAD + (widths[0] + 24 if layers else 0)
+    next_x = PAD + (widths[0] + gap if layers else 0)
     group_right = PAD + (widths[0] if layers else 0)
-    placed = [(layer, PAD + 24 * depth, PAD + LAYER_HEAD * depth, widths[depth], heights[depth])
+    placed = [(layer, PAD + 24 * depth, PAD + row_h * depth, widths[depth], heights[depth])
               for depth, layer in enumerate(layers)]
     for layer, head in zip(siblings, heads_of(siblings)):
-        placed.append((layer, next_x, PAD, head, LAYER_HEAD))
+        placed.append((layer, next_x, PAD, head, row_h))
         next_x += head + 24
     for layer, x, y, width, height in placed:
         canvas.rect(x, y, width, height, "layer", rx=10)
@@ -443,19 +538,16 @@ def svg_architecture(architecture, prefix):
             pills[component["id"]] = (pill_x + width / 2, y + 12, y + 38, layer.get("sibling"))
             pill_x += width + 10
     pairs = [(pair, pills.get(pair["adapter"]), pills.get(pair["port"])) for pair in architecture.get("implements") or []]
-    # A straight line between rows more than one layer apart can cross the pills of the rows between them.
-    crossing = [pair for pair, adapter, port in pairs
-                if adapter and port and (adapter[3] != port[3] or abs(adapter[1] - port[1]) > LAYER_HEAD)]
+    lane_of = {id(pair): lane for lane, pair in enumerate(crossing)}
     for pair, adapter, port in pairs:
         if not adapter or not port:
             continue
-        if pair in crossing:
-            # A sibling pill and a nested pill, or two nested pills more than one layer apart: run orthogonally through
-            # the gap beside the nested group and the free band under each pill row, so no other pill is crossed.
-            # Each such edge gets its own lanes.
-            lane = crossing.index(pair)
-            gap_x = group_right + 24 * (lane + 1) / (len(crossing) + 1)
-            band = 42 + 3 * (lane % 5)
+        if id(pair) in lane_of:
+            # Run orthogonally through the gap beside the nested group and the free band under each pill row, so no
+            # other pill is crossed. Each such edge gets its own band and its own vertical in the gap.
+            lane = lane_of[id(pair)]
+            gap_x = group_right + gap * (lane + 1) / (len(crossing) + 1)
+            band = 42 + 3 * lane
             points = [(adapter[0], adapter[2]), (adapter[0], adapter[1] - 12 + band), (gap_x, adapter[1] - 12 + band),
                       (gap_x, port[1] - 12 + band), (port[0], port[1] - 12 + band), (port[0], port[2])]
             canvas.path(line(*points), cls="edge impl", source=pair["adapter"], target=pair["port"])
