@@ -195,9 +195,10 @@ def svg_architecture(architecture, prefix):
     crossing = found
     # Lane k runs 42 + LANE_PITCH * k below its row's top and LANE_PITCH from its neighbors in the gap beside the
     # nested group. The elbows of a gap run on the bands after its lanes. The rows, the pill rows and the gap grow
-    # so the last band stays 4px above the next pills.
+    # so the last band stays 4px above the next pills. A nested layer's top border sits 12px above its pills, so a
+    # layer's first row grows 12px more to keep that border 4px below the last band.
     lane_room = 34 + LANE_PITCH * (len(crossing) + most_elbows - 1)
-    row_h, row_pitch = max(LAYER_HEAD, lane_room), max(PILL_ROW, lane_room)
+    row_h, row_pitch = max(LAYER_HEAD, lane_room + 12), max(PILL_ROW, lane_room)
     canvas = Canvas(prefix, caption("architecture", architecture))
     lane_end_names = {pair[side] for pair in crossing for side in ("adapter", "port")}
     placed, group_right = place_layers(layers, siblings, group_rows, sibling_rows, row_h, gap, row_pitch,

@@ -262,6 +262,22 @@ class Architecture(Base):
             self.assertEqual(len(paths), len(architecture["implements"]))
             self.assertEqual({b - a for a, b in zip(bands, bands[1:])}, {cds.LANE_PITCH}, (heading, upward))
 
+    def test_bands_keep_4_px_from_layer_borders(self):
+        three_elbows = elbow_chain("right")
+        three_elbows["implements"] = three_elbows["implements"][:3]
+        fixtures = [elbow_chain(heading, upward) for heading, upward in itertools.product(("right", "left"), (0, 1))]
+        fixtures += [three_elbows, sibling_to_outer(3), sibling_to_outer(4), self.many_lanes_architecture(6)]
+        for number, architecture in enumerate(fixtures):
+            text = cds.svg_architecture(architecture, "a")
+            borders = [(x, x + width, y_border) for x, y, width, height in rects_of_class(text, "layer")
+                       for y_border in (y, y + height)]
+            for source, target, _, _, points in shapes(text)[1]:
+                for (x0, y0), (x1, y1) in zip(points, points[1:]):
+                    near = [y for left, right, y in borders
+                            if y0 == y1 and min(x0, x1) < right and max(x0, x1) > left and abs(y0 - y) < 4]
+                    self.assertFalse(near, "fixture %d: the band of %s->%s at y %s is near a layer border at %s"
+                                     % (number, source, target, y0, near))
+
     def test_vertical_pair_stays_straight_and_one_row_pair_keeps_its_curve(self):
         architecture = {"layers": [
             {"name": "wide", "components": [{"id": "w%02d" % k, "label": "Quillon gate"} for k in range(14)]}],
