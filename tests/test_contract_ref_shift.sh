@@ -45,6 +45,14 @@ assert "unchanged ref is not listed" '! printf "%s\n" "$out" | grep -qF "b.py:2"
 assert "cross-repo ref is unchecked" 'printf "%s\n" "$out" | grep -qxF "unchecked: other/repo@abc123:x.py:1: cross-repo"'
 assert "count line" '[ "$(printf "%s\n" "$out" | tail -1)" = "refs: 2 changed, 1 unchanged, 1 unchecked" ]'
 
+printf 'v1\n' > "$repo/資料.py"; git -C "$repo" add -A; git -C "$repo" commit -q -m C
+commit_c="$(git -C "$repo" rev-parse HEAD)"
+printf 'v2\n' > "$repo/資料.py"; git -C "$repo" commit -q -am D
+wide_contract="$work_dir/wide.contract.yaml"
+printf 'sections:\n  abilities:\n    items:\n      - text: One.\n        refs: ["資料.py:1"]\n' > "$wide_contract"
+run "$repo" "$wide_contract" "$commit_c" "$(git -C "$repo" rev-parse HEAD)"
+assert "a non-ASCII file name matches its ref" 'printf "%s\n" "$out" | grep -qxF "changed: 資料.py:1"'
+
 run "$repo" "$contract" "$commit_a" deadbeef
 assert "bad commit exits 2" '[ $rc = 2 ] && [[ "$err" == contract-ref-shift:* ]]'
 run "$repo" "$contract" "$commit_a"

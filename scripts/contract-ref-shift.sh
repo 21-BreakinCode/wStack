@@ -20,7 +20,7 @@ for commit in "$old_commit" "$new_commit"; do
   git -C "$repo_dir" cat-file -e "$commit^{commit}" 2>/dev/null || fail "unknown commit: $commit"
 done
 contract_json="$(yq -o=json '.' "$contract_file")" || fail "contract is not valid YAML: $contract_file"
-changed_files="$(git -C "$repo_dir" diff --name-only --no-renames "$old_commit" "$new_commit")"
+changed_files="$(git -C "$repo_dir" -c core.quotepath=off diff --name-only --no-renames "$old_commit" "$new_commit")"
 
 changed=0; unchanged=0; unchecked=0
 while IFS= read -r ref; do
