@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from test_contract_diagrams_svg import (  # noqa: F401 (setUpModule loads the fixtures)
     DIAGRAMS, MEDIA, Base, cds, rects_of_class, segments_meet, setUpModule, shapes, view_width)
 
-SVG_ARCHITECTURE_SHA256 = "eca422da610b5ab5aa012fd65f8edb19fbd394aa0748f5084b8294e0548fe0b7"
+SVG_ARCHITECTURE_SHA256 = "9a4cf7950d97b6c24132af40c735424c8a51523b556ba33e766f644c8cf6e1f6"
 
 TWO_LANES_FROM_ONE_PILL = {"layers": [
     {"name": "ports", "components": [{"id": "pa", "label": "Port A"}, {"id": "pb", "label": "Port B"}]},
@@ -46,6 +46,17 @@ def sibling_to_outer(count):
         {"name": "jobs", "sibling": True, "components": [{"id": "j%d" % k, "label": "Job %d" % k}
                                                          for k in range(count)]}],
         "implements": [{"adapter": "j%d" % k, "port": "o%d" % k} for k in range(count)]}
+
+
+def elbow_chain(heading, upward=False):
+    """Pills p0..p5 in an outer layer and q0..q5 in the next layer, which sits 24 px right. Each pair heads one way
+    and overlaps its neighbor pair, and their ends keep one order: p_k to q_(k + 1) right, or p_(k + 2) to q_k left.
+    When upward, the q pill is the adapter."""
+    pier = lambda prefix: [{"id": "%s%d" % (prefix, k), "label": "Pier"} for k in range(6)]
+    pairs = ([("p%d" % k, "q%d" % (k + 1)) for k in range(5)] if heading == "right"
+             else [("p%d" % (k + 2), "q%d" % k) for k in range(4)])
+    return {"layers": [{"name": "outer", "components": pier("p")}, {"name": "inner", "components": pier("q")}],
+            "implements": [{"adapter": q, "port": p} if upward else {"adapter": p, "port": q} for p, q in pairs]}
 
 
 class Architecture(Base):
@@ -225,6 +236,47 @@ class Architecture(Base):
         for a, b in zip(first, first[1:]):
             for c, d in zip(second, second[1:]):
                 self.assertFalse(segments_meet(a, b, c, d), "lanes cross at %s-%s and %s-%s" % (a, b, c, d))
+
+    def assert_elbows(self, architecture):
+        """Every implements path runs only across and down: no segment slants, and no path crosses a pill. Returns
+        the paths by (adapter, port)."""
+        text = cds.svg_architecture(architecture, "a")
+        boxes, edges = self.assert_edges_touch(text, [(p["adapter"], p["port"]) for p in architecture["implements"]])
+        self.assert_no_box_crossing(boxes, edges)
+        for source, target, _, _, points in edges:
+            self.assertTrue(all(a[0] == b[0] or a[1] == b[1] for a, b in zip(points, points[1:])),
+                            "%s->%s has a slanted segment: %s" % (source, target, points))
+        return {(source, target): points for source, target, _, _, points in edges}
+
+    def test_neighbor_layers_join_with_elbows(self):
+        for architecture in (DIAGRAMS["architecture"], MEDIA["architecture"]):
+            for points in self.assert_elbows(architecture).values():
+                self.assertEqual(len(points), 4, "an elbow: down, across, down")
+
+    def test_elbows_of_one_gap_nest_8_apart(self):
+        for heading, upward in itertools.product(("right", "left"), (False, True)):
+            architecture = elbow_chain(heading, upward)
+            paths = self.assert_elbows(architecture)
+            self.assert_lane_crossings(architecture, 0)
+            bands = sorted(points[1][1] for points in paths.values())
+            self.assertEqual(len(paths), len(architecture["implements"]))
+            self.assertEqual({b - a for a, b in zip(bands, bands[1:])}, {cds.LANE_PITCH}, (heading, upward))
+
+    def test_vertical_pair_stays_straight_and_one_row_pair_keeps_its_curve(self):
+        architecture = {"layers": [
+            {"name": "wide", "components": [{"id": "w%02d" % k, "label": "Quillon gate"} for k in range(14)]}],
+            "implements": [{"adapter": "w00", "port": "w08"}, {"adapter": "w01", "port": "w10"},
+                           {"adapter": "w02", "port": "w03"}]}
+        text = cds.svg_architecture(architecture, "a")
+        boxes, _ = shapes(text)
+        self.assertEqual(boxes["w00"][0][0], boxes["w08"][0][0], "w08 starts the second row under w00")
+        paths = {(e.get("data-from"), e.get("data-to")): e.get("d") for e in ET.fromstring(text).iter()
+                 if e.get("data-from")}
+        self.assertEqual(paths[("w00", "w08")].count("L"), 1, "a vertical pair is one straight line")
+        self.assertIn("C", paths[("w02", "w03")], "a pair in one row keeps its curve")
+        elbow = self.assert_elbows(dict(architecture, implements=architecture["implements"][:2]))[("w01", "w10")]
+        self.assertEqual(len(elbow), 4)
+        self.assertLessEqual(elbow[1][1] + 4, boxes["w10"][0][1], "the elbow runs 4 px above the next row")
 
     def assert_implements_cross_no_other_pill(self, architecture):
         text = cds.svg_architecture(architecture, "architecture")
