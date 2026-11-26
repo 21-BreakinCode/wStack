@@ -722,6 +722,41 @@ class Geometry(Base):
             self.assertEqual(len(bands), 2 * count)
             self.assertEqual(len(bands), len(set(bands)), "%d crossing edges share a band" % count)
 
+    def test_media_architecture_fits(self):
+        text = cds.svg_architecture(MEDIA["architecture"], "architecture")
+        self.assertLessEqual(view_width(text), cds.PAGE_LIMIT)
+        layers = rects_of_class(text, "layer")
+        group, workers = layers[0], layers[-1]
+        self.assertGreaterEqual(workers[1], group[1] + group[3])
+        self.assertEqual(workers[0], group[0])
+
+    def test_wide_layer_wraps_pills(self):
+        architecture = {"layers": [{"name": "wide", "components": [
+            {"id": "p%02d" % k, "label": "twelve chars"} for k in range(14)]}]}
+        text = cds.svg_architecture(architecture, "x")
+        self.assertLessEqual(view_width(text), cds.PAGE_LIMIT)
+        boxes, _ = shapes(text)
+        self.assertEqual(len({round(rect[0][1]) for rect in boxes.values()}), 2)
+
+    def test_lanes_are_eight_apart(self):
+        architecture = self.many_lanes_architecture(6)
+        _, edges = shapes(cds.svg_architecture(architecture, "a"))
+        bands = sorted({y0 for _, _, _, _, points in edges for (_, y0), (_, y1) in zip(points, points[1:]) if y0 == y1})
+        near = [b - a for a, b in zip(bands, bands[1:]) if b - a < 30]
+        self.assertTrue(near)
+        self.assertEqual(set(near), {cds.LANE_PITCH})
+
+    def test_two_lanes_from_one_pill_leave_apart(self):
+        architecture = {"layers": [
+            {"name": "ports", "components": [{"id": "pa", "label": "Port A"}, {"id": "pb", "label": "Port B"}]},
+            {"name": "mid", "components": [{"id": "m", "label": "Middle"}]},
+            {"name": "adapters", "components": [{"id": "ad", "label": "Adapter"}]}],
+            "implements": [{"adapter": "ad", "port": "pa"}, {"adapter": "ad", "port": "pb"}]}
+        _, edges = shapes(cds.svg_architecture(architecture, "a"))
+        starts = sorted(points[0][0] for _, _, _, _, points in edges)
+        self.assertEqual(len(starts), 2)
+        self.assertAlmostEqual(starts[1] - starts[0], cds.LANE_PITCH)
+
     def assert_implements_cross_no_other_pill(self, architecture):
         text = cds.svg_architecture(architecture, "architecture")
         boxes, edges = self.assert_edges_touch(text, [(p["adapter"], p["port"]) for p in architecture["implements"]])

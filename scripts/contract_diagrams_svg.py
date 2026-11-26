@@ -34,6 +34,9 @@ BAND_MARK = 14  # states: distance of a band marker from its arrow's end on the 
 LOOP_ROOM = 48  # states: the right part of a box edge that a loop and its marker take
 LOOP_DEPTH = 24  # states: room above or below a box for a loop and its marker
 LAYER_HEAD = 56
+PAGE_LIMIT = 1100  # architecture: widest picture on the page
+PILL_ROW = 36  # architecture: distance between two pill rows of one layer
+LAYER_PAD_RIGHT = 12  # architecture: space right of the last pill of a row
 MARKER_R = 8  # radius of a step number marker
 NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
 
@@ -531,62 +534,116 @@ def lane_pairs(implements, layers, siblings):
             if adapter and port and (adapter[1] != port[1] or abs(adapter[0] - port[0]) > 1)]
 
 
-def lane_route(adapter, port, lane, lane_count, group_right, gap):
+def lane_route(adapter, port, lane, lane_count, group_right, gap, ends_x):
     # Run orthogonally through the gap beside the nested group and the free band under each pill row, so no
     # other pill is crossed. Each such edge gets its own band and its own vertical in the gap.
     gap_x = group_right + gap * (lane + 1) / (lane_count + 1)
-    band = 42 + 3 * lane
-    return [(adapter[0], adapter[2]), (adapter[0], adapter[1] - 12 + band), (gap_x, adapter[1] - 12 + band),
-            (gap_x, port[1] - 12 + band), (port[0], port[1] - 12 + band), (port[0], port[2])]
+    band = 42 + LANE_PITCH * lane
+    adapter_x, port_x = ends_x
+    return [(adapter_x, adapter[2]), (adapter_x, adapter[1] - 12 + band), (gap_x, adapter[1] - 12 + band),
+            (gap_x, port[1] - 12 + band), (port_x, port[1] - 12 + band), (port_x, port[2])]
 
 
-def place_layers(layers, siblings, widths, heights, sibling_heads, row_h, gap):
-    placed = [(layer, PAD + 24 * depth, PAD + row_h * depth, widths[depth], heights[depth])
-              for depth, layer in enumerate(layers)]
-    # Each sibling is a head-high box to the right of the nested group, top-aligned with it.
-    next_x = PAD + (widths[0] + gap if layers else 0)
-    for layer, head in zip(siblings, sibling_heads):
-        placed.append((layer, next_x, PAD, head, row_h))
-        next_x += head + 24
-    return placed, PAD + (widths[0] if layers else 0)
+def spread_lane_ends(crossing, pills):
+    """The x of each lane end. Lanes that meet one pill spread LANE_PITCH apart around its center, the lane
+    with the lowest band leftmost, so they do not cross each other. A narrow pill squeezes them."""
+    lanes_at = collections.defaultdict(list)
+    for lane, pair in enumerate(crossing):
+        lanes_at[pair["adapter"]].append((lane, "adapter"))
+        lanes_at[pair["port"]].append((lane, "port"))
+    ends_x = {}
+    for name, ends in lanes_at.items():
+        center, _, _, width = pills[name]
+        pitch = min(LANE_PITCH, (width - 16) / max(len(ends) - 1, 1))
+        for rank, end in enumerate(reversed(ends)):
+            ends_x[end] = center + (rank - (len(ends) - 1) / 2) * pitch
+    return ends_x
+
+
+def pill_rows(layer, labels, max_width):
+    """The pills of a layer as rows of (id, x offset, width). A pill that would push the layer box past max_width
+    starts a new row."""
+    start = 28 + text_width(layer.get("name", ""))
+    rows, x = [[]], start
+    for component in layer.get("components") or []:
+        width = text_width(labels[component["id"]]) + 24
+        if rows[-1] and x + width + LAYER_PAD_RIGHT > max_width:
+            rows.append([])
+            x = start
+        rows[-1].append((component["id"], x, width))
+        x += width + 10
+    return rows
+
+
+def layer_width(layer, rows):
+    ends = [row[-1][1] + row[-1][2] + LAYER_PAD_RIGHT for row in rows if row]
+    return max([30 + text_width(layer.get("name", ""))] + ends)
+
+
+def place_layers(layers, siblings, group_rows, sibling_rows, row_h, gap, row_pitch):
+    """Boxes as (layer, pill rows, x, y, width, height), and the x where the lanes' vertical gap starts.
+    Siblings sit right of the nested group, or under it when beside would pass PAGE_LIMIT."""
+    heights_of = lambda rows: row_h + (len(rows) - 1) * row_pitch
+    widths, heights, inner_w, inner_h = [0] * len(layers), [0] * len(layers), 0, 0
+    for depth in reversed(range(len(layers))):
+        widths[depth] = inner_w = max(layer_width(layers[depth], group_rows[depth]), inner_w + 48 if inner_w else 0)
+        heights[depth] = inner_h = heights_of(group_rows[depth]) + (inner_h + 24 if inner_h else 0)
+    placed, y = [], PAD
+    for depth, layer in enumerate(layers):
+        placed.append((layer, group_rows[depth], PAD + 24 * depth, y, widths[depth], heights[depth]))
+        y += heights_of(group_rows[depth])
+    group_right = PAD + (widths[0] if layers else 0)
+    sibling_widths = [layer_width(layer, rows) for layer, rows in zip(siblings, sibling_rows)]
+    beside_width = group_right + gap + sum(sibling_widths) + 24 * (len(siblings) - 1) + PAD
+    under = bool(layers and siblings) and beside_width > PAGE_LIMIT
+    x, top = (PAD, PAD + heights[0] + 24) if under else (group_right + gap if layers else PAD, PAD)
+    for layer, rows, width in zip(siblings, sibling_rows, sibling_widths):
+        placed.append((layer, rows, x, top, width, heights_of(rows)))
+        x += width + 24
+    return placed, max(group_right, x - 24) if under else group_right
+
+
+def draw_layers(canvas, placed, labels, row_pitch):
+    """Draw the layer boxes and pills. Returns each pill as (center x, top, bottom, width)."""
+    pills = {}
+    for layer, rows, x, y, width, height in placed:
+        canvas.rect(x, y, width, height, "layer", rx=10)
+        canvas.text(x + 12, y + 29, layer.get("name", ""), "layer-name", anchor="start")
+        for number, row in enumerate(rows):
+            for name, offset, pill_width in row:
+                top = y + 12 + number * row_pitch
+                canvas.rect(x + offset, top, pill_width, 26, "pill", rx=13, node=name)
+                canvas.text(x + offset + pill_width / 2, top + 17, labels[name])
+                pills[name] = (x + offset + pill_width / 2, top, top + 26, pill_width)
+    return pills
 
 
 def svg_architecture(architecture, prefix):
     layers = architecture.get("layers") or []
     labels = {c["id"]: str(c.get("label") or c["id"]) for layer in layers for c in layer.get("components") or []}
-    heads_of = lambda group: [30 + text_width(layer.get("name", ""))
-                              + sum(text_width(labels[c["id"]]) + 34 for c in layer.get("components") or []) for layer in group]
     siblings = [layer for layer in layers if layer.get("sibling")]
     layers = [layer for layer in layers if not layer.get("sibling")]
     crossing = lane_pairs(architecture.get("implements") or [], layers, siblings)
-    # Lane k runs 42 + 3k below its row's top and 3px from its neighbors in the gap beside the nested group.
-    # The rows and the gap grow so the last band stays 4px above the next row's pills.
-    row_h, gap = max(LAYER_HEAD, 31 + 3 * len(crossing)), max(24, 3 * (len(crossing) + 1))
-    heads = heads_of(layers)
-    widths, heights, inner_w, inner_h = [0] * len(layers), [0] * len(layers), 0, 0
-    for depth in reversed(range(len(layers))):
-        widths[depth] = inner_w = max(heads[depth], inner_w + 48 if inner_w else 0)
-        heights[depth] = inner_h = row_h + (inner_h + 24 if inner_h else 0)
+    # Lane k runs 42 + LANE_PITCH * k below its row's top and LANE_PITCH from its neighbors in the gap beside the
+    # nested group. The rows, the pill rows and the gap grow so the last band stays 4px above the next pills.
+    lane_room = 34 + LANE_PITCH * (len(crossing) - 1)
+    row_h, row_pitch, gap = max(LAYER_HEAD, lane_room), max(PILL_ROW, lane_room), max(24, LANE_PITCH * (len(crossing) + 1))
+    budget = PAGE_LIMIT - 2 * PAD - (gap if crossing else 0)
+    group_rows = [pill_rows(layer, labels, budget - 24 * depth) for depth, layer in enumerate(layers)]
+    sibling_rows = [pill_rows(layer, labels, budget) for layer in siblings]
     canvas = Canvas(prefix, caption("architecture", architecture))
-    pills = {}
-    placed, group_right = place_layers(layers, siblings, widths, heights, heads_of(siblings), row_h, gap)
-    for layer, x, y, width, height in placed:
-        canvas.rect(x, y, width, height, "layer", rx=10)
-        canvas.text(x + 12, y + 29, layer.get("name", ""), "layer-name", anchor="start")
-        pill_x = x + 28 + text_width(layer.get("name", ""))
-        for component in layer.get("components") or []:
-            width = text_width(labels[component["id"]]) + 24
-            canvas.rect(pill_x, y + 12, width, 26, "pill", rx=13, node=component["id"])
-            canvas.text(pill_x + width / 2, y + 29, labels[component["id"]])
-            pills[component["id"]] = (pill_x + width / 2, y + 12, y + 38)
-            pill_x += width + 10
-    pairs = [(pair, pills.get(pair["adapter"]), pills.get(pair["port"])) for pair in architecture.get("implements") or []]
+    placed, group_right = place_layers(layers, siblings, group_rows, sibling_rows, row_h, gap, row_pitch)
+    pills = draw_layers(canvas, placed, labels, row_pitch)
+    lane_ends = spread_lane_ends(crossing, pills)
     lane_of = {id(pair): lane for lane, pair in enumerate(crossing)}
-    for pair, adapter, port in pairs:
+    for pair in architecture.get("implements") or []:
+        adapter, port = pills.get(pair["adapter"]), pills.get(pair["port"])
         if not adapter or not port:
             continue
         if id(pair) in lane_of:
-            d = line(*lane_route(adapter, port, lane_of[id(pair)], len(crossing), group_right, gap))
+            lane = lane_of[id(pair)]
+            d = line(*lane_route(adapter, port, lane, len(crossing), group_right, gap,
+                                 (lane_ends[(lane, "adapter")], lane_ends[(lane, "port")])))
         elif adapter[1] < port[1]:
             d = line((adapter[0], adapter[2]), (port[0], port[1]))
         elif adapter[1] > port[1]:
