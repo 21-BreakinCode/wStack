@@ -4,11 +4,11 @@ refs_lib_dir="$(dirname "${BASH_SOURCE[0]}")"
 source "$refs_lib_dir/frontmatter.sh"
 # cross_form matches a cross-repo ref `<owner>/<repo>@<commit>:`.
 cross_form='^[^/@:]+/[^/@:]+@[0-9a-f]+:'
-# contract_ref_lines <contract_json>: print every ref of all sections, planned, and diagrams, one per line.
+# contract_ref_lines <contract_json>: print each distinct ref of all sections, planned, and diagrams once, one per line.
 contract_ref_lines() {
   jq -r '[(.sections // {} | .[] | objects | .items // [] | .[] | objects | .refs // [] | .[]),
           (.planned // [] | .[] | objects | .refs // [] | .[]),
-          (.diagrams // {} | .. | objects | select(has("refs")) | .refs | arrays | .[])] | .[] | strings' <<<"$1"
+          (.diagrams // {} | .. | objects | select(has("refs")) | .refs | arrays | .[])] | .[] | strings' <<<"$1" | awk '!seen[$0]++'
 }
 
 expand_home() { local path="${1//\$HOME/$HOME}"; echo "${path/#\~/$HOME}"; }
@@ -38,5 +38,9 @@ clone_for() {  # <owner/repo>: print the local clone path, or nothing
     remote_url="$(git -C "$mapped_repo_path" remote get-url origin 2>/dev/null)" || continue
     case "$remote_url" in *[/:]"$slug" | *[/:]"$slug.git") echo "$mapped_repo_path"; return ;; esac
   done <<<"$mapping_rows"
-  if [ -n "$workspace_root" ] && [ -d "$workspace_root/${slug#*/}/.git" ]; then echo "$workspace_root/${slug#*/}"; fi
+  [ -n "$workspace_root" ] || return 0
+  local candidate
+  for candidate in "$workspace_root/$slug" "$workspace_root/${slug#*/}"; do  # <owner>/<repo> or <repo>
+    if [ -d "$candidate/.git" ]; then echo "$candidate"; return; fi
+  done
 }

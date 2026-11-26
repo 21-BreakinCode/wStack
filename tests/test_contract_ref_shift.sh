@@ -116,6 +116,18 @@ assert "a cross-repo ref shifts to the clone's origin/HEAD ($out)" 'printf "%s\n
 assert "a file that changed up to origin/HEAD is changed" 'printf "%s\n" "$out" | grep -qxF "changed: northwind/wharf@$wharf_old:crane.py:2"'
 assert "origin/HEAD count line" '[ "$(printf "%s\n" "$out" | tail -1)" = "refs: 1 changed, 1 shifted, 0 unchanged, 0 unchecked" ]'
 
+# A clone at <workspace_root>/<owner>/<repo> with no Service Mapping row, and a ref that two items cite.
+pier="$work_dir/ws/northwind/pier"
+git init -q -b main "$pier"; printf '1\n' > "$pier/p.py"
+git -C "$pier" add -A; git -C "$pier" commit -q -m P1
+pier_head="$(git -C "$pier" rev-parse HEAD)"
+pier_contract="$org_dir/Services/svc/pier.contract.yaml"
+printf 'sections:\n  abilities:\n    items:\n      - text: One.\n        refs: ["northwind/pier@%s:p.py:1", "northwind/gone@abc123:x.py:1"]\n      - text: Two.\n        refs: ["northwind/gone@abc123:x.py:1"]\n' \
+  "$pier_head" > "$pier_contract"
+run "$repo" "$pier_contract" "$commit_a" "$commit_b"
+assert "a clone at <workspace_root>/<owner>/<repo> is found ($out)" '[ "$(printf "%s\n" "$out" | tail -1)" = "refs: 0 changed, 0 shifted, 1 unchanged, 1 unchecked" ]'
+assert "a ref that two items cite is listed once" '[ "$(printf "%s\n" "$out" | grep -cxF "unchecked: northwind/gone@abc123:x.py:1: no local clone of northwind/gone")" = 1 ]'
+
 run "$repo" "$contract" "$commit_a" deadbeef
 assert "bad commit exits 2" '[ $rc = 2 ] && [[ "$err" == contract-ref-shift:* ]]'
 run "$repo" "$contract" "$commit_a"

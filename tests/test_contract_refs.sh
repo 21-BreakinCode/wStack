@@ -89,6 +89,6 @@ assert "a remote of xacme-org/other is not a clone of acme-org/other ($out)" '[ 
 
 new_world; yq -i '. *= load("'"$repo_root/tests/fixtures/contract/diagrams-block.yaml"'")' "$CONTRACT"
 yq -i '.diagrams.flow.edges[0].refs = ["nofile.go:1"]' "$CONTRACT"; run
-assert "diagram refs are checked" '[ $rc = 1 ] && printf "%s\n" "$out" | grep -qx "bad: nofile.go:1: no file nofile.go at $FIRST_COMMIT" && printf "%s\n" "$out" | grep -q "^refs: 16 checked, 1 bad"'
+assert "diagram refs are checked, each distinct ref once ($(printf "%s\n" "$out" | tail -1))" '[ $rc = 1 ] && printf "%s\n" "$out" | grep -qx "bad: nofile.go:1: no file nofile.go at $FIRST_COMMIT" && printf "%s\n" "$out" | grep -qx "refs: 2 checked, 1 bad, 0 unchecked"'
 
 finish
