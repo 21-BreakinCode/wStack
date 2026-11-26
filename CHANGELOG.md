@@ -3,8 +3,8 @@
 ## 0.12.0 - 2026-11-26
 
 - **feat:** The vault note fits a phone. No line in a note code block is wider than 40 columns. The flow is an overview drawing plus one "called by" and "calls" list per part. A sequence is a numbered step list. A state lifecycle is a start line plus a key grouped by source state. The architecture is a tree plus an `Implements:` list. A cut text keeps its `…[n]` footnote under `labels:`.
-- **feat:** The HTML page fits a laptop. A figure can grow to `min(1200px, calc(100vw - 32px))`. Every picture of a media-center-shaped contract is at most 1100 px wide. The flow is an overview picture plus one card per part. Sequence and state arrows carry numbers, and a key under the picture gives each number its text.
-- **fix:** The states picture uses a ladder layout. No two arrows cross in the media-center lifecycle. A forward-only lifecycle is no wider than in 0.10.0, and the start arrow has its own slot.
+- **feat:** The HTML page fits a laptop. A figure can grow to `min(1200px, calc(100vw - 32px))`. Every picture of the test fixture `tests/fixtures/contract/media-shaped-diagrams.yaml` is at most 1100 px wide. That fixture has 4 parts, 8 callers, 9 dependencies, and 37 edges. The flow is an overview picture plus one card per part. Sequence and state arrows carry numbers, and a key under the picture gives each number its text.
+- **fix:** The states picture uses a ladder layout. No two arrows cross in the 10-transition lifecycle of `tests/fixtures/contract/media-shaped-diagrams.yaml`. A forward-only lifecycle is no wider than in 0.10.0, and the start arrow has its own slot.
 - **fix:** The architecture picture wraps pills inside a wide layer and moves siblings under the nested group. Implements lanes are 8 px apart, and lanes from one pill leave from separate points.
 - **fix:** `shape_hash` treats `sibling: false` like a missing `sibling`, so that change no longer marks a deep dive stale. Layout changes never change the hash.
 - **fix:** The page counts use real plurals, such as "1 ability" and "67 abilities".
