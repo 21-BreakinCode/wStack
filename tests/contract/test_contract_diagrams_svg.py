@@ -293,6 +293,22 @@ class Geometry(Base):
         self.assert_edges_touch(text, [("_callers", "api"), ("api", "worker"), ("api", "api"), ("other-svc", "worker"),
                                        ("_zone", "_dependencies")])
 
+    def test_flow_overview_callbacks_cross_no_link_lane(self):
+        flow = {"parts": [{"id": "a"}, {"id": "b"}, {"id": "c"}], "callers": [{"id": "ui"}],
+                "dependencies": [{"id": "dep-b", "label": "dep-b"}, {"id": "dep-c"}],
+                "edges": [{"from": "ui", "to": "a"}, {"from": "a", "to": "c"},
+                          {"from": "dep-b", "to": "b"}, {"from": "dep-c", "to": "c"}]}
+        text = cds.svg_flow_overview(flow, "flow")
+        boxes, edges = self.assert_edges_touch(text, [("_callers", "a"), ("a", "c"), ("dep-b", "b"), ("dep-c", "c"),
+                                                      ("_zone", "_dependencies")])
+        link = [e for e in edges if (e[0], e[1]) == ("a", "c")][0]
+        for source, target, _, _, points in edges:
+            if source in ("dep-b", "dep-c"):
+                for (x0, y0), (x1, y1) in zip(link[4], link[4][1:]):
+                    if x0 == x1:  # a vertical run of the link
+                        self.assertFalse(min(p[0] for p in points) < x0 < max(p[0] for p in points)
+                                         and min(y0, y1) < points[0][1] < max(y0, y1), "%s crosses the link lane" % source)
+
     def test_cards_list_every_edge(self):
         flow = MEDIA["flow"]
         labels = {n["id"]: n.get("label") or n["id"] for k in ("parts", "callers", "dependencies") for n in flow[k]}

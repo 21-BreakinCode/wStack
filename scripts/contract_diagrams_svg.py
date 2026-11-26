@@ -13,9 +13,10 @@ from contract_diagrams import display_width, flow_overview, part_cards, sequence
 COLUMN_PX = 7.5  # estimated width of one display column of 13px text
 PAD = 12
 BOX_H = 30
-SLOT = 36  # flow overview: vertical distance between two edge ends on the right side of a part
+SLOT = 36  # flow overview: vertical distance between two edge ends on one side of a part
 LANE_GAP = 10  # flow overview: space between a part and its nearest lane, and between the last lane and the zone edge
 LANE_PITCH = 8  # flow overview: distance between two lanes
+CALLBACK_GAP = 36  # flow overview: space between a callback box and the zone
 STEP = 36  # sequence: vertical distance between two steps
 STATE_H = 32
 STATE_ROW = 76
@@ -114,72 +115,101 @@ def count_label(count, singular, plural):
     return "%d %s" % (count, singular if count == 1 else plural)
 
 
-def svg_flow_overview(flow, prefix):
-    """Callers on top, the service zone with one box per part, dependencies below, all in a narrow column.
+class FlowLayout:
+    """Sizes and positions of the flow overview.
 
-    Arrows from callers run down lanes on the left of the parts.
-    Part-to-part arrows run down lanes on the right. A callback comes from a dependency box beside its part.
+    Caller arrows and callback arrows end on the left side of a part. Part-to-part lanes run on the right.
+    A callback box sits left of the zone, so no callback arrow crosses a link lane.
     """
-    overview = flow_overview(flow)
-    parts = overview["parts"]
-    labels = {n["id"]: str(n.get("label") or n["id"]) for kind in ("parts", "dependencies") for n in flow.get(kind) or []}
-    index = {part: i for i, part in enumerate(parts)}
-    links = sorted(overview["links"], key=lambda link: abs(index[link[0]] - index[link[1]]))
-    right_slots = [[] for _ in parts]  # per part: the edges that end on its right side, in slot order
-    for source, target in links:
-        right_slots[index[source]].append((source, target, "from"))
-        right_slots[index[target]].append((source, target, "to"))
-    for source, target in overview["callbacks"]:
-        right_slots[index[target]].append((source, target, "to"))
-    callers_text = count_label(overview["callers"], "caller", "callers") if overview["callers"] else ""
-    dependencies_text = count_label(overview["dependencies"], "dependency", "dependencies") \
-        if overview["dependencies"] else ""
-    caller_lanes = len(overview["caller_targets"])
-    part_w = max([text_width(labels[p]) + 28 for p in parts] + [text_width(callers_text) + 24,
-                                                                  text_width(dependencies_text) + 24, 60])
-    part_x_offset = LANE_GAP + caller_lanes * LANE_PITCH + LANE_GAP
-    zone_w = part_x_offset + part_w + LANE_GAP + len(links) * LANE_PITCH + LANE_GAP
-    zone_top = PAD + (BOX_H + SLOT if callers_text else 0)
-    tops, heights, y = {}, {}, zone_top + 16
-    for part, slots in zip(parts, right_slots):
-        tops[part], heights[part] = y, max(BOX_H, SLOT * len(slots))
-        y += heights[part] + 14
-    zone_bottom = (y - 14 if parts else zone_top + 30) + 16
-    part_x, part_right = PAD + part_x_offset, PAD + part_x_offset + part_w
 
-    canvas = Canvas(prefix, caption("flow", flow))
-    if callers_text:
-        canvas.rect(PAD, PAD, zone_w, BOX_H, "node", node="_callers")
-        canvas.text(PAD + zone_w / 2, PAD + BOX_H / 2 + 4, callers_text)
-    canvas.rect(PAD, zone_top, zone_w, zone_bottom - zone_top, "svc", rx=10, node="_zone")
-    for part in parts:
-        canvas.rect(part_x, tops[part], part_w, heights[part], "node", node=part)
-        canvas.text(part_x + part_w / 2, tops[part] + heights[part] / 2 + 4, labels[part])
-    for k, target in enumerate(overview["caller_targets"]):  # a later target gets a lane further left, so no lane crosses
-        lane_x = PAD + LANE_GAP + LANE_PITCH * (caller_lanes - 1 - k)
-        target_y = tops[target] + heights[target] / 2
-        canvas.path(line((lane_x, PAD + BOX_H), (lane_x, target_y), (part_x, target_y)), source="_callers", target=target)
+    def __init__(self, flow):
+        self.overview = overview = flow_overview(flow)
+        self.parts = parts = overview["parts"]
+        self.labels = {n["id"]: str(n.get("label") or n["id"]) for kind in ("parts", "dependencies") for n in flow.get(kind) or []}
+        index = {part: i for i, part in enumerate(parts)}
+        self.links = sorted(overview["links"], key=lambda link: abs(index[link[0]] - index[link[1]]))
+        self.left_ends = {part: [("_callers", part)] if part in overview["caller_targets"] else [] for part in parts}
+        self.right_ends = {part: [] for part in parts}
+        for source, target in self.links:
+            self.right_ends[source].append((source, target, "from"))
+            self.right_ends[target].append((source, target, "to"))
+        for source, target in overview["callbacks"]:
+            self.left_ends[target].append((source, target))
+        self.callers_text = count_label(overview["callers"], "caller", "callers") if overview["callers"] else ""
+        self.dependencies_text = (
+            count_label(overview["dependencies"], "dependency", "dependencies") if overview["dependencies"] else "")
+        self.callback_w = max([text_width(self.labels[d]) + 24 for d, _ in overview["callbacks"]] + [0])
+        self.place(len(overview["caller_targets"]))
 
-    def slot_y(part, edge, end):
-        return tops[part] + SLOT * (right_slots[index[part]].index((*edge, end)) + 0.5)
+    def place(self, caller_lanes):
+        wide = max([text_width(self.labels[p]) + 28 for p in self.parts]
+                   + [text_width(self.callers_text) + 24, text_width(self.dependencies_text) + 24, 60])
+        self.caller_lanes = caller_lanes
+        self.zone_x = PAD + (self.callback_w + CALLBACK_GAP if self.callback_w else 0)
+        self.part_x = self.zone_x + LANE_GAP + caller_lanes * LANE_PITCH + LANE_GAP
+        self.part_w = wide
+        self.part_right = self.part_x + wide
+        self.zone_w = self.part_right + LANE_GAP + len(self.links) * LANE_PITCH + LANE_GAP - self.zone_x
+        self.zone_top = PAD + (BOX_H + SLOT if self.callers_text else 0)
+        self.tops, self.heights, y = {}, {}, self.zone_top + 16
+        for part in self.parts:
+            self.tops[part] = y
+            self.heights[part] = max(BOX_H, SLOT * max(len(self.left_ends[part]), len(self.right_ends[part])))
+            y += self.heights[part] + 14
+        self.zone_bottom = (y - 14 if self.parts else self.zone_top + 30) + 16
 
-    for rank, (source, target) in enumerate(links):
-        lane_x = part_right + LANE_GAP + LANE_PITCH * rank
-        y_from, y_to = slot_y(source, (source, target), "from"), slot_y(target, (source, target), "to")
-        canvas.path(line((part_right, y_from), (lane_x, y_from), (lane_x, y_to), (part_right, y_to)),
+    def left_y(self, part, end):
+        return self.tops[part] + SLOT * (self.left_ends[part].index(end) + 0.5)
+
+    def right_y(self, part, end):
+        return self.tops[part] + SLOT * (self.right_ends[part].index(end) + 0.5)
+
+
+def draw_flow_boxes(canvas, layout):
+    if layout.callers_text:
+        canvas.rect(layout.zone_x, PAD, layout.zone_w, BOX_H, "node", node="_callers")
+        canvas.text(layout.zone_x + layout.zone_w / 2, PAD + BOX_H / 2 + 4, layout.callers_text)
+    canvas.rect(layout.zone_x, layout.zone_top, layout.zone_w, layout.zone_bottom - layout.zone_top, "svc", rx=10,
+                node="_zone")
+    for part in layout.parts:
+        canvas.rect(layout.part_x, layout.tops[part], layout.part_w, layout.heights[part], "node", node=part)
+        canvas.text(layout.part_x + layout.part_w / 2, layout.tops[part] + layout.heights[part] / 2 + 4,
+                    layout.labels[part])
+    if layout.dependencies_text:
+        box_top = layout.zone_bottom + SLOT
+        canvas.rect(layout.zone_x, box_top, layout.zone_w, BOX_H, "node", node="_dependencies")
+        canvas.text(layout.zone_x + layout.zone_w / 2, box_top + BOX_H / 2 + 4, layout.dependencies_text)
+
+
+def draw_flow_arrows(canvas, layout):
+    targets = layout.overview["caller_targets"]
+    for k, target in enumerate(targets):  # a later target gets a lane further left, so no caller lane crosses another
+        lane_x = layout.zone_x + LANE_GAP + LANE_PITCH * (len(targets) - 1 - k)
+        y = layout.left_y(target, ("_callers", target))
+        canvas.path(line((lane_x, PAD + BOX_H), (lane_x, y), (layout.part_x, y)), source="_callers", target=target)
+    for rank, (source, target) in enumerate(layout.links):
+        lane_x = layout.part_right + LANE_GAP + LANE_PITCH * rank
+        y_from, y_to = layout.right_y(source, (source, target, "from")), layout.right_y(target, (source, target, "to"))
+        canvas.path(line((layout.part_right, y_from), (lane_x, y_from), (lane_x, y_to), (layout.part_right, y_to)),
                     source=source, target=target)
-    dependency_x = PAD + zone_w + 36
-    for dependency, target in overview["callbacks"]:
-        y_to = slot_y(target, (dependency, target), "to")
-        box_w = text_width(labels[dependency]) + 24
-        canvas.rect(dependency_x, y_to - BOX_H / 2, box_w, BOX_H, "node", node=dependency)
-        canvas.text(dependency_x + box_w / 2, y_to + 4, labels[dependency])
-        canvas.path(line((dependency_x, y_to), (part_right, y_to)), source=dependency, target=target)
-    if dependencies_text:
-        box_top = zone_bottom + SLOT
-        canvas.rect(PAD, box_top, zone_w, BOX_H, "node", node="_dependencies")
-        canvas.text(PAD + zone_w / 2, box_top + BOX_H / 2 + 4, dependencies_text)
-        canvas.path(line((PAD + zone_w / 2, zone_bottom), (PAD + zone_w / 2, box_top)), source="_zone", target="_dependencies")
+    for dependency, target in layout.overview["callbacks"]:
+        y = layout.left_y(target, (dependency, target))
+        box_w = text_width(layout.labels[dependency]) + 24
+        canvas.rect(PAD, y - BOX_H / 2, box_w, BOX_H, "node", node=dependency)
+        canvas.text(PAD + box_w / 2, y + 4, layout.labels[dependency])
+        canvas.path(line((PAD + box_w, y), (layout.part_x, y)), source=dependency, target=target)
+    if layout.dependencies_text:
+        middle = layout.zone_x + layout.zone_w / 2
+        canvas.path(line((middle, layout.zone_bottom), (middle, layout.zone_bottom + SLOT)),
+                    source="_zone", target="_dependencies")
+
+
+def svg_flow_overview(flow, prefix):
+    """Callers on top, the service zone with one box per part, dependencies below, all in a narrow column."""
+    layout = FlowLayout(flow)
+    canvas = Canvas(prefix, caption("flow", flow))
+    draw_flow_boxes(canvas, layout)
+    draw_flow_arrows(canvas, layout)
     return canvas.svg()
 
 
