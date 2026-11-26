@@ -16,6 +16,7 @@ import unicodedata
 from urllib.parse import quote
 
 MAX_LABEL = 32
+NOTE_COLUMNS = 40
 META_TAG = re.compile(r"<meta\b[^>]*>", re.I)
 META_NAME = re.compile(r"\bname\s*=\s*\"(wstack-[a-z-]+)\"", re.I)
 META_CONTENT = re.compile(r"\bcontent\s*=\s*\"([^\"]*)\"", re.I)
@@ -39,17 +40,92 @@ def subject_slug(subject):
     return subject.replace(":", "-")
 
 
-def without_refs(value):
+def without_layout_only_keys(value):
+    """Drop refs, and a sibling flag that is false, so neither changes the shape hash."""
     if isinstance(value, dict):
-        return {k: without_refs(v) for k, v in value.items() if k != "refs"}
+        return {k: without_layout_only_keys(v) for k, v in value.items()
+                if k != "refs" and not (k == "sibling" and v is False)}
     if isinstance(value, list):
-        return [without_refs(v) for v in value]
+        return [without_layout_only_keys(v) for v in value]
     return value
 
 
 def shape_hash(value):
-    text = json.dumps(without_refs(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    text = json.dumps(without_layout_only_keys(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def state_columns(transitions, start):
+    """Column of each state: its breadth-first distance from start. States start cannot reach share a last column."""
+    column = {start: 0} if start is not None else {}
+    queue = collections.deque(column)
+    while queue:
+        state = queue.popleft()
+        for t in transitions:
+            if t["from"] == state and t["to"] not in column:
+                column[t["to"]] = column[state] + 1
+                queue.append(t["to"])
+    last = max(column.values()) + 1 if column else 0
+    for t in transitions:
+        for key in ("from", "to"):
+            column.setdefault(t[key], last)
+    return column
+
+
+def state_start(lifecycle):
+    initial = lifecycle.get("initial")
+    names = sequence_participants(lifecycle.get("transitions") or [])
+    return initial if initial in names else None
+
+
+def state_order(lifecycle):
+    transitions = lifecycle.get("transitions") or []
+    names = sequence_participants(transitions)
+    column = state_columns(transitions, state_start(lifecycle) or (names[0] if names else None))
+    return sorted(names, key=lambda name: column[name])
+
+
+def state_key(lifecycle):
+    """Transitions grouped by source state in column order, each with its number (YAML index + 1)."""
+    transitions = lifecycle.get("transitions") or []
+    numbered = [dict(t, number=i + 1) for i, t in enumerate(transitions)]
+    return [t for name in state_order(lifecycle) for t in numbered if t["from"] == name]
+
+
+def flow_overview(flow):
+    parts = [p["id"] for p in flow.get("parts") or []]
+    caller_ids = {c["id"] for c in flow.get("callers") or []}
+    dependency_ids = {d["id"] for d in flow.get("dependencies") or []}
+    edges = flow.get("edges") or []
+
+    def unique(pairs):
+        return list(dict.fromkeys(pairs))
+
+    reached = {e["to"] for e in edges if e["from"] in caller_ids}
+    return {
+        "parts": parts,
+        "callers": len(caller_ids),
+        "dependencies": len(dependency_ids),
+        "caller_targets": [p for p in parts if p in reached],
+        "links": unique((e["from"], e["to"]) for e in edges if e["from"] in parts and e["to"] in parts),
+        "callbacks": unique((e["from"], e["to"]) for e in edges if e["from"] in dependency_ids and e["to"] in parts),
+    }
+
+
+def part_cards(flow):
+    labels = {n["id"]: n.get("label") or n["id"]
+              for kind in ("parts", "callers", "dependencies") for n in flow.get(kind) or []}
+    edges = flow.get("edges") or []
+    return [{
+        "id": part["id"],
+        "label": labels[part["id"]],
+        "called_by": [(labels.get(e["from"], e["from"]), e.get("label") or "") for e in edges if e["to"] == part["id"]],
+        "calls": [(labels.get(e["to"], e["to"]), e.get("label") or "") for e in edges if e["from"] == part["id"]],
+    } for part in flow.get("parts") or []]
+
+
+def key_line(source, target, label):
+    return "%s → %s: %s" % (source, target, label) if label else "%s → %s" % (source, target)
 
 
 def display_width(text):
@@ -60,15 +136,15 @@ def pad(text, width, fill=" "):
     return text + fill * max(0, width - display_width(text))
 
 
-def short(text, notes=None):
-    """Cut text to MAX_LABEL columns. With a notes dict, a cut label ends in …[n] and its full text is kept in notes."""
+def short(text, notes=None, width=MAX_LABEL):
+    """Cut text to width columns. With a notes dict, a cut label ends in …[n] and its full text is kept in notes."""
     text = " ".join(str(text).split())
-    if display_width(text) <= MAX_LABEL:
+    if display_width(text) <= width:
         return text
     marker = "…" if notes is None else "…[%d]" % notes.setdefault(text, len(notes) + 1)
     kept = ""
     for ch in text:
-        if display_width(kept + ch) + display_width(marker) > MAX_LABEL:
+        if display_width(kept + ch) + display_width(marker) > width:
             break
         kept += ch
     return kept + marker

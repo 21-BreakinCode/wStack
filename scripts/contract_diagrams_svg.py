@@ -8,7 +8,7 @@ import html
 import re
 from urllib.parse import quote
 
-from contract_diagrams import display_width, sequence_participants, subject_slug, subjects
+from contract_diagrams import display_width, sequence_participants, state_columns, subject_slug, subjects
 
 COLUMN_PX = 7.5  # estimated width of one display column of 13px text
 PAD = 12
@@ -277,23 +277,6 @@ def svg_sequence(sequence, prefix):
         if label:
             canvas.text((source + target) / 2, y - 6, label, "lbl")
     return canvas.svg()
-
-
-def state_columns(transitions, start):
-    """Column of each state: its breadth-first distance from start. States start cannot reach share a last column."""
-    column = {start: 0} if start is not None else {}
-    queue = collections.deque(column)
-    while queue:
-        state = queue.popleft()
-        for t in transitions:
-            if t["from"] == state and t["to"] not in column:
-                column[t["to"]] = column[state] + 1
-                queue.append(t["to"])
-    last = max(column.values()) + 1 if column else 0
-    for t in transitions:
-        for key in ("from", "to"):
-            column.setdefault(t[key], last)
-    return column
 
 
 def label_width(item):

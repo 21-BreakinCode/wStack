@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import contract_diagrams as cd  # noqa: E402
 
 DIAGRAMS = {}
+MEDIA = {}
 
 ASCII_ARCHITECTURE_SHA256 = "0f7cea8aade4d3fe4c83cc2756b30184f814b9face9292731aa9c72a0642f36d"
 
@@ -22,6 +23,9 @@ def setUpModule():
     out = subprocess.check_output(
         ["yq", "-o=json", str(ROOT / "tests/fixtures/contract/diagrams-block.yaml")])
     DIAGRAMS.update(json.loads(out)["diagrams"])
+    media = subprocess.check_output(
+        ["yq", "-o=json", str(ROOT / "tests/fixtures/contract/media-shaped-diagrams.yaml")])
+    MEDIA.update(json.loads(media)["diagrams"])
 
 
 def first_bar_column(line):
@@ -47,6 +51,55 @@ class SubjectsAndHash(unittest.TestCase):
     def test_hash_is_key_order_free(self):
         self.assertEqual(cd.shape_hash({"a": 1, "b": {"c": 2, "d": 3}}),
                          cd.shape_hash({"b": {"d": 3, "c": 2}, "a": 1}))
+
+
+class Models(unittest.TestCase):
+    def test_state_key_groups_by_source(self):
+        key = cd.state_key(MEDIA["states"][0])
+        self.assertEqual([(t["from"], t["to"]) for t in key], [
+            ("pending", "success"), ("pending", "failed"), ("pending", "earning_toozle"),
+            ("success", "failed"),
+            ("failed", "success"), ("failed", "earning_toozle"), ("failed", "pending"),
+            ("earning_toozle", "success"), ("earning_toozle", "failed"), ("earning_toozle", "failed")])
+
+    def test_state_start_falls_back(self):
+        lifecycle = {"initial": "nope", "transitions": [{"from": "a", "to": "b"}]}
+        self.assertIsNone(cd.state_start(lifecycle))
+        self.assertEqual(cd.state_order(lifecycle), ["a", "b"])
+
+    def test_flow_overview_media(self):
+        overview = cd.flow_overview(MEDIA["flow"])
+        self.assertEqual(overview["callers"], 8)
+        self.assertEqual(overview["dependencies"], 9)
+        self.assertEqual(overview["caller_targets"], ["api"])
+        self.assertEqual(overview["links"], [("api", "abuna-secesh")])
+        self.assertEqual(overview["callbacks"],
+                         [("ticky-let-2", "ticky-secesh"), ("abuna-let-2", "abuna-toozle-secesh")])
+
+    def test_part_cards_keep_duplicate_pairs(self):
+        api = cd.part_cards(MEDIA["flow"])[0]
+        self.assertEqual(api["label"], "API (FastAPI)")
+        self.assertEqual(len(api["called_by"]), 8)
+        self.assertIn(("ticky-let-2", "mozzetta.angionoma (Pub/Sub)"), api["calls"])
+        self.assertIn(("ticky-let-2", "POST /confide"), api["calls"])
+        self.assertIn(("abuna secesh", "tray id on abuna-swish pursy"), api["calls"])
+
+    def test_flow_without_callers_or_dependencies(self):
+        flow = {"parts": [{"id": "p"}], "edges": []}
+        self.assertEqual(cd.flow_overview(flow)["callers"], 0)
+        self.assertEqual(cd.part_cards(flow), [{"id": "p", "label": "p", "called_by": [], "calls": []}])
+
+    def test_sibling_false_hashes_like_missing(self):
+        with_flag = {"layers": [{"name": "a", "sibling": False, "components": []}]}
+        without = {"layers": [{"name": "a", "components": []}]}
+        self.assertEqual(cd.shape_hash(with_flag), cd.shape_hash(without))
+        self.assertNotEqual(cd.shape_hash({"layers": [{"name": "a", "sibling": True, "components": []}]}),
+                            cd.shape_hash(without))
+
+    def test_key_line_and_short_width(self):
+        self.assertEqual(cd.key_line("a", "b", "go"), "a → b: go")
+        self.assertEqual(cd.key_line("a", "b", ""), "a → b")
+        self.assertEqual(cd.short("x" * 50, width=10), "x" * 9 + "…")
 
 
 class Ascii(unittest.TestCase):

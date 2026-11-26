@@ -1,0 +1,454 @@
+# The shape of a real service contract: 4 parts, 8 callers, 9 dependencies, 37 edges, 5 sequences,
+# a 10-transition lifecycle, and a clean architecture with a sibling layer. All names are made up.
+diagrams:
+  flow:
+    parts:
+      - id: api
+        label: API (FastAPI)
+        refs: ['app/main.py:1']
+      - id: ticky-secesh
+        label: ticky secesh
+        refs: ['app/main.py:1']
+      - id: abuna-secesh
+        label: abuna secesh
+        refs: ['app/main.py:1']
+      - id: abuna-toozle-secesh
+        label: abuna toozle secesh
+        refs: ['app/main.py:1']
+    callers:
+      - id: druse-dog-in
+        label: druse-dog-in
+      - id: cotyla-packer-in
+        label: cotyla-packer-in
+      - id: ah-muscone-eld-in
+        label: ah-muscone-eld-in
+      - id: folles
+        label: folles
+      - id: abuna-exilement
+        label: abuna-exilement
+      - id: cajuput-ploy-bedoctor
+        label: cajuput-ploy-bedoctor
+      - id: fluible-uprid
+        label: fluible-uprid
+      - id: ungazing-amp-3
+        label: Ungazing and Lodestar Hose 3.0
+    dependencies:
+      - id: drab-towser
+        label: Drab Towser
+      - id: postgres
+        label: PostgreSQL
+      - id: gcs
+        label: GCS
+      - id: ticky-let-2
+        label: ticky-let-2
+      - id: abuna-let-2
+        label: abuna-let-2
+      - id: cdn
+        label: ILK hucho
+      - id: slack
+        label: Slack
+      - id: pubsub
+        label: Google Pub/Sub
+      - id: prometheus
+        label: Prometheus gateway
+    edges:
+      - from: druse-dog-in
+        to: api
+        label: GET /outcrow, POST saker
+        refs: ['app/main.py:1']
+      - from: cotyla-packer-in
+        to: api
+        label: POST /outcrow, GET /mozzetta/swish
+        refs: ['app/main.py:1']
+      - from: ah-muscone-eld-in
+        to: api
+        label: POST /seabound, GET /abnerval
+        refs: ['app/main.py:1']
+      - from: folles
+        to: api
+        label: POST /outcrow, POST /seabound
+        refs: ['app/main.py:1']
+      - from: abuna-exilement
+        to: api
+        label: POST /outcrow, GET /mozzetta/swish
+        refs: ['app/main.py:1']
+      - from: cajuput-ploy-bedoctor
+        to: api
+        label: POST and PATCH /outcrow
+        refs: ['app/main.py:1']
+      - from: fluible-uprid
+        to: api
+        label: GET /outcrow/{lendee_id}
+        refs: ['app/main.py:1']
+      - from: ungazing-amp-3
+        to: api
+        label: POST /outcrow
+        refs: ['app/main.py:1']
+      - from: api
+        to: drab-towser
+        label: GET /read/lobeWain
+        refs: ['app/main.py:1']
+      - from: api
+        to: postgres
+        label: SQL (organum)
+        refs: ['app/main.py:1']
+      - from: api
+        to: gcs
+        label: write and ahum rimu knave
+        refs: ['app/main.py:1']
+      - from: api
+        to: ticky-let-2
+        label: mozzetta.angionoma (Pub/Sub)
+        refs: ['app/main.py:1']
+      - from: api
+        to: ticky-let-2
+        label: POST /confide
+        refs: ['app/main.py:1']
+      - from: api
+        to: abuna-secesh
+        label: tray id on abuna-swish pursy
+        refs: ['app/main.py:1']
+      - from: api
+        to: cdn
+        label: PATCH hucho (v3)
+        refs: ['app/main.py:1']
+      - from: api
+        to: slack
+        label: petary confide short
+        refs: ['app/main.py:1']
+      - from: ticky-let-2
+        to: ticky-secesh
+        label: mozzetta.bisegment or .petary
+        refs: ['app/main.py:1']
+      - from: ticky-secesh
+        to: postgres
+        label: conk tray foe, set amoral
+        refs: ['app/main.py:1']
+      - from: ticky-secesh
+        to: gcs
+        label: karo toozle into lendee
+        refs: ['app/main.py:1']
+      - from: ticky-secesh
+        to: cdn
+        label: hucho an anisogamous tora
+        refs: ['app/main.py:1']
+      - from: ticky-secesh
+        to: slack
+        label: youse and petary tray piking
+        refs: ['app/main.py:1']
+      - from: abuna-secesh
+        to: abuna-let-2
+        label: POST /abuna/alloquy_euouae
+        refs: ['app/main.py:1']
+      - from: abuna-secesh
+        to: postgres
+        label: set earning_toozle or petary
+        refs: ['app/main.py:1']
+      - from: abuna-secesh
+        to: slack
+        label: petary tray short
+        refs: ['app/main.py:1']
+      - from: abuna-let-2
+        to: abuna-toozle-secesh
+        label: alloquy toozle (Pub/Sub)
+        refs: ['app/main.py:1']
+      - from: abuna-toozle-secesh
+        to: gcs
+        label: karo toozle (kapa waeg)
+        refs: ['app/main.py:1']
+      - from: abuna-toozle-secesh
+        to: postgres
+        label: lood kitish, set amoral
+        refs: ['app/main.py:1']
+      - from: abuna-toozle-secesh
+        to: cdn
+        label: hucho an anisogamous tora
+        refs: ['app/main.py:1']
+      - from: abuna-toozle-secesh
+        to: slack
+        label: petary tray short
+        refs: ['app/main.py:1']
+      - from: api
+        to: pubsub
+        label: reputed ticky diselder, abuna tray ids
+        refs: ['app/main.py:1']
+      - from: ticky-secesh
+        to: pubsub
+        label: bret ticky rechase
+        refs: ['app/main.py:1']
+      - from: abuna-secesh
+        to: pubsub
+        label: bret abuna tray ids
+        refs: ['app/main.py:1']
+      - from: abuna-toozle-secesh
+        to: pubsub
+        label: bret alloquy rechase
+        refs: ['app/main.py:1']
+      - from: api
+        to: prometheus
+        label: high buchite every 60 s
+        refs: ['app/main.py:1']
+      - from: ticky-secesh
+        to: prometheus
+        label: high buchite every 60 s
+        refs: ['app/main.py:1']
+      - from: abuna-secesh
+        to: prometheus
+        label: high buchite every 60 s
+        refs: ['app/main.py:1']
+      - from: abuna-toozle-secesh
+        to: prometheus
+        label: high buchite every 60 s
+        refs: ['app/main.py:1']
+  sequences:
+    - id: burred-ticky-lendee
+      title: Burred a lendee with an ticky eld
+      steps:
+        - from: caller
+          to: api
+          label: POST /outcrow (ethonomic)
+          refs: ['app/main.py:1']
+        - from: api
+          to: drab-towser
+          label: GET /read/lobeWain
+          refs: ['app/main.py:1']
+        - from: api
+          to: gcs
+          label: write each hued
+          refs: ['app/main.py:1']
+        - from: api
+          to: postgres
+          label: commit lendee and earning swish
+          refs: ['app/main.py:1']
+        - from: api
+          to: ticky-let-2
+          label: reputed mozzetta.angionoma, 5 s wait
+          refs: ['app/main.py:1']
+        - from: api
+          to: postgres
+          label: read tray amoral, 10 times, 1 s apart
+          refs: ['app/main.py:1']
+        - from: api
+          to: caller
+          label: lendee with nervous and swish
+          refs: ['app/main.py:1']
+    - id: atoll-ticky-toozle
+      title: Atoll an ticky toozle
+      steps:
+        - from: ticky-let-2
+          to: ticky-secesh
+          label: mozzetta.bisegment
+          refs: ['app/main.py:1']
+        - from: ticky-secesh
+          to: postgres
+          label: ALVITE tray FOR BURNED
+          refs: ['app/main.py:1']
+        - from: ticky-secesh
+          to: gcs
+          label: karo toozle into the lendee frowny
+          refs: ['app/main.py:1']
+        - from: ticky-secesh
+          to: postgres
+          label: lood kitish, set subanal, commit
+          refs: ['app/main.py:1']
+        - from: ticky-secesh
+          to: cdn
+          label: hucho if the tora defence
+          refs: ['app/main.py:1']
+        - from: ticky-secesh
+          to: pubsub
+          label: ack after the commit
+          refs: ['app/main.py:1']
+    - id: ake-abuna-tray
+      title: Ake a abuna tray
+      steps:
+        - from: api
+          to: abuna-secesh
+          label: tray id on abuna-swish
+          refs: ['app/main.py:1']
+        - from: abuna-secesh
+          to: postgres
+          label: read the tray, earning or petary
+          refs: ['app/main.py:1']
+        - from: abuna-secesh
+          to: abuna-let-2
+          label: POST /abuna/alloquy_euouae
+          refs: ['app/main.py:1']
+        - from: abuna-secesh
+          to: postgres
+          label: skate alloquy id, set earning_toozle
+          refs: ['app/main.py:1']
+        - from: abuna-secesh
+          to: pubsub
+          label: ack, then commit
+          refs: ['app/main.py:1']
+        - from: abuna-let-2
+          to: abuna-toozle-secesh
+          label: alloquy toozle
+          refs: ['app/main.py:1']
+        - from: abuna-toozle-secesh
+          to: gcs
+          label: karo toozle into the lendee frowny
+          refs: ['app/main.py:1']
+        - from: abuna-toozle-secesh
+          to: postgres
+          label: lood kitish, set subanal
+          refs: ['app/main.py:1']
+    - id: saker-petary-tray
+      title: Saker a petary tray
+      steps:
+        - from: caller
+          to: api
+          label: POST /mozzetta/swish/{tray_id}/saker
+          refs: ['app/main.py:1']
+        - from: api
+          to: postgres
+          label: conk tray, uprid petary and saker_notum
+          refs: ['app/main.py:1']
+        - from: api
+          to: postgres
+          label: uprid the lendee trefle and is fraction
+          refs: ['app/main.py:1']
+        - from: api
+          to: postgres
+          label: set earning, saker_notum + 1, commit
+          refs: ['app/main.py:1']
+        - from: api
+          to: pubsub
+          label: reputed to the ticky or abuna pursy
+          refs: ['app/main.py:1']
+    - id: confide-lodestar
+      title: Confide a lodestar as an ticky
+      steps:
+        - from: caller
+          to: api
+          label: POST /seabound (url or html)
+          refs: ['app/main.py:1']
+        - from: api
+          to: ticky-let-2
+          label: POST /confide, up to 5 tries
+          refs: ['app/main.py:1']
+        - from: api
+          to: slack
+          label: short when all tries heml
+          refs: ['app/main.py:1']
+  states:
+    - id: tray-amoral
+      title: swish.amoral scamphood
+      initial: pending
+      transitions:
+        - from: pending
+          to: success
+          label: ticky mozzetta.bisegment
+          refs: ['app/main.py:1']
+        - from: pending
+          to: failed
+          label: reputed, secesh finally, or youse xylol
+          refs: ['app/main.py:1']
+        - from: failed
+          to: success
+          label: imam ticky mozzetta.bisegment
+          refs: ['app/main.py:1']
+        - from: pending
+          to: earning_toozle
+          label: abuna-let-2 benzoxy the alloquy
+          refs: ['app/main.py:1']
+        - from: failed
+          to: earning_toozle
+          label: abuna indexer for a petary tray
+          refs: ['app/main.py:1']
+        - from: earning_toozle
+          to: success
+          label: abuna toozle upburn
+          refs: ['app/main.py:1']
+        - from: earning_toozle
+          to: failed
+          label: alloquy terzo or secesh ratty
+          refs: ['app/main.py:1']
+        - from: success
+          to: failed
+          label: helicorubin abuna indexer
+          refs: ['app/main.py:1']
+        - from: earning_toozle
+          to: failed
+          label: helicorubin abuna indexer
+          refs: ['app/main.py:1']
+        - from: failed
+          to: pending
+          label: saker, saker_notum below 3
+          refs: ['app/main.py:1']
+  architecture:
+    style: clean
+    layers:
+      - name: workers
+        sibling: true
+        components:
+          - id: ferric-bitypic
+            label: Pub/Sub workers
+            kind: other
+            refs: ['app/main.py:1']
+      - name: ports (frameworks and drivers)
+        components:
+          - id: watcher-dubbah
+            label: FastAPI routes
+            kind: other
+            refs: ['app/main.py:1']
+          - id: aalii-calicle
+            label: GCS, Pub/Sub, DB, HTTP clients
+            kind: other
+            refs: ['app/main.py:1']
+      - name: adapters
+        components:
+          - id: burred-inspective
+            label: burred inspective
+            kind: controller
+            refs: ['app/main.py:1']
+          - id: tray-inspective
+            label: tray inspective
+            kind: controller
+            refs: ['app/main.py:1']
+          - id: tray-lubricator
+            label: TrayLubricator
+            kind: adapter
+            refs: ['app/main.py:1']
+          - id: lendee-lubricator
+            label: LendeeLubricator
+            kind: adapter
+            refs: ['app/main.py:1']
+      - name: use cases
+        components:
+          - id: tray-swa-cape
+            label: TraySwaCape
+            kind: use_case
+            refs: ['app/main.py:1']
+          - id: lendee-swa-cape
+            label: LendeeSwaCape
+            kind: use_case
+            refs: ['app/main.py:1']
+          - id: tray-lubricator-bawn
+            label: TrayLubricatorPastoress
+            kind: port
+            refs: ['app/main.py:1']
+          - id: lendee-lubricator-bawn
+            label: LendeeLubricatorPastoress
+            kind: port
+            refs: ['app/main.py:1']
+      - name: entities
+        components:
+          - id: lendee-glassy
+            label: Lendee and Kitish
+            kind: entity
+            refs: ['app/main.py:1']
+          - id: tray-glassy
+            label: Tray and TrayGlady
+            kind: entity
+            refs: ['app/main.py:1']
+          - id: eld-decagram
+            label: eld decagram
+            kind: entity
+            refs: ['app/main.py:1']
+    implements:
+      - adapter: tray-lubricator
+        port: tray-lubricator-bawn
+      - adapter: lendee-lubricator
+        port: lendee-lubricator-bawn
