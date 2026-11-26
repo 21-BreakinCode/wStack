@@ -4,7 +4,11 @@ wStack is a Claude Code plugin. The repository root is the plugin root.
 
 ## Before every commit
 
-Run `bash tests/run-all.sh`. It runs every `tests/test_*.sh` file at the top level of `tests/`. It skips `tests/spikes/`.
+Run the test files that cover the change, for example `python3 tests/contract/test_contract_diagrams_svg.py` or `bash tests/test_contract_render.sh`.
+
+## Before a merge to main
+
+Run `bash tests/run-all.sh` once. It runs every `tests/test_*.sh` file at the top level of `tests/`, and it takes about 7 minutes. It skips `tests/spikes/`.
 
 ## Test rules
 
