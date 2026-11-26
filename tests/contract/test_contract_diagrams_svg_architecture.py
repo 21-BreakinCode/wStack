@@ -117,6 +117,15 @@ class Architecture(Base):
         self.assertGreaterEqual(workers[1], group[1] + group[3])
         self.assertEqual(workers[0], group[0])
 
+    def test_pair_past_a_wrapped_pill_row_gets_a_lane(self):
+        architecture = {"layers": [
+            {"name": "wide", "components": [{"id": "w%02d" % k, "label": "Quillon gate"} for k in range(14)]},
+            {"name": "next", "components": [{"id": "nib", "label": "Nib port"}]}],
+            "implements": [{"adapter": "w00", "port": "nib"}]}
+        boxes, _ = shapes(cds.svg_architecture(architecture, "a"))
+        self.assertEqual(len({boxes["w%02d" % k][0][1] for k in range(14)}), 2, "the wide layer wraps onto two rows")
+        self.assert_implements_cross_no_other_pill(architecture)
+
     def test_wide_layer_wraps_pills(self):
         architecture = {"layers": [{"name": "wide", "components": [
             {"id": "p%02d" % k, "label": "twelve chars"} for k in range(14)]}]}

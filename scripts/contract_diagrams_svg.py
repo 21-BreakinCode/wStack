@@ -534,11 +534,12 @@ def svg_states(lifecycle, prefix):
     return canvas.svg()
 
 
-def lane_pairs(implements, layers, siblings):
-    """The implements pairs that need their own lanes: a sibling pill with a nested pill, or two nested pills more
-    than one layer apart. A straight line between those can cross the pills of the rows between them."""
-    row_of = {c["id"]: (depth, False) for depth, layer in enumerate(layers) for c in layer.get("components") or []}
-    row_of.update({c["id"]: (0, True) for layer in siblings for c in layer.get("components") or []})
+def lane_pairs(implements, group_rows, sibling_rows):
+    """The implements pairs that need their own lanes: a sibling pill with a nested pill, or two pills with a pill row
+    between them. A straight line between those can cross the pills of the rows between them."""
+    nested_rows = [row for rows in group_rows for row in rows]
+    row_of = {name: (number, False) for number, row in enumerate(nested_rows) for name, _, _ in row}
+    row_of.update({name: (number, True) for rows in sibling_rows for number, row in enumerate(rows) for name, _, _ in row})
     ends = [(pair, row_of.get(pair["adapter"]), row_of.get(pair["port"])) for pair in implements]
     return [pair for pair, adapter, port in ends
             if adapter and port and (adapter[1] != port[1] or abs(adapter[0] - port[0]) > 1)]
@@ -646,16 +647,22 @@ def svg_architecture(architecture, prefix):
     labels = {c["id"]: str(c.get("label") or c["id"]) for layer in layers for c in layer.get("components") or []}
     siblings = [layer for layer in layers if layer.get("sibling")]
     layers = [layer for layer in layers if not layer.get("sibling")]
-    crossing = lane_pairs(architecture.get("implements") or [], layers, siblings)
+    crossing = []
+    while True:  # wrapped rows can need more lanes, and more lanes take more width: wrap again until the count stays
+        gap = max(24, LANE_PITCH * (len(crossing) + 1))
+        budget = PAGE_LIMIT - 2 * PAD - (gap if crossing else 0)
+        # an outer layer is 48px wider than its inner layer, so each level takes 48px of budget
+        group_rows = [pill_rows(layer, labels, budget - 48 * depth) for depth, layer in enumerate(layers)]
+        sibling_rows = [pill_rows(layer, labels, budget) for layer in siblings]
+        found = lane_pairs(architecture.get("implements") or [], group_rows, sibling_rows)
+        if len(found) <= len(crossing):
+            break
+        crossing = found
+    crossing = found
     # Lane k runs 42 + LANE_PITCH * k below its row's top and LANE_PITCH from its neighbors in the gap beside the
     # nested group. The rows, the pill rows and the gap grow so the last band stays 4px above the next pills.
     lane_room = 34 + LANE_PITCH * (len(crossing) - 1)
     row_h, row_pitch, gap = max(LAYER_HEAD, lane_room), max(PILL_ROW, lane_room), max(24, LANE_PITCH * (len(crossing) + 1))
-    budget = PAGE_LIMIT - 2 * PAD - (gap if crossing else 0)
-    # an outer layer is 48px wider than its inner layer, so each level takes 48px of budget
-    group_rows = [pill_rows(layer, labels, budget - 48 * depth)
-                  for depth, layer in enumerate(layers)]
-    sibling_rows = [pill_rows(layer, labels, budget) for layer in siblings]
     canvas = Canvas(prefix, caption("architecture", architecture))
     placed, group_right = place_layers(layers, siblings, group_rows, sibling_rows, row_h, gap, row_pitch)
     pills = draw_layers(canvas, placed, labels, row_pitch)
