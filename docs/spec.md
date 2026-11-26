@@ -157,6 +157,7 @@ wstack/
 │   ├── contract_render.py         the renderer that contract-render.sh calls
 │   ├── contract_diagrams.py       draws the diagrams block as ASCII, hashes subjects
 │   ├── contract_diagrams_svg.py   draws the diagrams block as SVG
+│   ├── contract_diagrams_arch_svg.py  draws the architecture picture for contract_diagrams_svg.py
 │   ├── contract-diagram.sh        stamps, installs, lists stale, and restores deep dives
 │   ├── contract-open.sh           finds a contract, renders stale views, opens the page or the note
 │   ├── contract-deliver.sh        write, undo, and rehearse the Deliver step of a contract task
