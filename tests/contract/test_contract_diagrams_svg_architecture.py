@@ -95,6 +95,20 @@ class Architecture(Base):
             self.assertEqual(len(bands), 2 * count)
             self.assertEqual(len(bands), len(set(bands)), "%d crossing edges share a band" % count)
 
+    def test_lanes_from_sibling_pills_to_outer_pills_cross_no_other_pill(self):
+        for count in (1, 2, 3, 4, 6):  # both ends of each lane sit in the top pill row
+            architecture = {"layers": [
+                {"name": "outer", "components": [{"id": "o%d" % k, "label": "Outer %d" % k} for k in range(count)]},
+                {"name": "inner", "components": [{"id": "i0", "label": "Inner"}]},
+                {"name": "jobs", "sibling": True, "components": [{"id": "j%d" % k, "label": "Job %d" % k}
+                                                                 for k in range(count)]}],
+                "implements": [{"adapter": "j%d" % k, "port": "o%d" % k} for k in range(count)]}
+            self.assert_implements_cross_no_other_pill(architecture)
+            text = cds.svg_architecture(architecture, "a")
+            _, jobs_top, _, jobs_height = rects_of_class(text, "layer")[-1]
+            lowest = max(y for _, _, _, _, points in shapes(text)[1] for _, y in points)
+            self.assertLessEqual(lowest + 4, jobs_top + jobs_height, "%d lanes run below the sibling box" % count)
+
     def test_media_architecture_fits(self):
         text = cds.svg_architecture(MEDIA["architecture"], "architecture")
         self.assertLessEqual(view_width(text), cds.PAGE_LIMIT)
@@ -151,8 +165,8 @@ class Architecture(Base):
                     crosses = (min(x0, x1) < bx + bw - 0.5 and max(x0, x1) > bx + 0.5
                                and min(y0, y1) < by + bh - 0.5 and max(y0, y1) > by + 0.5)
                     self.assertFalse(crosses, "%s->%s crosses %s" % (source, target, name))
-            lanes = {round(y, 1) for _, y in points[1:-1]}
-            self.assertGreater(len(lanes), 1)
+            # a lane: down, along a band, through the gap, along a band, up; both bands are one band in one pill row
+            self.assertEqual(len(points), 6, "%s->%s does not run in a lane" % (source, target))
 
     def test_sibling_only_block_with_implements_stays_inside_view_box(self):
         architecture = {"layers": [

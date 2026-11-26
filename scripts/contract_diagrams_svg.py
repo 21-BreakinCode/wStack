@@ -17,7 +17,7 @@ PAD = 12
 BOX_H = 30
 SLOT = 36  # flow overview: vertical distance between two edge ends on one side of a part
 LANE_GAP = 10  # flow overview: space between a part and its nearest lane, and between the last lane and the zone edge
-LANE_PITCH = 8  # flow overview: distance between two lanes
+LANE_PITCH = 8  # flow overview and architecture: distance between two lanes
 CALLBACK_GAP = 36  # flow overview: space between a callback box and the zone
 LOOP_W = 28  # sequence: width of a self-step loop
 STEP = 36  # sequence: vertical distance between two steps
@@ -556,7 +556,8 @@ def plan_lane_ends(crossing, pills):
     """The (x, pill bottom, band y) of both ends of each lane. Lane 0 is the innermost: the lane ends nest, so
     lanes never meet. The end on the lower pill (bottom end) takes bands and x in lane order, and the end on the
     higher pill (top end) in reverse. Lanes that meet one pill spread LANE_PITCH apart around its center; a
-    narrow pill squeezes them. Bands of one pill row are LANE_PITCH apart."""
+    narrow pill squeezes them. Each lane takes one band in each pill row it meets, LANE_PITCH apart, so a row
+    holds at most one band per lane. A lane with both ends in one row runs both ends on one band."""
     ends = []
     for lane, pair in enumerate(crossing):
         adapter_is_bottom = pills[pair["adapter"]][1] >= pills[pair["port"]][1]
@@ -567,8 +568,9 @@ def plan_lane_ends(crossing, pills):
         by_pill[end[2]].append(end)
         by_row[pills[end[2]][1]].append(end)
     for row_top, row_ends in by_row.items():
-        for slot, end in enumerate(sorted(row_ends, key=rank)):
-            bands[end[:2]] = row_top - 12 + 42 + LANE_PITCH * slot
+        row_lanes = list(dict.fromkeys(end[0] for end in sorted(row_ends, key=rank)))
+        for end in row_ends:
+            bands[end[:2]] = row_top - 12 + 42 + LANE_PITCH * row_lanes.index(end[0])
     for name, pill_ends in by_pill.items():
         center, width = pills[name][0], pills[name][3]
         pitch = min(LANE_PITCH, (width - 16) / max(len(pill_ends) - 1, 1))
@@ -617,7 +619,9 @@ def place_layers(layers, siblings, group_rows, sibling_rows, row_h, gap, row_pit
     under = bool(layers and siblings) and beside_width > PAGE_LIMIT
     x, top = (PAD, PAD + heights[0] + 24) if under else (group_right + gap if layers else PAD, PAD)
     for layer, rows, width in zip(siblings, sibling_rows, sibling_widths):
-        placed.append((layer, rows, x, top, width, heights_of(rows)))
+        # A band runs at most row_pitch + 8 below the line 12px above its pill row. No inner layer sits under a
+        # sibling, so the sibling box grows to keep its last band 4px inside.
+        placed.append((layer, rows, x, top, width, max(heights_of(rows), len(rows) * row_pitch + 12)))
         x += width + 24
     return placed, max(group_right, x - 24) if under else group_right
 
