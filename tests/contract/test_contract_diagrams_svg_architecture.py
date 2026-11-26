@@ -38,6 +38,16 @@ def sibling_row(count, mirrored):
                        for k in range(count)]}
 
 
+def sibling_to_outer(count):
+    """Job k in a sibling implements pill k of the outer layer. No lane ends in the inner layer."""
+    return {"layers": [
+        {"name": "outer", "components": [{"id": "o%d" % k, "label": "Outer %d" % k} for k in range(count)]},
+        {"name": "inner", "components": [{"id": "i0", "label": "Inner"}]},
+        {"name": "jobs", "sibling": True, "components": [{"id": "j%d" % k, "label": "Job %d" % k}
+                                                         for k in range(count)]}],
+        "implements": [{"adapter": "j%d" % k, "port": "o%d" % k} for k in range(count)]}
+
+
 class Architecture(Base):
     def test_architecture_nests_and_joins_pills(self):
         architecture = DIAGRAMS["architecture"]
@@ -118,17 +128,17 @@ class Architecture(Base):
 
     def test_lanes_from_sibling_pills_to_outer_pills_cross_no_other_pill(self):
         for count in (1, 2, 3, 4, 6):  # both ends of each lane sit in the top pill row
-            architecture = {"layers": [
-                {"name": "outer", "components": [{"id": "o%d" % k, "label": "Outer %d" % k} for k in range(count)]},
-                {"name": "inner", "components": [{"id": "i0", "label": "Inner"}]},
-                {"name": "jobs", "sibling": True, "components": [{"id": "j%d" % k, "label": "Job %d" % k}
-                                                                 for k in range(count)]}],
-                "implements": [{"adapter": "j%d" % k, "port": "o%d" % k} for k in range(count)]}
+            architecture = sibling_to_outer(count)
             self.assert_implements_cross_no_other_pill(architecture)
             text = cds.svg_architecture(architecture, "a")
             _, jobs_top, _, jobs_height = rects_of_class(text, "layer")[-1]
             lowest = max(y for _, _, _, _, points in shapes(text)[1] for _, y in points)
             self.assertLessEqual(lowest + 4, jobs_top + jobs_height, "%d lanes run below the sibling box" % count)
+
+    def test_innermost_box_grows_only_for_its_own_lanes(self):
+        for count in (3, 6):
+            outer, inner, _ = rects_of_class(cds.svg_architecture(sibling_to_outer(count), "a"), "layer")
+            self.assertEqual(inner[3], inner[1] - outer[1], "%d lanes: the inner box is taller than one row" % count)
 
     def test_each_layer_box_holds_its_bands(self):
         for count in (3, 4, 6):

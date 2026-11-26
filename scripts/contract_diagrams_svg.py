@@ -661,18 +661,21 @@ def layer_width(layer, rows):
     return max([30 + text_width(layer.get("name", ""))] + ends)
 
 
-def place_layers(layers, siblings, group_rows, sibling_rows, row_h, gap, row_pitch):
+def place_layers(layers, siblings, group_rows, sibling_rows, row_h, gap, row_pitch, lane_end_names):
     """Boxes as (layer, pill rows, x, y, width, height), and the x where the lanes' vertical gap starts.
     Siblings sit right of the nested group, or under it when beside would pass PAGE_LIMIT."""
     heights_of = lambda rows: row_h + (len(rows) - 1) * row_pitch
     # A band runs at most row_pitch + 8 below the line 12px above its pill row. No layer sits under a sibling or the
-    # innermost layer, so those boxes grow to keep their last band 4px inside.
+    # innermost layer, so those boxes grow to keep their last band 4px inside: the innermost one only if a lane ends
+    # in it.
     holds_bands = lambda rows: max(heights_of(rows), len(rows) * row_pitch + 12)
+    has_lane_end = lambda rows: any(name in lane_end_names for row in rows for name, _, _ in row)
     widths, heights, inner_w, inner_h = [0] * len(layers), [0] * len(layers), 0, 0
     for depth in reversed(range(len(layers))):
         widths[depth] = inner_w = max(layer_width(layers[depth], group_rows[depth]), inner_w + 48 if inner_w else 0)
         own_rows = group_rows[depth]
-        heights[depth] = inner_h = heights_of(own_rows) + inner_h + 24 if inner_h else holds_bands(own_rows)
+        innermost_h = holds_bands(own_rows) if has_lane_end(own_rows) else heights_of(own_rows)
+        heights[depth] = inner_h = heights_of(own_rows) + inner_h + 24 if inner_h else innermost_h
     placed, y = [], PAD
     for depth, layer in enumerate(layers):
         placed.append((layer, group_rows[depth], PAD + 24 * depth, y, widths[depth], heights[depth]))
@@ -725,7 +728,9 @@ def svg_architecture(architecture, prefix):
     lane_room = 34 + LANE_PITCH * (len(crossing) - 1)
     row_h, row_pitch, gap = max(LAYER_HEAD, lane_room), max(PILL_ROW, lane_room), max(24, LANE_PITCH * (len(crossing) + 1))
     canvas = Canvas(prefix, caption("architecture", architecture))
-    placed, group_right = place_layers(layers, siblings, group_rows, sibling_rows, row_h, gap, row_pitch)
+    lane_end_names = {pair[side] for pair in crossing for side in ("adapter", "port")}
+    placed, group_right = place_layers(layers, siblings, group_rows, sibling_rows, row_h, gap, row_pitch,
+                                       lane_end_names)
     pills = draw_layers(canvas, placed, labels, row_pitch)
     lane_ends = plan_lane_ends(crossing, pills, group_right + gap / 2)
     lane_of = {id(pair): lane for lane, pair in enumerate(crossing)}
