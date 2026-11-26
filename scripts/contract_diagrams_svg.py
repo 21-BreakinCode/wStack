@@ -587,33 +587,53 @@ def lane_route(adapter_end, port_end, gap_x):
             (gap_x, port_band), (port_x, port_band), (port_x, port_edge)]
 
 
-def plan_lane_ends(crossing, pills):
-    """The (x, pill bottom, band y) of both ends of each lane. Lane 0 is the innermost: the lane ends nest, so
-    lanes never meet. The end on the lower pill (bottom end) takes bands and x in lane order, and the end on the
-    higher pill (top end) in reverse. Lanes that meet one pill spread LANE_PITCH apart around its center; a
-    narrow pill squeezes them. Each lane takes one band in each pill row it meets, LANE_PITCH apart, so a row
-    holds at most one band per lane. A lane with both ends in one row runs both ends on one band."""
-    ends = []
+def plan_lane_ends(crossing, pills, gap_center):
+    """The (x, pill bottom, band y) of both ends of each lane, and its place in the gap, 0 nearest the nested group.
+
+    In each pill row, the lane end nearest the gap takes the band nearest the pills, LANE_PITCH apart, and a lane
+    with both ends in one row runs both on one band. Of two ends on one pill, a lane that stays in the row goes
+    first, the one with the nearer other end first. Then the lane with the nearer other row goes first at a lower
+    end and last at an upper end, and then the lane whose other end is farther from the gap goes first. So the
+    lanes nest. Ends on one pill spread LANE_PITCH apart around its center, the nearer band nearer the gap; a
+    narrow pill squeezes them. In the gap, the shortest runs start innermost, and two neighbors swap while that
+    lets fewer arms pass another lane's run."""
+    distance = lambda name: abs(pills[name][0] - gap_center)
+    by_row, by_pill, bands, xs = collections.defaultdict(list), collections.defaultdict(list), {}, {}
     for lane, pair in enumerate(crossing):
-        adapter_is_bottom = pills[pair["adapter"]][1] >= pills[pair["port"]][1]
-        ends += [(lane, "adapter", pair["adapter"], adapter_is_bottom), (lane, "port", pair["port"], not adapter_is_bottom)]
-    rank = lambda end: end[0] if end[3] else -end[0]  # bottom ends ascend with the lane, top ends descend
-    bands, xs, by_pill, by_row = {}, {}, collections.defaultdict(list), collections.defaultdict(list)
-    for end in ends:
-        by_pill[end[2]].append(end)
-        by_row[pills[end[2]][1]].append(end)
+        for side, other in (("adapter", "port"), ("port", "adapter")):
+            name, far = pair[side], pair[other]
+            rows_apart, lower = pills[name][1] - pills[far][1], pills[name][1] > pills[far][1]
+            tie = ((0, distance(far)) if not rows_apart else
+                   (1, abs(rows_apart) if lower else -abs(rows_apart), -distance(far), lane if lower else -lane))
+            by_row[pills[name][1]].append(((distance(name), tie), lane, side))
+            by_pill[name].append((lane, side))
     for row_top, row_ends in by_row.items():
-        row_lanes = list(dict.fromkeys(end[0] for end in sorted(row_ends, key=rank)))
-        for end in row_ends:
-            bands[end[:2]] = row_top - 12 + 42 + LANE_PITCH * row_lanes.index(end[0])
+        row_lanes = list(dict.fromkeys(lane for _, lane, _ in sorted(row_ends)))
+        for _, lane, side in row_ends:
+            bands[(lane, side)] = row_top + 30 + LANE_PITCH * row_lanes.index(lane)
     for name, pill_ends in by_pill.items():
         center, width = pills[name][0], pills[name][3]
-        pitch = min(LANE_PITCH, (width - 16) / max(len(pill_ends) - 1, 1))
-        for place, end in enumerate(sorted(pill_ends, key=lambda end: (not end[3], -rank(end)))):
-            xs[end[:2]] = center + (place - (len(pill_ends) - 1) / 2) * pitch
+        pitch = min(LANE_PITCH, (width - 16) / max(len(pill_ends) - 1, 1)) * (1 if center < gap_center else -1)
+        for place, end in enumerate(sorted(pill_ends, key=lambda end: -bands[end])):
+            xs[end] = center + (place - (len(pill_ends) - 1) / 2) * pitch
+    spans = {lane: sorted(bands[(lane, side)] for side in ("adapter", "port")) for lane in range(len(crossing))}
+
+    def passes(first, second):  # arms that pass the gap run of another lane when first runs nearer the group
+        inside = lambda y, lane: spans[lane][0] < y < spans[lane][1]
+        arms = lambda lane, right: [bands[end] for end in ((lane, "adapter"), (lane, "port"))
+                                    if (xs[end] > gap_center) == right]
+        return sum(inside(y, first) for y in arms(second, False)) + sum(inside(y, second) for y in arms(first, True))
+
+    order = sorted(range(len(crossing)), key=lambda lane: spans[lane][1] - spans[lane][0])
+    swapped = True
+    while swapped:  # each swap lowers the count of passing arms, so this ends
+        swapped = False
+        for k in range(len(order) - 1):
+            if passes(order[k + 1], order[k]) < passes(order[k], order[k + 1]):
+                order[k], order[k + 1], swapped = order[k + 1], order[k], True
     edge = lambda lane, side: pills[crossing[lane][side]][2]
     return {lane: tuple((xs[(lane, side)], edge(lane, side), bands[(lane, side)]) for side in ("adapter", "port"))
-            for lane in range(len(crossing))}
+            + (order.index(lane),) for lane in range(len(crossing))}
 
 
 def pill_rows(layer, labels, max_width):
@@ -702,15 +722,15 @@ def svg_architecture(architecture, prefix):
     canvas = Canvas(prefix, caption("architecture", architecture))
     placed, group_right = place_layers(layers, siblings, group_rows, sibling_rows, row_h, gap, row_pitch)
     pills = draw_layers(canvas, placed, labels, row_pitch)
-    lane_ends = plan_lane_ends(crossing, pills)
+    lane_ends = plan_lane_ends(crossing, pills, group_right + gap / 2)
     lane_of = {id(pair): lane for lane, pair in enumerate(crossing)}
     for pair in architecture.get("implements") or []:
         adapter, port = pills.get(pair["adapter"]), pills.get(pair["port"])
         if not adapter or not port:
             continue
         if id(pair) in lane_of:
-            lane = lane_of[id(pair)]
-            d = line(*lane_route(*lane_ends[lane], group_right + gap * (lane + 1) / (len(crossing) + 1)))
+            adapter_end, port_end, place = lane_ends[lane_of[id(pair)]]
+            d = line(*lane_route(adapter_end, port_end, group_right + gap * (place + 1) / (len(crossing) + 1)))
         elif adapter[1] < port[1]:
             d = line((adapter[0], adapter[2]), (port[0], port[1]))
         elif adapter[1] > port[1]:

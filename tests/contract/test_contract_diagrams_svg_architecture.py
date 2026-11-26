@@ -2,6 +2,7 @@
 python3 tests/contract/test_contract_diagrams_svg_architecture.py"""
 import copy
 import hashlib
+import itertools
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -15,6 +16,26 @@ TWO_LANES_FROM_ONE_PILL = {"layers": [
     {"name": "mid", "components": [{"id": "m", "label": "Middle"}]},
     {"name": "adapters", "components": [{"id": "ad", "label": "Adapter"}]}],
     "implements": [{"adapter": "ad", "port": "pa"}, {"adapter": "ad", "port": "pb"}]}
+
+
+def two_rows_apart(mirrored):
+    """Adapters a1 and a2 in one row implement ports p1 and p2 two layers down. Mirrored: a1 -> p2 and a2 -> p1."""
+    ports = ["p2", "p1"] if mirrored else ["p1", "p2"]
+    return {"layers": [
+        {"name": "outer", "components": [{"id": "a1", "label": "Adapter one"}, {"id": "a2", "label": "Adapter two"}]},
+        {"name": "mid", "components": [{"id": "m", "label": "Middle"}]},
+        {"name": "inner", "components": [{"id": "p1", "label": "Port one"}, {"id": "p2", "label": "Port two"}]}],
+        "implements": [{"adapter": "a1", "port": ports[0]}, {"adapter": "a2", "port": ports[1]}]}
+
+
+def sibling_row(count, mirrored):
+    """A sibling beside one nested layer, all lane ends in one pill row. Job k implements core pill k, or pill
+    count - 1 - k when mirrored."""
+    return {"layers": [
+        {"name": "core", "components": [{"id": "c%d" % k, "label": "C%d" % k} for k in range(count)]},
+        {"name": "jobs", "sibling": True, "components": [{"id": "j%d" % k, "label": "J%d" % k} for k in range(count)]}],
+        "implements": [{"adapter": "j%d" % k, "port": "c%d" % (count - 1 - k if mirrored else k)}
+                       for k in range(count)]}
 
 
 class Architecture(Base):
@@ -110,12 +131,8 @@ class Architecture(Base):
             self.assertLessEqual(lowest + 4, jobs_top + jobs_height, "%d lanes run below the sibling box" % count)
 
     def test_each_layer_box_holds_its_bands(self):
-        for count in (3, 4, 6):  # a sibling beside one nested layer
-            architecture = {"layers": [
-                {"name": "core", "components": [{"id": "c%d" % k, "label": "C%d" % k} for k in range(count)]},
-                {"name": "jobs", "sibling": True, "components": [{"id": "j%d" % k, "label": "J%d" % k}
-                                                                 for k in range(count)]}],
-                "implements": [{"adapter": "j%d" % k, "port": "c%d" % k} for k in range(count)]}
+        for count in (3, 4, 6):
+            architecture = sibling_row(count, mirrored=False)
             self.assert_implements_cross_no_other_pill(architecture)
             text = cds.svg_architecture(architecture, "a")
             boxes, edges = shapes(text)
@@ -128,6 +145,22 @@ class Architecture(Base):
                                   and r[1] <= y and y + height <= r[1] + r[3]), key=lambda r: r[3])
                     self.assertLessEqual(band_y + 4, holder[1] + holder[3],
                                          "%d lanes: the band under %s runs below its layer box" % (count, name))
+
+    def assert_lane_crossings(self, architecture, most):
+        """No two implements paths meet more than most times, for the implements list in either order."""
+        for implements in (architecture["implements"], architecture["implements"][::-1]):
+            _, edges = shapes(cds.svg_architecture(dict(architecture, implements=implements), "a"))
+            for (s1, t1, _, _, p), (s2, t2, _, _, q) in itertools.combinations(edges, 2):
+                count = sum(segments_meet(a, b, c, d) for a, b in zip(p, p[1:]) for c, d in zip(q, q[1:]))
+                self.assertLessEqual(count, most, "%s->%s and %s->%s meet %d times" % (s1, t1, s2, t2, count))
+
+    def test_lanes_nest_when_the_orders_mirror(self):
+        # Both lane ends leave from a pill bottom, so lanes nest when the adapter order seen from below mirrors the
+        # port order. The same order forces one crossing per pair.
+        for mirrored, most in ((True, 0), (False, 1)):
+            for architecture in [two_rows_apart(mirrored)] + [sibling_row(count, mirrored) for count in (2, 3, 6)]:
+                self.assert_implements_cross_no_other_pill(architecture)
+                self.assert_lane_crossings(architecture, most)
 
     def test_media_architecture_fits(self):
         text = cds.svg_architecture(MEDIA["architecture"], "architecture")
