@@ -55,7 +55,8 @@ check_yq() {
   command -v yq >/dev/null 2>&1 || { missing yq 'brew install yq'; return; }
   yq_version="$(yq --version 2>&1 || true)"
   case "$yq_version" in
-    *mikefarah*" v4."*) check yq 'yq --version' 4.22.1 'brew upgrade yq' ;;  # pick needs 4.22.1
+    # yq before 4.30.3 prints "version 4.x" with no "v". 4.30.8 is the oldest yq the full test suite passed on.
+    *mikefarah*" version v4."* | *mikefarah*" version 4."*) check yq 'yq --version' 4.30.8 'brew upgrade yq' ;;
     *) missing yq 'brew install yq' ;;  # the contract needs mikefarah yq v4, not the Python yq
   esac
 }

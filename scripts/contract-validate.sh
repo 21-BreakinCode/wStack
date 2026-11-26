@@ -9,7 +9,7 @@ contract_file="${1:-}"
 
 yq_version="$(yq --version 2>&1 || true)"
 case "$yq_version" in
-  *mikefarah*" v4."*) ;;
+  *mikefarah*" version v4."* | *mikefarah*" version 4."*) ;;
   *) echo "contract-validate.sh: needs mikefarah yq v4: brew install yq" >&2; exit 2 ;;
 esac
 

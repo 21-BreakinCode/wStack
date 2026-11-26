@@ -99,7 +99,7 @@ Plugin facts from the Claude Code plugin reference:
 - Prefer `skills/` over `commands/` for new plugins.
 - `${CLAUDE_PLUGIN_ROOT}` is the plugin's install path. Each plugin update changes this path. Do not write state there.
 
-The contract scripts need `yq` version 4.22.1 or later from mikefarah (`brew install yq`). `scripts/preflight.sh` checks for it.
+The contract scripts need `yq` version 4.30.8 or later from mikefarah (`brew install yq`). `scripts/preflight.sh` checks for it.
 
 So the plugin `name` is `wstack` and the `displayName` is `wStack`. The commands appear as `/wstack:start-task` and `/wstack:run-retro`.
 

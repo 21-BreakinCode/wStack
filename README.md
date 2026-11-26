@@ -142,7 +142,7 @@ npm i -g @playwright/cli@0.1.24
 brew install herdr
 ```
 
-`yq` must be mikefarah `yq` version 4.22.1 or later. Another tool with the same name does not work. Preflight checks it.
+`yq` must be mikefarah `yq` version 4.30.8 or later. Another tool with the same name does not work. Preflight checks it.
 
 herdr is optional. Without it, preflight only warns.
 

@@ -47,15 +47,25 @@ run_preflight base
 assert "python yq exits 1" '[ "$rc" = "1" ]'
 assert "python yq line" 'echo "$output" | grep -qx "MISSING yq: brew install yq"'
 
-fresh_bin; make_stub yq 'echo "yq (https://github.com/mikefarah/yq/) version v4.21.0"'
+# yq before 4.30.3 prints its version with no "v"; it must get the upgrade line, not MISSING.
+fresh_bin; make_stub yq 'echo "yq (https://github.com/mikefarah/yq/) version 4.22.1"'
 run_preflight base
-assert "yq 4.21.0 exits 1" '[ "$rc" = "1" ]'
-assert "yq 4.21.0 line asks for the upgrade" 'echo "$output" | grep -qx "OLD yq 4.21.0 (need 4.22.1): brew upgrade yq"'
+assert "yq 4.22.1 exits 1" '[ "$rc" = "1" ]'
+assert "yq 4.22.1 (no v) line asks for the upgrade" 'echo "$output" | grep -qx "OLD yq 4.22.1 (need 4.30.8): brew upgrade yq"'
 
-fresh_bin; make_stub yq 'echo "yq (https://github.com/mikefarah/yq/) version v4.22.1"'
+fresh_bin; make_stub yq 'echo "yq (https://github.com/mikefarah/yq/) version v4.30.7"'
 run_preflight base
-assert "yq 4.22.1 exits 0" '[ "$rc" = "0" ]'
-assert "yq 4.22.1 line" 'echo "$output" | grep -qx "OK yq 4.22.1"'
+assert "yq 4.30.7 exits 1" '[ "$rc" = "1" ]'
+assert "yq 4.30.7 line asks for the upgrade" 'echo "$output" | grep -qx "OLD yq 4.30.7 (need 4.30.8): brew upgrade yq"'
+
+fresh_bin; make_stub yq 'echo "yq (https://github.com/mikefarah/yq/) version v4.30.8"'
+run_preflight base
+assert "yq 4.30.8 exits 0" '[ "$rc" = "0" ]'
+assert "yq 4.30.8 line" 'echo "$output" | grep -qx "OK yq 4.30.8"'
+
+fresh_bin; make_stub yq 'echo "yq (https://github.com/mikefarah/yq/) version v5.0.0"'
+run_preflight base
+assert "mikefarah yq 5 is not taken for v4" 'echo "$output" | grep -qx "MISSING yq: brew install yq"'
 
 fresh_bin; rm "$stub_bin/yq"
 run_preflight base

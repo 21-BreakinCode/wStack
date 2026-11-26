@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.1 - 2026-11-26
+
+- **fix:** wStack needs mikefarah `yq` version 4.30.8 or later, not 4.22.1. The scripts use `-r` (yq 4.25.3) and `"\n"` in an expression (yq 4.30.3). 4.30.8 is the oldest yq that the full test suite passed on. On yq 4.22.1, 99 checks failed.
+- **fix:** Preflight now reports an old mikefarah `yq` as `OLD yq <version> (need 4.30.8)`. Before, a yq older than 4.30.3 was reported as `MISSING`, because it prints its version with no `v`.
+
 ## 0.10.0 - 2026-11-26
 
 - **feat:** A service contract can hold a `diagrams` block with four subjects: the component `flow`, `sequences`, `states`, and the `architecture` layers. The validator checks its shape. `contract-refs.sh` proves every ref in it. The vault note draws the block as ASCII, and the HTML page draws it as SVG. A contract with no `diagrams` block stays valid and renders as before.
