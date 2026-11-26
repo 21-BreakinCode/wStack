@@ -773,9 +773,8 @@ class Geometry(Base):
         first, second = [points for _, _, _, _, points in edges]
         # the first lane has the higher band, so it leaves right of the second lane
         self.assertGreater(first[0][0], second[0][0])
-        leaving_first, leaving_second = first[:3], second[:3]  # pill, own band, gap: the part the spread orders
-        for a, b in zip(leaving_first, leaving_first[1:]):
-            for c, d in zip(leaving_second, leaving_second[1:]):
+        for a, b in zip(first, first[1:]):
+            for c, d in zip(second, second[1:]):
                 self.assertFalse(segments_meet(a, b, c, d), "lanes cross at %s-%s and %s-%s" % (a, b, c, d))
 
     def assert_implements_cross_no_other_pill(self, architecture):
