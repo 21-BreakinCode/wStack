@@ -1,4 +1,5 @@
 """Unit tests for scripts/contract_diagrams.py: python3 tests/contract/test_contract_diagrams.py"""
+import copy
 import json
 import re
 import subprocess
@@ -22,6 +23,27 @@ def setUpModule():
     media = subprocess.check_output(
         ["yq", "-o=json", str(ROOT / "tests/fixtures/contract/media-shaped-diagrams.yaml")])
     MEDIA.update(json.loads(media)["diagrams"])
+
+
+class SubjectsAndHash(unittest.TestCase):
+    def test_subjects_order(self):
+        self.assertEqual(list(cd.subjects(DIAGRAMS)),
+                         ["flow", "sequence:create", "states:item-status", "architecture"])
+
+    def test_slug(self):
+        self.assertEqual(cd.subject_slug("sequence:create"), "sequence-create")
+
+    def test_hash_ignores_refs(self):
+        flow = copy.deepcopy(DIAGRAMS["flow"])
+        before = cd.shape_hash(flow)
+        flow["edges"][0]["refs"] = ["other/file.go:9"]
+        self.assertEqual(cd.shape_hash(flow), before)
+        flow["edges"][0]["label"] = "changed"
+        self.assertNotEqual(cd.shape_hash(flow), before)
+
+    def test_hash_is_key_order_free(self):
+        self.assertEqual(cd.shape_hash({"a": 1, "b": {"c": 2, "d": 3}}),
+                         cd.shape_hash({"b": {"d": 3, "c": 2}, "a": 1}))
 
 
 class Models(unittest.TestCase):
@@ -71,6 +93,20 @@ class Models(unittest.TestCase):
         self.assertEqual(cd.key_line("a", "b", "go"), "a → b: go")
         self.assertEqual(cd.key_line("a", "b", ""), "a → b")
         self.assertEqual(cd.short("x" * 50, width=10), "x" * 9 + "…")
+
+
+class ShortLabels(unittest.TestCase):
+    def test_short_label_width_limits(self):
+        exact = "圖" * 16
+        self.assertEqual(cd.short(exact), exact)
+        self.assertEqual(cd.short(exact, {}), exact)
+        notes = {}
+        cut = cd.short("圖" * 20, notes)
+        self.assertEqual(cut, "圖" * 14 + "…[1]")
+        self.assertEqual(cd.display_width(cut), 32)
+        plain = cd.short("圖" * 20)
+        self.assertEqual(plain, "圖" * 15 + "…")
+        self.assertEqual(cd.display_width(plain), 31)
 
 
 class DeepDives(unittest.TestCase):
