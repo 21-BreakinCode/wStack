@@ -5,6 +5,8 @@
 # Output: `changed: <ref>` per local ref, `unchecked: <ref>: cross-repo` per cross-repo ref, then a `refs:` count line.
 # Exit: 0 done, 2 error.
 set -euo pipefail
+plugin_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$plugin_root/scripts/lib/contract-refs-read.sh"
 
 fail() { echo "contract-ref-shift: $1" >&2; exit 2; }
 [ $# -eq 4 ] && [ -n "$1" ] && [ -n "$2" ] && [ -n "$3" ] && [ -n "$4" ] \
@@ -20,20 +22,17 @@ done
 contract_json="$(yq -o=json '.' "$contract_file")" || fail "contract is not valid YAML: $contract_file"
 changed_files="$(git -C "$repo_dir" diff --name-only --no-renames "$old_commit" "$new_commit")"
 
-cross_form='^[^/@:]+/[^/@:]+@[0-9a-f]+:'
 changed=0; unchanged=0; unchecked=0
 while IFS= read -r ref; do
   [ -n "$ref" ] || continue
   if [[ "$ref" =~ $cross_form ]]; then
     echo "unchecked: $ref: cross-repo"; unchecked=$((unchecked + 1)); continue
   fi
-  if printf '%s\n' "$changed_files" | grep -qxF -- "${ref%:*}"; then
+  if grep -qxF -- "${ref%:*}" <<<"$changed_files"; then
     echo "changed: $ref"; changed=$((changed + 1))
   else
     unchanged=$((unchanged + 1))
   fi
-done < <(jq -r '[(.sections // {} | .[] | objects | .items // [] | .[] | objects | .refs // [] | .[]),
-                 (.planned // [] | .[] | objects | .refs // [] | .[]),
-                 (.diagrams // {} | .. | objects | select(has("refs")) | .refs | arrays | .[])] | .[] | strings' <<<"$contract_json")
+done < <(contract_ref_lines "$contract_json")
 
 echo "refs: $changed changed, $unchanged unchanged, $unchecked unchecked"

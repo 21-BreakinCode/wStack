@@ -17,6 +17,7 @@ contract_file="$2"
 mapping_from="${4:-$contract_file}"
 plugin_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$plugin_root/scripts/lib/frontmatter.sh"
+source "$plugin_root/scripts/lib/contract-refs-read.sh"
 
 fail() { echo "contract-refs.sh: $1" >&2; exit 2; }
 expand_home() { local path="${1//\$HOME/$HOME}"; echo "${path/#\~/$HOME}"; }
@@ -56,7 +57,6 @@ clone_for() {  # <owner/repo>: print the local clone path, or nothing
 }
 
 lines_form='^[0-9]+(-[0-9]+)?(, *[0-9]+(-[0-9]+)?)*$'
-cross_form='^[^/@:]+/[^/@:]+@[0-9a-f]+:'
 checked=0; bad=0; unchecked=0
 
 while IFS= read -r ref; do
@@ -91,9 +91,7 @@ while IFS= read -r ref; do
     echo "bad: $ref: lines $past_end are outside $path ($line_count lines at $commit)"; bad=$((bad + 1)); continue
   fi
   checked=$((checked + 1))
-done < <(jq -r '[(.sections // {} | .[] | objects | .items // [] | .[] | objects | .refs // [] | .[]),
-                 (.planned // [] | .[] | objects | .refs // [] | .[]),
-                 (.diagrams // {} | .. | objects | select(has("refs")) | .refs | arrays | .[])] | .[] | strings' <<<"$contract_json")
+done < <(contract_ref_lines "$contract_json")
 
 echo "refs: $checked checked, $bad bad, $unchecked unchecked"
 [ "$bad" = 0 ]
