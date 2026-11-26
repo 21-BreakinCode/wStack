@@ -63,6 +63,63 @@ def view_width(text):
     return float(ET.fromstring(text).get("viewBox").split()[2])
 
 
+def transition(source, target, label):
+    return {"from": source, "to": target, "label": label, "refs": ["a.go:1"]}
+
+
+# The shape of a real lifecycle: 4 states, 8 transitions, 5 of them back or same-column arrows.
+TASK_STATUS = {"id": "task-status", "title": "Task status", "initial": "queued", "transitions": [
+    transition("queued", "done", "worker reports completed"),
+    transition("queued", "failed", "publish, worker failure, or stale sweep"),
+    transition("failed", "done", "late completed message"),
+    transition("queued", "waiting_result", "remote service accepts the job"),
+    transition("failed", "waiting_result", "remote message for a failed task"),
+    transition("waiting_result", "done", "remote result copied"),
+    transition("waiting_result", "failed", "job fails or worker error"),
+    transition("failed", "queued", "retry, retry_count below 3")]}
+
+
+def bezier(points, t):
+    while len(points) > 1:
+        points = [(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t) for a, b in zip(points, points[1:])]
+    return points[0]
+
+
+def path_samples(d):
+    """Points along a path of M, L, Q and C commands, about one pixel apart."""
+    out = []
+    for command, args in re.findall(r"([MLQC])([^MLQC]*)", d):
+        values = [float(v) for v in re.findall(r"-?\d+(?:\.\d+)?", args)]
+        controls = list(zip(values[0::2], values[1::2]))
+        if command == "M":
+            out.append(controls[0])
+            continue
+        controls = [out[-1]] + controls
+        steps = max(1, int(sum(abs(b[0] - a[0]) + abs(b[1] - a[1]) for a, b in zip(controls, controls[1:]))))
+        out += [bezier(controls, s / steps) for s in range(1, steps + 1)]
+    return out
+
+
+def label_rects(text):
+    """Edge labels as (text, (x, y, w, h)), with the width the module estimates for 13px text."""
+    out = []
+    for element in ET.fromstring(text).iter():
+        if element.get("class") == "lbl":
+            width, x = cds.text_width(element.text), float(element.get("x"))
+            left = {"start": x, "middle": x - width / 2, "end": x - width}[element.get("text-anchor")]
+            out.append((element.text, (left, float(element.get("y")) - 12, width, 16)))
+    return out
+
+
+def strictly_inside(point, rect, margin=0.5):
+    x, y, w, h = rect
+    return x + margin < point[0] < x + w - margin and y + margin < point[1] < y + h - margin
+
+
+def rects_overlap(a, b):
+    return a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
+
+
 class Base(unittest.TestCase):
     def assert_edges_touch(self, text, expected_pairs):
         boxes, edges = shapes(text)
@@ -81,6 +138,41 @@ class Base(unittest.TestCase):
                         crosses = (min(x0, x1) < bx + bw - 0.5 and max(x0, x1) > bx + 0.5
                                    and min(y0, y1) < by + bh - 0.5 and max(y0, y1) > by + 0.5)
                         self.assertFalse(crosses, "%s->%s crosses %s" % (source, target, name))
+
+    def assert_clean_states(self, lifecycle):
+        """Each transition has one path and one label. No path crosses a box other than its ends.
+        No label touches another label, a box, or a path other than its own. All of it is inside the view box."""
+        text = cds.svg_states(lifecycle, "s")
+        root = ET.fromstring(text)
+        _, _, view_w, view_h = (float(v) for v in root.get("viewBox").split())
+        boxes = {e.get("data-id"): tuple(float(e.get(k)) for k in ("x", "y", "width", "height"))
+                 for e in root.iter() if e.get("data-id") is not None}
+        paths = [((e.get("data-from"), e.get("data-to")), path_samples(e.get("d")))
+                 for e in root.iter() if e.tag.endswith("path") and e.get("class") == "edge"]
+        pairs = [(t["from"], t["to"]) for t in lifecycle["transitions"]]
+        self.assertEqual(sorted(owner for owner, _ in paths if owner[0] is not None), sorted(pairs))
+        labels = label_rects(text)
+        owner_of = {t["label"]: (t["from"], t["to"]) for t in lifecycle["transitions"] if t.get("label")}
+        self.assertEqual(sorted(name for name, _ in labels), sorted(owner_of))
+        in_view = lambda x, y: 0 <= x <= view_w and 0 <= y <= view_h
+        for owner, points in paths:
+            self.assertTrue(all(in_view(*p) for p in points), "%s->%s leaves the view box" % owner)
+            for name, box in boxes.items():
+                if name not in owner:
+                    self.assertFalse(any(strictly_inside(p, box) for p in points),
+                                     "%s->%s crosses %s" % (owner + (name,)))
+        for index, (name, rect) in enumerate(labels):
+            self.assertTrue(in_view(rect[0], rect[1]) and in_view(rect[0] + rect[2], rect[1] + rect[3]),
+                            "label %r leaves the view box" % name)
+            for other, other_rect in labels[index + 1:]:
+                self.assertFalse(rects_overlap(rect, other_rect), "label %r overlaps label %r" % (name, other))
+            for box_name, box in boxes.items():
+                self.assertFalse(rects_overlap(rect, box), "label %r overlaps box %s" % (name, box_name))
+            for owner, points in paths:
+                if owner != owner_of[name]:
+                    self.assertFalse(any(strictly_inside(p, rect) for p in points),
+                                     "label %r crosses the path %s->%s" % ((name,) + owner))
+        return text, boxes, paths, labels
 
 
 class Svg(Base):
@@ -227,6 +319,45 @@ class Geometry(Base):
                                                [(t["from"], t["to"]) for t in lifecycle["transitions"]])
         self.assert_no_box_crossing(boxes, edges)
 
+    def test_states_task_lifecycle_is_clean(self):
+        text, _, _, _ = self.assert_clean_states(TASK_STATUS)
+        self.assert_edges_touch(text, [(t["from"], t["to"]) for t in TASK_STATUS["transitions"]])
+
+    def test_states_other_lifecycles_are_clean(self):
+        lifecycle = copy.deepcopy(DIAGRAMS["states"][0])
+        self.assert_clean_states(lifecycle)
+        lifecycle["transitions"] += [{"from": "queued", "to": "queued", "label": "wait"},
+                                     {"from": "failed", "to": "done", "label": "manual fix"},
+                                     {"from": "new", "to": "failed", "label": "fast fail"},
+                                     {"from": "done", "to": "new", "label": "reopen"}]
+        self.assert_clean_states(lifecycle)
+        lifecycle["transitions"].append({"from": "queued", "to": "queued", "label": "heartbeat"})
+        _, boxes, paths, _ = self.assert_clean_states(lifecycle)
+        floor = max(y + h for _, y, _, h in boxes.values())
+        loop_depths = sorted(max(y for _, y in points) for owner, points in paths if owner == ("queued", "queued"))
+        self.assertEqual(len(loop_depths), 2)
+        self.assertTrue(loop_depths[0] <= boxes["queued"][1] < floor < loop_depths[1])
+
+    def test_states_back_and_same_column_arrows_get_own_lanes(self):
+        _, boxes, paths, labels = self.assert_clean_states(TASK_STATUS)
+        floor = max(y + h for _, y, _, h in boxes.values())
+        column_of = {name: box[0] for name, box in boxes.items()}
+        below = [t for t in TASK_STATUS["transitions"] if column_of[t["to"]] <= column_of[t["from"]]]
+        self.assertEqual(len(below), 5)
+        lowest = {}
+        for t in below:
+            points = [points for owner, points in paths if owner == (t["from"], t["to"])][0]
+            depth = max(y for _, y in points)
+            self.assertGreater(depth, floor, "%s->%s stays above the boxes" % (t["from"], t["to"]))
+            bottom = [x for x, y in points if abs(y - depth) < 0.01]
+            label = [rect for name, rect in labels if name == t["label"]][0]
+            self.assertTrue(min(bottom) <= label[0] and label[0] + label[2] <= max(bottom),
+                            "the label of %s->%s is off its lowest segment" % (t["from"], t["to"]))
+            self.assertTrue(0 < depth - (label[1] + label[3]) <= 4,
+                            "the label of %s->%s does not sit on its lowest segment" % (t["from"], t["to"]))
+            lowest[(t["from"], t["to"])] = depth
+        self.assertEqual(len(set(lowest.values())), len(below))
+
     def test_architecture_nests_and_joins_pills(self):
         architecture = DIAGRAMS["architecture"]
         text = cds.svg_architecture(architecture, "architecture")
@@ -274,11 +405,20 @@ class Geometry(Base):
             {"name": "application", "components": [pill(n) for n in ("uc-one", "uc-two", "uc-three", "uc-four")]},
             {"name": "domain", "components": [{"id": "repo-port", "label": "Repo port", "kind": "port"},
                                               {"id": "mail-port", "label": "Mail port", "kind": "port"}]}],
-            "implements": [{"adapter": "job", "port": "repo-port"}, {"adapter": "cron", "port": "mail-port"}]}
+            "implements": [{"adapter": "job", "port": "repo-port"}, {"adapter": "cron", "port": "mail-port"},
+                           {"adapter": "http-in", "port": "mail-port"}, {"adapter": "repo-port", "port": "http-in"}]}
 
-    def test_sibling_implements_cross_no_other_pill(self):
-        text = cds.svg_architecture(self.wide_architecture(), "architecture")
-        boxes, edges = self.assert_edges_touch(text, [("job", "repo-port"), ("cron", "mail-port")])
+    def test_sibling_and_nested_implements_cross_no_other_pill(self):
+        with_siblings = self.wide_architecture()
+        without_siblings = copy.deepcopy(with_siblings)
+        without_siblings["layers"].pop(1)
+        without_siblings["implements"] = without_siblings["implements"][2:]
+        for architecture in (with_siblings, without_siblings):
+            self.assert_implements_cross_no_other_pill(architecture)
+
+    def assert_implements_cross_no_other_pill(self, architecture):
+        text = cds.svg_architecture(architecture, "architecture")
+        boxes, edges = self.assert_edges_touch(text, [(p["adapter"], p["port"]) for p in architecture["implements"]])
         for source, target, _, _, points in edges:
             for name, ((bx, by, bw, bh),) in boxes.items():
                 if name in (source, target):

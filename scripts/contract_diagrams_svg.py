@@ -17,6 +17,8 @@ SLOT = 44  # flow: vertical distance between two edge ends on one side of a part
 STEP = 36  # sequence: vertical distance between two steps
 STATE_H = 32
 STATE_ROW = 76
+LANE = 24  # states: vertical distance between two lanes below the boxes, and between two forward label rows
+LEG = 8  # states: horizontal distance between two vertical legs beside one column
 LAYER_HEAD = 56
 NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
 
@@ -39,6 +41,17 @@ def line(*points):
 
 def curve(start, control_1, control_2, end):
     return "M%s %s C%s %s %s %s %s %s" % tuple(num(v) for v in start + control_1 + control_2 + end)
+
+
+def rounded(*points):
+    """An orthogonal line through the points, each corner rounded."""
+    sign = lambda v: (v > 0) - (v < 0)
+    d = "M%s %s" % (num(points[0][0]), num(points[0][1]))
+    for (x0, y0), (x1, y1), (x2, y2) in zip(points, points[1:], points[2:]):
+        r = min(6, (abs(x1 - x0) + abs(y1 - y0)) / 2, (abs(x2 - x1) + abs(y2 - y1)) / 2)
+        d += " L%s %s Q%s %s %s %s" % tuple(num(v) for v in (
+            x1 - r * sign(x1 - x0), y1 - r * sign(y1 - y0), x1, y1, x1 + r * sign(x2 - x1), y1 + r * sign(y2 - y1)))
+    return d + " L%s %s" % (num(points[-1][0]), num(points[-1][1]))
 
 
 class Canvas:
@@ -283,6 +296,12 @@ def state_columns(transitions, start):
 
 
 def svg_states(lifecycle, prefix):
+    """Columns by breadth-first distance, so every arrow goes one column forward, stays in its column, or goes back.
+
+    Beside each column is a zone for vertical legs. Between two zones is a band that holds only labels and the
+    straight middle of forward arrows, each on its own row. Back and same-column arrows leave a box on its left side,
+    each runs along its own lane below all boxes, and enters its target on the right side.
+    """
     transitions = lifecycle.get("transitions") or []
     names = sequence_participants(transitions)
     initial = lifecycle.get("initial") if lifecycle.get("initial") in names else None
@@ -291,24 +310,66 @@ def svg_states(lifecycle, prefix):
     for name in names:
         stacks[column[name]].append(name)
     count = max(stacks) + 1 if stacks else 0
-    widths = [max([text_width(n) + 28 for n in stacks[c]] + [0]) for c in range(count)]
-    # A back route drops through the gap left of its source column and rises through the gap right of its target column.
-    # Column 0 holds only the start state, so a back route never starts there.
-    lanes = collections.Counter()
-    for t in transitions:
-        if t["from"] != t["to"] and column[t["to"]] <= column[t["from"]]:
-            lanes[(column[t["from"]] - 1, "source")] += 1
-            lanes[(column[t["to"]], "target")] += 1
-    gaps = [max([text_width(t.get("label", "")) for t in transitions
-                 if column[t["from"]] == c and column[t["to"]] == c + 1] + [20,
-                 6 * (lanes[(c, "source")] + lanes[(c, "target")]) - 4]) + 36 for c in range(count)]
-    top = PAD + (16 if any(t["from"] == t["to"] for t in transitions) else 0)
-    x = PAD + (30 if initial else 0)
-    box = {}
+    row = {name: stacks[column[name]].index(name) for name in names}
+    label_width = lambda t: text_width(t.get("label", ""))
+    # One small loop on top of a state. A second loop on the same state takes a lane below like a same-column arrow.
+    loops = list({t["from"]: t for t in reversed(transitions) if t["from"] == t["to"]}.values())
+    forward = sorted([t for t in transitions if column[t["to"]] == column[t["from"]] + 1],
+                     key=lambda t: (column[t["from"]], row[t["to"]], row[t["from"]]))
+    # Lanes, shallowest first: back arrows by span, then same-column arrows by label width.
+    back = sorted([t for t in transitions if column[t["to"]] < column[t["from"]]],
+                  key=lambda t: column[t["from"]] - column[t["to"]])
+    same = sorted([t for t in transitions if column[t["to"]] == column[t["from"]] and all(t is not o for o in loops)],
+                  key=label_width)
+    # A loop label sits above its box, left of the loop, so the box is wide enough to hold it.
+    widths = [max([text_width(n) + 28 for n in stacks[c]]
+                  + [label_width(t) + 40 for t in loops if column[t["from"]] == c]) for c in range(count)]
+
+    # A same-column label sits centered under its column, so each deeper same-column arrow puts its legs outside it.
+    # Back legs go outside those, the shallowest one outermost, so no back lane crosses another back leg.
+    # The first leg is 12px from the box.
+    leg, outer = {}, collections.defaultdict(lambda: 12 - LEG)
+    for t in same:
+        c = column[t["from"]]
+        outer[c] = max(outer[c] + LEG, (label_width(t) - widths[c]) / 2 + 8)
+        leg[(id(t), "left")] = leg[(id(t), "right")] = outer[c]
+    back_legs = collections.defaultdict(list)
+    for t in back:
+        back_legs[(column[t["from"]], "left")].append(t)
+        back_legs[(column[t["to"]], "right")].append(t)
+    for (c, side), items in back_legs.items():
+        for k, t in enumerate(items):
+            leg[(id(t), side)] = outer[c] + LEG * (len(items) - k)
+    zone = {(c, side): max(40, outer[c] + LEG * len(back_legs[(c, side)]) + 10)
+            for c in range(count) for side in ("left", "right")}
+
+    top, x, box, band = PAD + 16, PAD + zone.get((0, "left"), 0), {}, {}
     for c in range(count):
-        for row, name in enumerate(stacks[c]):
-            box[name] = (x, top + STATE_ROW * row, widths[c], STATE_H)
-        x += widths[c] + gaps[c]
+        for r, name in enumerate(stacks[c]):
+            box[name] = (x, top + STATE_ROW * r, widths[c], STATE_H)
+        x += widths[c] + zone[(c, "right")]
+        room = max([label_width(t) for t in forward if column[t["from"]] == c]
+                   + [label_width(t) for t in back if column[t["to"]] == c] + [20]) + 16
+        band[c] = (x, x + room)
+        x += room + zone.get((c + 1, "left"), 0)
+    # Ports: forward ends at the top of a side, then below-lane ends with the outermost leg highest, so ends of one
+    # side never cross each other.
+    ends = collections.defaultdict(list)
+    for t in forward:
+        ends[(t["from"], "right")].append(((0, 0), (id(t), "out")))
+        ends[(t["to"], "left")].append(((0, 0), (id(t), "in")))
+    for t in back + same:
+        ends[(t["from"], "left")].append(((1, -leg[(id(t), "left")]), (id(t), "out")))
+        ends[(t["to"], "right")].append(((1, -leg[(id(t), "right")]), (id(t), "in")))
+    port = {}
+    for (name, _), items in ends.items():
+        for k, (_, key) in enumerate(sorted(items, key=lambda item: item[0])):
+            port[key] = box[name][1] + STATE_H * (k + 1) / (len(items) + 1)
+    level, last = {}, collections.defaultdict(lambda: -LANE)
+    for t in forward:
+        c = column[t["from"]]
+        level[id(t)] = last[c] = max(port[(id(t), "in")], last[c] + LANE)
+    lane_top = max([by + bh for _, by, _, bh in box.values()] + list(level.values()) + [0]) + 26
 
     canvas = Canvas(prefix, caption("states", lifecycle))
     for name, (bx, by, bw, bh) in box.items():
@@ -318,33 +379,34 @@ def svg_states(lifecycle, prefix):
         bx, by = box[initial][:2]
         canvas.shapes.append('<circle class="start" cx="%s" cy="%s" r="5"/>' % (num(bx - 25), num(by + STATE_H / 2)))
         canvas.path(line((bx - 20, by + STATE_H / 2), (bx, by + STATE_H / 2)))
-    floor = max([by + bh for bx, by, bw, bh in box.values()] + [0])
-    back_count, used = 0, collections.Counter()
-    for t in transitions:
-        sx, sy, sw, sh = box[t["from"]]
-        ex, ey, ew, eh = box[t["to"]]
-        step, anchor = column[t["to"]] - column[t["from"]], "middle"
-        if step == 1:
-            x0, y0, x1, y1 = sx + sw, sy + sh / 2, ex, ey + eh / 2
-            d = curve((x0, y0), ((x0 + x1) / 2, y0), ((x0 + x1) / 2, y1), (x1, y1))
-            spot = ((x0 + x1) / 2, (y0 + y1) / 2 - 6)
-        elif t["from"] == t["to"]:
-            d = curve((sx + sw - 20, sy), (sx + sw - 20, sy - 28), (sx + sw + 28, sy + 8), (sx + sw, sy + 8))
-            spot, anchor = (sx + sw + 12, sy - 4), "start"
-        else:
-            # Breadth-first columns make every other edge go back or stay in its column. It runs through the column gaps
-            # and a channel below every box, so it crosses no box.
-            source_lane, target_lane = (column[t["from"]] - 1, "source"), (column[t["to"]], "target")
-            down_x, up_x = sx - 16 - 6 * used[source_lane], ex + ew + 16 + 6 * used[target_lane]
-            used.update((source_lane, target_lane))
-            channel = floor + 22 + 30 * back_count
-            back_count += 1
-            d = line((sx, sy + sh - 6), (down_x, sy + sh - 6), (down_x, channel),
-                     (up_x, channel), (up_x, ey + eh - 6), (ex + ew, ey + eh - 6))
-            spot = ((sx + ex + ew) / 2, channel + 16)
+    for t in forward:
+        x0, x1 = box[t["from"]][0] + box[t["from"]][2], box[t["to"]][0]
+        y0, y1, y = port[(id(t), "out")], port[(id(t), "in")], level[id(t)]
+        xa, xb = band[column[t["from"]]]
+        bend_a, bend_b = (x0 + xa) / 2, (xb + x1) / 2
+        d = "M%s %s C%s %s %s %s %s %s L%s %s C%s %s %s %s %s %s" % tuple(num(v) for v in (
+            x0, y0, bend_a, y0, bend_a, y, xa, y, xb, y, bend_b, y, bend_b, y1, x1, y1))
         canvas.path(d, source=t["from"], target=t["to"])
         if t.get("label"):
-            canvas.text(spot[0], spot[1], t["label"], "lbl", anchor=anchor)
+            canvas.text((xa + xb) / 2, y - 6, t["label"], "lbl")
+    for k, t in enumerate(back + same):
+        y = lane_top + LANE * k
+        sx, _, sw, _ = box[t["from"]]
+        ex, _, ew, _ = box[t["to"]]
+        down_x, up_x = sx - leg[(id(t), "left")], ex + ew + leg[(id(t), "right")]
+        y0, y1 = port[(id(t), "out")], port[(id(t), "in")]
+        canvas.path(rounded((sx, y0), (down_x, y0), (down_x, y), (up_x, y), (up_x, y1), (ex + ew, y1)),
+                    source=t["from"], target=t["to"])
+        if t.get("label"):
+            spot = sx + sw / 2 if t in same else sum(band[column[t["to"]]]) / 2
+            canvas.text(spot, y - 6, t["label"], "lbl")
+    for t in loops:
+        sx, sy, sw, _ = box[t["from"]]
+        right = sx + sw - 8
+        canvas.path(curve((right - 20, sy), (right - 20, sy - 22), (right, sy - 22), (right, sy)),
+                    source=t["from"], target=t["to"])
+        if t.get("label"):
+            canvas.text(right - 24 - label_width(t), sy - 6, t["label"], "lbl", anchor="start")
     return canvas.svg()
 
 
@@ -381,22 +443,22 @@ def svg_architecture(architecture, prefix):
             pills[component["id"]] = (pill_x + width / 2, y + 12, y + 38, layer.get("sibling"))
             pill_x += width + 10
     pairs = [(pair, pills.get(pair["adapter"]), pills.get(pair["port"])) for pair in architecture.get("implements") or []]
-    crossing = [pair for pair, adapter, port in pairs if adapter and port and adapter[3] != port[3]]
+    # A straight line between rows more than one layer apart can cross the pills of the rows between them.
+    crossing = [pair for pair, adapter, port in pairs
+                if adapter and port and (adapter[3] != port[3] or abs(adapter[1] - port[1]) > LAYER_HEAD)]
     for pair, adapter, port in pairs:
         if not adapter or not port:
             continue
-        if adapter[3] != port[3]:
-            # A sibling pill and a nested pill: run orthogonally through the gap beside the nested group and the free
-            # band under each pill row, so no other pill is crossed. Each such edge gets its own lanes.
+        if pair in crossing:
+            # A sibling pill and a nested pill, or two nested pills more than one layer apart: run orthogonally through
+            # the gap beside the nested group and the free band under each pill row, so no other pill is crossed.
+            # Each such edge gets its own lanes.
             lane = crossing.index(pair)
             gap_x = group_right + 24 * (lane + 1) / (len(crossing) + 1)
             band = 42 + 3 * (lane % 5)
-            sibling_end, nested_end = (adapter, port) if adapter[3] else (port, adapter)
-            points = [(sibling_end[0], sibling_end[2]), (sibling_end[0], sibling_end[1] - 12 + band),
-                      (gap_x, sibling_end[1] - 12 + band), (gap_x, nested_end[1] - 12 + band),
-                      (nested_end[0], nested_end[1] - 12 + band), (nested_end[0], nested_end[2])]
-            canvas.path(line(*(points if adapter[3] else points[::-1])), cls="edge impl",
-                        source=pair["adapter"], target=pair["port"])
+            points = [(adapter[0], adapter[2]), (adapter[0], adapter[1] - 12 + band), (gap_x, adapter[1] - 12 + band),
+                      (gap_x, port[1] - 12 + band), (port[0], port[1] - 12 + band), (port[0], port[2])]
+            canvas.path(line(*points), cls="edge impl", source=pair["adapter"], target=pair["port"])
             continue
         if adapter[1] < port[1]:
             d = line((adapter[0], adapter[2]), (port[0], port[1]))
