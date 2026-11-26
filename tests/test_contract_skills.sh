@@ -284,4 +284,7 @@ glob_blocks_without_null_glob() {
 }
 assert "every bash block with a glob for loop sets NULL_GLOB (zsh)" '[ "$(glob_blocks_without_null_glob "$confirmation" "$execute" "$deliver")" = 0 ]'
 
+assert "execute.md names contract-ref-shift.sh" 'grep -qF "contract-ref-shift.sh" "$execute"'
+assert "execute.md says the reviewer judges the whole draft" 'grep -qF "The reviewer still judges the whole draft." "$execute"'
+
 finish
