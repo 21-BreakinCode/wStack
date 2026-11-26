@@ -713,7 +713,7 @@ def svg_architecture(architecture, prefix):
     layers = [layer for layer in layers if not layer.get("sibling")]
     crossing = []
     while True:  # wrapped rows can need more lanes, and more lanes take more width: wrap again until the count stays
-        gap = max(24, LANE_PITCH * (len(crossing) + 1))
+        gap = max(24, LANE_PITCH * (len(crossing) + 1))  # the lanes' gap, drawn as wide as the rows left room for
         budget = PAGE_LIMIT - 2 * PAD - (gap if crossing else 0)
         # an outer layer is 48px wider than its inner layer, so each level takes 48px of budget
         group_rows = [pill_rows(layer, labels, budget - 48 * depth) for depth, layer in enumerate(layers)]
@@ -726,7 +726,7 @@ def svg_architecture(architecture, prefix):
     # Lane k runs 42 + LANE_PITCH * k below its row's top and LANE_PITCH from its neighbors in the gap beside the
     # nested group. The rows, the pill rows and the gap grow so the last band stays 4px above the next pills.
     lane_room = 34 + LANE_PITCH * (len(crossing) - 1)
-    row_h, row_pitch, gap = max(LAYER_HEAD, lane_room), max(PILL_ROW, lane_room), max(24, LANE_PITCH * (len(crossing) + 1))
+    row_h, row_pitch = max(LAYER_HEAD, lane_room), max(PILL_ROW, lane_room)
     canvas = Canvas(prefix, caption("architecture", architecture))
     lane_end_names = {pair[side] for pair in crossing for side in ("adapter", "port")}
     placed, group_right = place_layers(layers, siblings, group_rows, sibling_rows, row_h, gap, row_pitch,
