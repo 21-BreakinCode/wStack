@@ -697,7 +697,7 @@ Build in this order. Each step must pass its done check before the next step sta
 |---|---|---|
 | 1 | Plugin skeleton: `plugin.json` (name `wstack`, displayName `wStack`, userConfig), empty skills | `claude plugin validate ./wstack` passes. `/wstack:start-task` appears in Claude Code. |
 | 2 | Task folder and templates | `/wstack:start-task test idea` creates `<tasks_dir>/<date>-test-idea/` with the four `.md` files and frontmatter. |
-| 3 | Confirmation | For a rough idea, the agent asks questions one at a time, writes a `spec.md` with all eight sections, and stops at `awaiting-approval`. |
+| 3 | Confirmation | For a rough idea, the agent asks questions one at a time, writes a `spec.md` with all its sections, and stops at `awaiting-approval`. |
 | 4 | Execute | After approval, the agent works on branch `wstack/<slug>`, logs steps in `run-log.md`, and stops before a non-undoable step. |
 | 5 | Verify checks and failure path | A failing check sends the task back to Execute. After `retry_limit` failures, the status is `waiting-user`. |
 | 6 | Reviewer agent | On a sample change with one planted bug, the reviewer agent reports it as a blocking finding. |
