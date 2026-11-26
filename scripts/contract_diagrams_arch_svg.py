@@ -16,8 +16,8 @@ LAYER_PAD_RIGHT = 12  # architecture: space right of the last pill of a row
 def lane_pairs(implements, group_rows, sibling_rows):
     """The implements pairs that need their own lanes: a sibling pill with a nested pill, or two pills with a pill row
     between them. A straight line between those can cross the pills of the rows between them. Also the most pairs
-    between one pill row and the next, which run as elbows in the gap between the two rows. A vertical pair needs no
-    band, so that count can be one too many."""
+    between one pill row and the next, which run as elbows in the gap between the two rows. A pair whose adapter sits
+    over its port needs no band, so that count can be too high."""
     nested_rows = [row for rows in group_rows for row in rows]
     row_of = {name: (number, False) for number, row in enumerate(nested_rows) for name, _, _ in row}
     row_of.update({name: (number, True) for rows in sibling_rows for number, row in enumerate(rows) for name, _, _ in row})
@@ -87,7 +87,8 @@ def plan_lane_ends(crossing, pills, gap_center):
 
 
 def plan_elbows(pairs, pills, lane_ends):
-    """The band y of each pair between neighbor pill rows, keyed by id(pair), or no band for a vertical pair.
+    """The band y of each pair between neighbor pill rows that needs an elbow, keyed by id(pair). A pair whose adapter
+    center sits over the port, 13px in from the port's rounded ends, needs none: it is one vertical line.
 
     An elbow runs on its band in the gap under the upper row: below the lanes there, LANE_PITCH apart. Of two elbows
     that head one way, the one whose upper end trails runs lower, and of two from one upper end, the longer one runs
@@ -98,11 +99,12 @@ def plan_elbows(pairs, pills, lane_ends):
             lane_bands[edge].append(band)
     gaps = collections.defaultdict(list)
     for index, pair in enumerate(pairs):
-        (upper_x, _, upper_bottom, _), (lower_x, _, _, _) = sorted((pills[pair["adapter"]], pills[pair["port"]]),
-                                                                   key=lambda pill: pill[1])
-        if upper_x != lower_x:
-            heading = 1 if lower_x < upper_x else -1  # the leading elbow sorts first, onto the higher band
-            gaps[upper_bottom].append(((heading * upper_x, heading * lower_x, index), id(pair)))
+        adapter, port = pills[pair["adapter"]], pills[pair["port"]]
+        if adapter[1] == port[1] or abs(adapter[0] - port[0]) <= max(port[3] / 2 - 13, 0):
+            continue
+        (upper_x, _, upper_bottom, _), (lower_x, _, _, _) = sorted((adapter, port), key=lambda pill: pill[1])
+        heading = 1 if lower_x < upper_x else -1  # the leading elbow sorts first, onto the higher band
+        gaps[upper_bottom].append(((heading * upper_x, heading * lower_x, index), id(pair)))
     bands = {}
     for upper_bottom, elbows in gaps.items():
         first = max(lane_bands[upper_bottom], default=upper_bottom - 4) + LANE_PITCH
@@ -208,8 +210,7 @@ def svg_architecture(architecture, prefix):
     lane_of = {id(pair): lane for lane, pair in enumerate(crossing)}
     implements = [pair for pair in architecture.get("implements") or []
                   if pair["adapter"] in pills and pair["port"] in pills]
-    elbow_bands = plan_elbows([pair for pair in implements if id(pair) not in lane_of
-                               and pills[pair["adapter"]][1] != pills[pair["port"]][1]], pills, lane_ends)
+    elbow_bands = plan_elbows([pair for pair in implements if id(pair) not in lane_of], pills, lane_ends)
     for pair in implements:
         adapter, port = pills[pair["adapter"]], pills[pair["port"]]
         if id(pair) in lane_of:
@@ -218,10 +219,10 @@ def svg_architecture(architecture, prefix):
         elif adapter[1] == port[1]:
             d = curve((adapter[0], adapter[2]), (adapter[0], adapter[2] + 14),
                       (port[0], port[2] + 14), (port[0], port[2]))
-        else:  # neighbor rows: an elbow on its band, or a straight line when the pills sit on one vertical
+        else:  # neighbor rows: an elbow on its band, or one vertical line at the adapter's center
             adapter_y, port_y = (adapter[2], port[1]) if adapter[1] < port[1] else (adapter[1], port[2])
             band = elbow_bands.get(id(pair))
             bend = [] if band is None else [(adapter[0], band), (port[0], band)]
-            d = line((adapter[0], adapter_y), *bend, (port[0], port_y))
+            d = line((adapter[0], adapter_y), *bend, (port[0] if bend else adapter[0], port_y))
         canvas.path(d, cls="edge impl", source=pair["adapter"], target=pair["port"])
     return canvas.svg()

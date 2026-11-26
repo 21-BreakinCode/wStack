@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from test_contract_diagrams_svg import (  # noqa: F401 (setUpModule loads the fixtures)
     DIAGRAMS, MEDIA, Base, cds, rects_of_class, segments_meet, setUpModule, shapes, view_width)
 
-SVG_ARCHITECTURE_SHA256 = "9a4cf7950d97b6c24132af40c735424c8a51523b556ba33e766f644c8cf6e1f6"
+SVG_ARCHITECTURE_SHA256 = "bef253d91c5a2f1e9d593e79e5af17423a2ad6d04b8213167dd01160481a2232"
 
 TWO_LANES_FROM_ONE_PILL = {"layers": [
     {"name": "ports", "components": [{"id": "pa", "label": "Port A"}, {"id": "pb", "label": "Port B"}]},
@@ -249,9 +249,13 @@ class Architecture(Base):
         return {(source, target): points for source, target, _, _, points in edges}
 
     def test_neighbor_layers_join_with_elbows(self):
+        # Each adapter center of these pairs sits over its port, 13 px in from the port's rounded ends, so each pair
+        # is one vertical line from the adapter's center. The elbow_chain fixtures hold the elbows.
         for architecture in (DIAGRAMS["architecture"], MEDIA["architecture"]):
-            for points in self.assert_elbows(architecture).values():
-                self.assertEqual(len(points), 4, "an elbow: down, across, down")
+            boxes, _ = shapes(cds.svg_architecture(architecture, "a"))
+            for pair, points in self.assert_elbows(architecture).items():
+                (x, _, width, _), = boxes[pair[0]]
+                self.assertEqual([px for px, _ in points], [x + width / 2] * 2, "%s->%s: %s" % (pair + (points,)))
 
     def test_elbows_of_one_gap_nest_8_apart(self):
         for heading, upward in itertools.product(("right", "left"), (False, True)):
