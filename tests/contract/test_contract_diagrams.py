@@ -252,6 +252,35 @@ Implements:
         sequence = {"steps": [{"from": "a", "to": "b", "label": "two\nlines"}]}
         self.assertEqual(cd.note_sequence(sequence), ["1. a → b: two lines"])
 
+    def test_callers_marker_stays_on_a_cut_part_label(self):
+        label = "a part label that is far too long for the box"
+        flow = {"parts": [{"id": "p", "label": label}], "callers": [{"id": "ui"}], "edges": [{"from": "ui", "to": "p"}]}
+        lines = cd.note_flow(flow)
+        self.assertIn("│ %s │" % cd.pad(cd.short(label, {}, 26) + " ◀ callers", 36), lines)
+        footnote = lines[lines.index("labels:") + 1:lines.index("```")]
+        self.assertEqual(" ".join(" ".join(footnote).split()), "[1] " + label)
+
+    def test_null_label_prints_no_none(self):
+        self.assertEqual(cd.note_sequence({"steps": [{"from": "a", "to": "b", "label": None}]}), ["1. a → b"])
+        lifecycle = {"initial": "a", "transitions": [{"from": "a", "to": "b", "label": None}]}
+        self.assertIn("1. → b", cd.note_states(lifecycle))
+
+    def test_note_lists_keep_angle_brackets(self):
+        flow = {"parts": [{"id": "p", "label": "<p>"}], "callers": [{"id": "ui"}],
+                "edges": [{"from": "ui", "to": "p", "label": "GET /items/<id>"}]}
+        lines = cd.note_flow(flow)
+        self.assertIn("│ <p> ◀ callers", "\n".join(lines))  # a code block keeps the text as it is
+        self.assertIn("**&lt;p>**", lines)
+        self.assertIn("  - ui: GET /items/&lt;id>", lines)
+        sequence = {"steps": [{"from": "ui", "to": "api", "label": "GET /items/<id>"}]}
+        self.assertEqual(cd.note_sequence(sequence), ["1. ui → api: GET /items/&lt;id>"])
+        lifecycle = {"initial": "<a>", "transitions": [{"from": "<a>", "to": "<b>", "label": "on <event>"}]}
+        self.assertEqual(cd.note_states(lifecycle),
+                         ["Start: &lt;a>", "", "**&lt;a>**", "", "1. → &lt;b>: on &lt;event>"])
+        architecture = {"layers": [{"name": "l", "components": [{"id": "a", "label": "<A>"}, {"id": "b"}]}],
+                        "implements": [{"adapter": "a", "port": "b"}]}
+        self.assertEqual(cd.note_architecture(architecture)[-1], "- &lt;A> ─▶ b")
+
 
 if __name__ == "__main__":
     unittest.main()

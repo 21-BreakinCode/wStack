@@ -124,8 +124,9 @@ def part_cards(flow):
     } for part in flow.get("parts") or []]
 
 
-def one_line(text):
-    return " ".join(str(text).split())
+def note_text(text):
+    """Text for a Markdown line outside a code block: one line, with `<` as `&lt;` so Markdown keeps it."""
+    return " ".join(str(text).split()).replace("<", "&lt;")
 
 
 def key_line(source, target, label):
@@ -223,8 +224,8 @@ def note_flow(flow):
     inner = NOTE_COLUMNS - 4
     rows = []
     for card in cards:
-        suffix = " ◀ callers" if card["id"] in overview["caller_targets"] else ""
-        rows.append(short(card["label"] + suffix, notes, inner))
+        marker = " ◀ callers" if card["id"] in overview["caller_targets"] else ""
+        rows.append(short(card["label"], notes, inner - display_width(marker)) + marker)
         rows += ["  ─▶ " + short(labels[target], notes, inner - 5)
                  for source, target in overview["links"] if source == card["id"]]
         rows += ["  ◀─ " + short(labels[source], notes, inner - 5)
@@ -241,17 +242,18 @@ def note_flow(flow):
         drawing += ["  ▼", "%d %s" % (dependencies, "dependency" if dependencies == 1 else "dependencies")]
     lines = ["```text"] + with_footnotes(drawing, notes) + ["```", ""]
     for card in cards:
-        lines += ["**%s**" % one_line(card["label"]), ""]
+        lines += ["**%s**" % note_text(card["label"]), ""]
         for heading, entries in (("called by", card["called_by"]), ("calls", card["calls"])):
             if entries:
-                lines += ["- %s:" % heading] + ["  - " + (": ".join(map(one_line, e)) if e[1] else one_line(e[0]))
+                lines += ["- %s:" % heading] + ["  - " + (": ".join(map(note_text, e)) if e[1] else note_text(e[0]))
                                                  for e in entries]
         lines.append("")
     return lines[:-1]
 
 
 def note_sequence(sequence):
-    return ["%d. %s" % (number, key_line(one_line(step["from"]), one_line(step["to"]), one_line(step.get("label", ""))))
+    return ["%d. %s" % (number, key_line(note_text(step["from"]), note_text(step["to"]),
+                                         note_text(step.get("label") or "")))
             for number, step in enumerate(sequence.get("steps") or [], 1)]
 
 
@@ -259,13 +261,14 @@ def note_states(lifecycle):
     lines = []
     start = state_start(lifecycle)
     if start:
-        lines += ["Start: %s" % one_line(start), ""]
+        lines += ["Start: %s" % note_text(start), ""]
     for state in state_order(lifecycle):
         outgoing = [t for t in state_key(lifecycle) if t["from"] == state]
         if not outgoing:
             continue
-        lines += ["**%s**" % one_line(state), ""]
-        lines += ["%d. → %s" % (t["number"], ": ".join(filter(None, (one_line(t["to"]), one_line(t.get("label", ""))))))
+        lines += ["**%s**" % note_text(state), ""]
+        lines += ["%d. → %s" % (t["number"], ": ".join(filter(None, (note_text(t["to"]),
+                                                                       note_text(t.get("label") or "")))))
                   for t in outgoing]
         lines.append("")
     return lines[:-1]
@@ -299,7 +302,7 @@ def note_architecture(architecture):
 
     drawing = [row for i, tree in enumerate(trees) for row in ([""] if i else []) + tree]
     lines = ["```text"] + with_footnotes(drawing, notes) + ["```"]
-    labels = {c["id"]: one_line(c.get("label") or c["id"]) for layer in layers for c in layer.get("components") or []}
+    labels = {c["id"]: note_text(c.get("label") or c["id"]) for layer in layers for c in layer.get("components") or []}
     implements = architecture.get("implements") or []
     if implements:
         lines += ["", "Implements:", ""]
