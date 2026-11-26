@@ -6,7 +6,7 @@
     {
       "name": "wstack",
       "source": "./",
-      "version": "0.12.2",
+      "version": "0.12.3",
       "description": "A task workflow for Claude Code: confirm the spec, execute, verify with evidence, and deliver."
     }
   ]
