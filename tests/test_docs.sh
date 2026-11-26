@@ -39,6 +39,9 @@ done
 assert "README.md exists" '[ -f "$readme" ]'
 assert "README names the resume-work hand-off, the retro drift check, and the init-service contract offer" 'grep -qF "it prints \`cd \"<workspace_cwd>\" && claude \"/wstack:start-task --task <task_id>\"\`" "$readme" && grep -qF "drift check of the service contract" "$readme" && grep -qF "<retro>.contract-before.yaml" "$readme" && grep -qF "asks whether to launch a contract task" "$readme"'
 assert "spec.md names pause.md, pause-<time>.md, paused_from, and the retro drift walk" 'spec="$repo_root/docs/spec.md"; grep -qF "  pause.md " "$spec" && grep -qF "  pause-<time>.md " "$spec" && grep -qF "paused_from: " "$spec" && grep -qF -- "- Drift walk:" "$spec" && grep -qF -- "- Contract write:" "$spec"'
+design="$repo_root/docs/superpowers/specs/2026-11-26-phone-first-diagrams-design.md"
+assert "spec.md keeps the diagram figure in the text column" 'grep -qF "Only the box that holds the SVG can grow" "$repo_root/docs/spec.md" && ! grep -qF "A figure can grow" "$repo_root/docs/spec.md"'
+assert "the phone-first design keeps the figure in the column and names the card grid" 'grep -qF "Only the box that holds the SVG can grow" "$design" && grep -qF "minmax(min(340px, 100%), 1fr)" "$design" && ! grep -qF "minmax(320px, 1fr)" "$design" && ! grep -qF "figure can grow past" "$design"'
 assert "CHANGELOG has a 0.1.0 entry dated today or earlier" 'grep -qE "^## 0\.1\.0 - [0-9]{4}-[0-9]{2}-[0-9]{2}$" "$repo_root/CHANGELOG.md"'
 for name in pipeline launcher layout; do
   assert "README embeds docs/diagrams/$name.svg" 'grep -qF "](docs/diagrams/$name.svg)" "$readme"'

@@ -505,7 +505,7 @@ The vault note is for the phone. No line in a note code block is wider than 40 c
 
 A cut text in a code block ends in `…[n]`. The full text is listed under `labels:`, wrapped at 40 columns. A wide-character name is cut at about 15 characters.
 
-The HTML page is for the laptop. A figure can grow to `min(1200px, calc(100vw - 32px))`. Every SVG of the test fixture `tests/fixtures/contract/media-shaped-diagrams.yaml` is at most 1100 px wide (`PAGE_LIMIT`). That fixture has 4 parts, 8 callers, 9 dependencies, 37 edges, a 7-participant sequence, and a 10-transition lifecycle. The page views are:
+The HTML page is for the laptop. A figure stays in the 760 px text column with its caption, key, and cards. Only the box that holds the SVG can grow, up to `min(1200px, calc(100vw - 32px))`, centered on the column. A wider SVG scrolls in that box. Every SVG of the test fixture `tests/fixtures/contract/media-shaped-diagrams.yaml` is at most 1100 px wide (`PAGE_LIMIT`). That fixture has 4 parts, 8 callers, 9 dependencies, 37 edges, a 7-participant sequence, and a 10-transition lifecycle. The page views are:
 
 - `flow`: an overview SVG drawn top to bottom, and a grid of part cards with the same lists as the note.
 - `sequences`: the arrows carry step numbers, and a key `<ol>` sits under the picture.

@@ -72,9 +72,9 @@ The `labels:` footnote block of 0.11.0 stays for every cut text in a code block.
 
 ### The HTML page (laptop)
 
-A `.diagram` figure can grow past the 760 px text column, up to `min(1200px, 100vw - 32px)`, centered on the page. Every picture for the media-center-shaped fixture is at most 1100 px wide. A test checks the `width` attribute of each SVG.
+A `.diagram` figure stays in the 760 px text column with its caption, key, and cards. Only the box that holds the SVG can grow, up to `min(1200px, 100vw - 32px)`, centered on the column. The SVG keeps its full size in that box. A wider SVG scrolls. Every picture for the media-center-shaped fixture is at most 1100 px wide. A test checks the `width` attribute of each SVG.
 
-Component flow: an overview SVG with the same content as the note overview, drawn top to bottom. Under it, one card per part with the same "called by" and "calls" lists as the note. The cards sit in a CSS grid that wraps (`repeat(auto-fill, minmax(320px, 1fr))`).
+Component flow: an overview SVG with the same content as the note overview, drawn top to bottom. Under it, one card per part with the same "called by" and "calls" lists as the note. The cards sit in a CSS grid that wraps (`repeat(auto-fill, minmax(min(340px, 100%), 1fr))`). The text column holds at most 2 cards in a row, aligned at the top.
 
 Sequences: the SVG keeps lifelines and arrows. Each arrow carries its step number in place of its label, so the space between two lifelines depends only on the participant names. The media-center sequence with 7 participants is about 850 px wide this way, and 1228 px today. The key is an `<ol>` under the picture.
 
