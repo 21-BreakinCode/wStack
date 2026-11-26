@@ -493,6 +493,10 @@ The contract YAML has an optional top-level `diagrams` block. A contract with no
 - `states`: the status lifecycle of a record, with `initial` and `transitions`.
 - `architecture`: a `style` (`clean`, `hexagonal`, or `layered`), `layers` of components, and `implements` pairs of an adapter and a port.
 
+An architecture layer can carry `sibling`, a boolean and optional. A layer with `sibling: true` is drawn beside the nested layers in both views. `contract-validate.sh` rejects any other value with `bad sibling flag`.
+
+The ASCII view cuts a label that is over 32 display columns to fit, and ends it with `…[n]`. The full labels are listed under `labels:` in the same block, so no detail is lost.
+
 Every part, edge, step, transition, and architecture component cites `refs`. `contract-refs.sh` proves them like any other ref. `contract-validate.sh` checks the shape of the block.
 
 `scripts/contract_diagrams.py` draws the block as ASCII, and `scripts/contract_diagrams_svg.py` draws it as SVG. `contract_render.py` calls both. The vault note shows the ASCII under `## Diagrams`. The HTML page shows the SVG in the same place. Every contract edit redraws both, so they always match the YAML.

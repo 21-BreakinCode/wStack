@@ -35,6 +35,9 @@ In every step below, "stop" means: outside a task, print the stderr text and sto
    - The diagram type is architecture for `flow`, sequence for `sequence:<id>`, state machine for `states:<id>`, and layers for `architecture`.
    - Use `faithful` density.
    - Draw only what the JSON holds. To get a readable picture, merge, drop, or shorten nodes and labels. Add no node, edge, or label that the JSON does not hold.
+   - Allowed merge: if several parts call the same dependency, draw one arrow from the service zone to that dependency. Add a sublabel that names those parts.
+   - Allowed merge: if many callers call the same part, draw one node for them. Its label gives the count. A sublabel or a legend names the callers.
+   - Every merged node and edge still comes from the JSON. The drawing adds no fact.
    - If diagram-design asks about its style guide, keep the default style.
    - Skip its plan approval step.
 

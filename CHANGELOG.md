@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.0 - 2026-11-26
+
+- **feat:** An architecture layer can carry `sibling: true`. The ASCII view and the SVG view draw it beside the nested layers. The validator rejects a non-boolean value.
+- **feat:** A deep dive can merge many callers of one part into one node. Its label gives the count. A deep dive can also merge the arrows from several parts to one dependency into one arrow from the service zone. A sublabel names the merged parts. Every merged item still comes from the JSON.
+- **fix:** The ASCII view cuts a label over 32 display columns and ends it with `…[n]`. The full labels are listed under `labels:`, so no detail is lost.
+- **fix:** The states SVG gives each back arrow and each same-column arrow its own lane. No arrow crosses a box. No label overlaps a label, a box, or another arrow.
+- **fix:** The `implements` lines no longer cross other pills.
+
 ## 0.10.1 - 2026-11-26
 
 - **fix:** wStack needs mikefarah `yq` version 4.30.8 or later, not 4.22.1. The scripts use `-r` (yq 4.25.3) and `"\n"` in an expression (yq 4.30.3). 4.30.8 is the oldest yq that the full test suite passed on. On yq 4.22.1, 99 checks failed.

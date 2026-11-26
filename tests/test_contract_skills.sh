@@ -249,6 +249,8 @@ reviewer_agent="$repo_root/agents/reviewer.md"
 for needle in 'diagram-design:diagram-design' 'faithful' 'contract-open.sh' '--contract' 'contract-render.sh' 'keep the default style'; do
   assert "draw-contract names $needle" 'grep -qF -- "$needle" "$draw_skill"'
 done
+assert "draw-contract allows the dependency merge" 'grep -qF "service zone" "$draw_skill" && grep -qF "same dependency" "$draw_skill"'
+assert "draw-contract allows the caller merge" 'grep -qF "the count" "$draw_skill" && grep -qF "same part" "$draw_skill"'
 assert "execute fills diagrams.flow and architecture" 'has "$(cat "$execute")" "diagrams.flow" && has "$(cat "$execute")" "architecture"'
 assert "reviewer judges diagrams.flow" 'grep -qF "diagrams.flow" "$reviewer_agent"'
 assert "verify names diagrams" 'grep -qF "diagrams" "$verify"'
