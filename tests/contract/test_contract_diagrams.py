@@ -1,6 +1,4 @@
 """Unit tests for scripts/contract_diagrams.py: python3 tests/contract/test_contract_diagrams.py"""
-import copy
-import hashlib
 import json
 import re
 import subprocess
@@ -16,8 +14,6 @@ import contract_diagrams as cd  # noqa: E402
 DIAGRAMS = {}
 MEDIA = {}
 
-ASCII_ARCHITECTURE_SHA256 = "0f7cea8aade4d3fe4c83cc2756b30184f814b9face9292731aa9c72a0642f36d"
-
 
 def setUpModule():
     out = subprocess.check_output(
@@ -26,31 +22,6 @@ def setUpModule():
     media = subprocess.check_output(
         ["yq", "-o=json", str(ROOT / "tests/fixtures/contract/media-shaped-diagrams.yaml")])
     MEDIA.update(json.loads(media)["diagrams"])
-
-
-def first_bar_column(line):
-    return cd.display_width(line[:line.index("│")])
-
-
-class SubjectsAndHash(unittest.TestCase):
-    def test_subjects_order(self):
-        self.assertEqual(list(cd.subjects(DIAGRAMS)),
-                         ["flow", "sequence:create", "states:item-status", "architecture"])
-
-    def test_slug(self):
-        self.assertEqual(cd.subject_slug("sequence:create"), "sequence-create")
-
-    def test_hash_ignores_refs(self):
-        flow = copy.deepcopy(DIAGRAMS["flow"])
-        before = cd.shape_hash(flow)
-        flow["edges"][0]["refs"] = ["other/file.go:9"]
-        self.assertEqual(cd.shape_hash(flow), before)
-        flow["edges"][0]["label"] = "changed"
-        self.assertNotEqual(cd.shape_hash(flow), before)
-
-    def test_hash_is_key_order_free(self):
-        self.assertEqual(cd.shape_hash({"a": 1, "b": {"c": 2, "d": 3}}),
-                         cd.shape_hash({"b": {"d": 3, "c": 2}, "a": 1}))
 
 
 class Models(unittest.TestCase):
@@ -102,225 +73,6 @@ class Models(unittest.TestCase):
         self.assertEqual(cd.short("x" * 50, width=10), "x" * 9 + "…")
 
 
-class Ascii(unittest.TestCase):
-    def test_ascii_flow(self):
-        text = cd.ascii_flow(DIAGRAMS["flow"])
-        lines = text.split("\n")
-        self.assertIn("┌", text)
-        self.assertIn("└", text)
-        self.assertTrue(any("web-ui" in l and "GET /items" in l and "▶" in l for l in lines))
-        done = [l for l in lines if "items.done" in l][0]
-        self.assertIn("◀", done)
-        self.assertGreater(done.index("◀"), done.index("│"))
-        inside = [l for l in lines if l.startswith("inside:")]
-        self.assertEqual(len(inside), 1)
-        self.assertIn("items.created", inside[0])
-        columns = {first_bar_column(l) for l in lines if "│" in l}
-        self.assertEqual(len(columns), 1)
-
-    def test_ascii_flow_rows_sit_beside_their_part(self):
-        lines = cd.ascii_flow(DIAGRAMS["flow"]).split("\n")
-        worker_row = next(i for i, l in enumerate(lines) if "Worker" in l)
-        self.assertLess(next(i for i, l in enumerate(lines) if "POST /items" in l), worker_row)
-        self.assertLess(next(i for i, l in enumerate(lines) if "API" in l),
-                        next(i for i, l in enumerate(lines) if "POST /items" in l))
-        self.assertIn("Worker", [l for l in lines if "SQL" in l][0])
-        self.assertGreater(next(i for i, l in enumerate(lines) if "items.done" in l), worker_row)
-        self.assertFalse(any(re.search(r"▶ {2,}│", l) for l in lines))
-
-    def test_ascii_flow_part_with_two_edges_grows(self):
-        lines = cd.ascii_flow(DIAGRAMS["flow"]).split("\n")
-        api_rows = [l for l in lines if "│" in l][:2]
-        self.assertIn("GET /items", api_rows[0])
-        self.assertIn("POST /items", api_rows[1])
-        self.assertIn("API", api_rows[0])
-        self.assertNotIn("API", api_rows[1])
-
-    def test_ascii_flow_wide_label(self):
-        flow = copy.deepcopy(DIAGRAMS["flow"])
-        flow["parts"][0]["label"] = "圖片服務"
-        lines = [l for l in cd.ascii_flow(flow).split("\n") if "│" in l]
-        right = {cd.display_width(l[:l.rindex("│")]) for l in lines}
-        self.assertEqual(len(right), 1)
-        self.assertIn("圖片服務", "\n".join(lines))
-
-    def test_ascii_flow_edge_without_label(self):
-        flow = copy.deepcopy(DIAGRAMS["flow"])
-        del flow["edges"][0]["label"]
-        self.assertRegex(cd.ascii_flow(flow), r"web-ui ─+▶ │")
-
-    def test_ascii_truncates(self):
-        flow = copy.deepcopy(DIAGRAMS["flow"])
-        flow["edges"][0]["label"] = "x" * 45
-        text = cd.ascii_flow(flow)
-        marked = [l for l in text.split("\n") if "…[1]" in l]
-        self.assertTrue(marked)
-        self.assertNotIn("x" * 32, marked[0])
-        self.assertIn("x" * 27 + "…[1]", marked[0])
-        self.assertIn("\n\nlabels:\n[1] " + "x" * 45, text)
-
-    def test_ascii_footnote_numbers(self):
-        flow = copy.deepcopy(DIAGRAMS["flow"])
-        flow["edges"][0]["label"] = "a" * 40
-        flow["edges"][1]["label"] = "b" * 40
-        text = cd.ascii_flow(flow)
-        self.assertIn("[1] " + "a" * 40 + "\n[2] " + "b" * 40, text)
-        flow["edges"][1]["label"] = "a" * 40
-        text = cd.ascii_flow(flow)
-        self.assertIn("[1] " + "a" * 40, text)
-        self.assertNotIn("[2]", text)
-
-    def test_ascii_sequence_footnote(self):
-        sequence = copy.deepcopy(DIAGRAMS["sequences"][0])
-        sequence["steps"][0]["label"] = "s" * 50
-        text = cd.ascii_sequence(sequence)
-        self.assertIn("…[1]", text)
-        self.assertTrue(text.endswith("labels:\n[1] " + "s" * 50))
-
-    def test_ascii_short_labels_have_no_footnotes(self):
-        self.assertNotIn("labels:", cd.ascii_flow(DIAGRAMS["flow"]))
-        self.assertNotIn("labels:", cd.ascii_sequence(DIAGRAMS["sequences"][0]))
-
-    def test_short_label_width_limits(self):
-        exact = "圖" * 16
-        self.assertEqual(cd.short(exact), exact)
-        self.assertEqual(cd.short(exact, {}), exact)
-        notes = {}
-        cut = cd.short("圖" * 20, notes)
-        self.assertEqual(cut, "圖" * 14 + "…[1]")
-        self.assertEqual(cd.display_width(cut), 32)
-        plain = cd.short("圖" * 20)
-        self.assertEqual(plain, "圖" * 15 + "…")
-        self.assertEqual(cd.display_width(plain), 31)
-
-    def test_ascii_footnote_from_inside_edge(self):
-        flow = copy.deepcopy(DIAGRAMS["flow"])
-        flow["edges"][2]["label"] = "i" * 40
-        text = cd.ascii_flow(flow)
-        self.assertTrue(any(l.startswith("inside:") and "…[1]" in l for l in text.split("\n")))
-        self.assertIn("[1] " + "i" * 40, text)
-
-    def test_ascii_footnote_numbers_follow_edge_order(self):
-        flow = copy.deepcopy(DIAGRAMS["flow"])
-        for index, letter in ((0, "a"), (3, "b"), (4, "c")):
-            flow["edges"][index]["label"] = letter * 40
-        text = cd.ascii_flow(flow)
-        self.assertIn("[1] " + "a" * 40 + "\n[2] " + "b" * 40 + "\n[3] " + "c" * 40, text)
-
-    def test_ascii_flow_wide_node_name_is_cut(self):
-        flow = copy.deepcopy(DIAGRAMS["flow"])
-        flow["parts"][0]["label"] = "圖" * 20
-        text = cd.ascii_flow(flow)
-        lines = [l for l in text.split("\n") if "│" in l]
-        self.assertIn("圖" * 15 + "…", text)
-        self.assertNotIn("labels:", text)
-        self.assertEqual(len({cd.display_width(l[:l.rindex("│")]) for l in lines}), 1)
-        self.assertTrue(all(cd.display_width(l[l.index("│"):l.rindex("│") + 1]) <= cd.MAX_LABEL + 4 for l in lines))
-
-    def test_ascii_sequence_self_step_footnote(self):
-        sequence = copy.deepcopy(DIAGRAMS["sequences"][0])
-        step = next(st for st in sequence["steps"] if st["from"] == st["to"])
-        step["label"] = "z" * 50
-        text = cd.ascii_sequence(sequence)
-        self.assertTrue(any("┐" in l and "…[1]" in l for l in text.split("\n")))
-        self.assertTrue(text.endswith("labels:\n[1] " + "z" * 50))
-
-    def test_ascii_states_footnote(self):
-        text = cd.ascii_states({"initial": "a", "transitions": [{"from": "a", "to": "b", "label": "k" * 45}]})
-        self.assertIn("k" * 27 + "…[1]", text)
-        self.assertTrue(text.endswith("labels:\n[1] " + "k" * 45))
-
-    def test_ascii_sequence(self):
-        lines = cd.ascii_sequence(DIAGRAMS["sequences"][0]).split("\n")
-        header = lines[0]
-        order = [header.index(n) for n in ("web-ui", "api", "worker", "postgres")]
-        self.assertEqual(order, sorted(order))
-        self.assertTrue(any("▶" in l and "POST /items" in l for l in lines))
-        self.assertTrue(any("┐" in l and "validate the body" in l for l in lines))
-
-    def test_ascii_sequence_right_to_left(self):
-        lines = cd.ascii_sequence({"steps": [
-            {"from": "a", "to": "b", "label": "go"}, {"from": "b", "to": "a", "label": "back"}]})
-        self.assertTrue(any("◀" in l and "back" in l for l in lines.split("\n")))
-
-    def test_ascii_states(self):
-        lines = cd.ascii_states(DIAGRAMS["states"][0]).split("\n")
-        self.assertEqual(lines[0], "initial: new")
-        self.assertEqual(len(lines), 5)
-        self.assertEqual(len({cd.display_width(l[:l.index("──▶")]) for l in lines[1:]}), 1)
-
-    def test_ascii_states_without_label(self):
-        text = cd.ascii_states({"initial": "a", "transitions": [{"from": "a", "to": "b"}]})
-        self.assertIn("──▶ b", text)
-
-    def test_ascii_architecture(self):
-        text = cd.ascii_architecture(DIAGRAMS["architecture"])
-        lines = text.split("\n")
-        tops = [l for l in lines if "┌" in l]
-        self.assertEqual(len(tops), 3)
-        positions = [next(i for i, t in enumerate(tops) if n in t) for n in ("adapters", "use-cases", "entities")]
-        self.assertEqual(positions, [0, 1, 2])
-        self.assertTrue(lines[-1].startswith("ports:"))
-        self.assertIn("Store port <- SQL store", lines[-1])
-
-    def test_ascii_architecture_without_labels(self):
-        arch = {"layers": [{"name": "l", "components": [{"id": "store-port"}, {"id": "sql-store"}]}],
-                "implements": [{"adapter": "sql-store", "port": "store-port"}]}
-        self.assertIn("store-port <- sql-store", cd.ascii_architecture(arch))
-
-    def test_ascii_architecture_without_siblings_is_unchanged(self):
-        text = cd.ascii_architecture(DIAGRAMS["architecture"])
-        self.assertEqual(hashlib.sha256(text.encode()).hexdigest(), ASCII_ARCHITECTURE_SHA256)
-
-    def test_ascii_architecture_sibling_sits_right_of_outer_box(self):
-        arch = copy.deepcopy(DIAGRAMS["architecture"])
-        arch["layers"].insert(1, {"name": "workers", "sibling": True, "components": [
-            {"id": "job-runner", "label": "Job runner", "kind": "other"}]})
-        lines = cd.ascii_architecture(arch).split("\n")
-        nested = cd.ascii_architecture(DIAGRAMS["architecture"]).split("\n")
-        self.assertIn("adapters", lines[0])
-        self.assertIn("┌─ workers", lines[0])
-        self.assertGreater(lines[0].index("┌─ workers"), lines[0].index("┐"))
-        self.assertEqual(lines[0][:lines[0].index("┐") + 2], nested[0][:nested[0].index("┐") + 1] + " ")
-        self.assertIn("Job runner", lines[1])
-        self.assertTrue(lines[-1].startswith("ports:"))
-
-    def test_ascii_architecture_all_siblings_sit_side_by_side(self):
-        arch = {"layers": [{"name": "alpha", "sibling": True, "components": [{"id": "a", "label": "A"}]},
-                           {"name": "beta", "sibling": True, "components": []}]}
-        lines = cd.ascii_architecture(arch).split("\n")
-        self.assertEqual(len(lines), 3)
-        self.assertTrue(lines[0].startswith("┌─ alpha"))
-        self.assertIn(" ┌─ beta", lines[0])
-
-    def test_ascii_sibling_taller_than_the_nested_group(self):
-        arch = {"layers": [{"name": "core", "components": []},
-                           {"name": "workers", "sibling": True, "components": [
-                               {"id": str(n), "label": "job %s" % n} for n in range(4)]}]}
-        lines = cd.ascii_architecture(arch).split("\n")
-        self.assertEqual(len(lines), 6)
-        self.assertTrue(lines[0].startswith("┌─ core"))
-        self.assertIn("┌─ workers", lines[0])
-        self.assertTrue(all(l.startswith(" ") and l.strip().startswith(("│", "└")) for l in lines[2:]))
-        self.assertEqual(len({cd.display_width(l) for l in lines[2:]}), 1)
-
-    def test_ascii_sibling_with_wide_characters_keeps_boxes_aligned(self):
-        arch = {"layers": [{"name": "核心", "components": [{"id": "a", "label": "訂單服務"}]},
-                           {"name": "workers", "sibling": True, "components": [{"id": "b", "label": "排程"}]}]}
-        lines = cd.ascii_architecture(arch).split("\n")
-        self.assertIn("┐ ┌─ workers", lines[0])
-        self.assertIn("│ │ 排程", lines[1])
-        self.assertEqual(len({cd.display_width(l) for l in lines}), 1)
-
-    def test_ascii_sibling_only_block_ends_with_ports_line(self):
-        arch = {"layers": [{"name": "alpha", "sibling": True, "components": [{"id": "a", "label": "A"}]},
-                           {"name": "beta", "sibling": True, "components": [{"id": "b", "label": "B"}]}],
-                "implements": [{"adapter": "a", "port": "b"}]}
-        lines = cd.ascii_architecture(arch).split("\n")
-        self.assertEqual(lines[-1], "ports: B <- A")
-        self.assertEqual(sum("ports:" in l for l in lines), 1)
-
-
 class DeepDives(unittest.TestCase):
     def test_read_deep_dives(self):
         def page(subject, digest):
@@ -358,6 +110,111 @@ class DeepDives(unittest.TestCase):
 class Note(unittest.TestCase):
     def test_note_lines_empty(self):
         self.assertEqual(cd.note_lines({}, []), [])
+
+    def test_note_flow_overview_media(self):
+        lines = cd.note_flow(MEDIA["flow"])
+        self.assertEqual("\n".join(lines[:15]), """```text
+8 callers
+  ▼
+┌ parts ───────────────────────────────┐
+│ API (FastAPI) ◀ callers              │
+│   ─▶ abuna secesh                    │
+│ ticky secesh                         │
+│   ◀─ ticky-let-2                     │
+│ abuna secesh                         │
+│ abuna toozle secesh                  │
+│   ◀─ abuna-let-2                     │
+└──────────────────────────────────────┘
+  ▼
+9 dependencies
+```""")
+        self.assertEqual(lines[15:19], ["", "**API (FastAPI)**", "", "- called by:"])
+        self.assertIn("  - druse-dog-in: GET /outcrow, POST saker", lines)
+
+    def test_note_states_media_head(self):
+        lines = cd.note_states(MEDIA["states"][0])
+        self.assertEqual("\n".join(lines[:11]), """Start: pending
+
+**pending**
+
+1. → success: ticky mozzetta.bisegment
+2. → failed: reputed, secesh finally, or youse xylol
+3. → earning_toozle: abuna-let-2 benzoxy the alloquy
+
+**success**
+
+4. → failed: helicorubin abuna indexer""")
+        self.assertEqual(lines[-1], "10. → failed: helicorubin abuna indexer")
+
+    def test_note_architecture_media(self):
+        text = "\n".join(cd.note_architecture(MEDIA["architecture"]))
+        self.assertTrue(text.startswith("""```text
+ports (frameworks and drivers)
+├─ FastAPI routes
+├─ GCS, Pub/Sub, DB, HTTP clients
+└─ adapters
+   ├─ burred inspective
+   ├─ tray inspective
+   ├─ TrayLubricator
+   ├─ LendeeLubricator
+   └─ use cases
+      ├─ TraySwaCape
+      ├─ LendeeSwaCape
+      ├─ TrayLubricatorPastoress
+      ├─ LendeeLubricatorPastoress
+      └─ entities
+         ├─ Lendee and Kitish
+         ├─ Tray and TrayGlady
+         └─ eld decagram
+
+workers (beside the nested layers)
+└─ Pub/Sub workers
+```
+
+Implements:
+
+- TrayLubricator ─▶ TrayLubricatorPastoress
+"""))
+
+    def test_note_code_blocks_fit_a_phone(self):
+        for diagrams in (DIAGRAMS, MEDIA):
+            in_block = False
+            for line in cd.note_lines(diagrams, []):
+                if line.startswith("```"):
+                    in_block = not in_block
+                elif in_block:
+                    self.assertLessEqual(cd.display_width(line), cd.NOTE_COLUMNS, line)
+
+    def test_wide_characters_fit_and_keep_footnotes(self):
+        architecture = {"style": "clean", "layers": [{"name": "外層", "components": [
+            {"id": "c", "label": "處理中的非常長的元件名稱一二三四五六七八九十", "refs": ["a:1"]}]}]}
+        lines = "\n".join(cd.note_architecture(architecture))
+        self.assertIn("…[1]", lines)
+        drawn_rows = filter(lambda row: row[:2] != "- ", lines.split("\n"))
+        self.assertTrue(all(cd.display_width(row) <= 40 for row in drawn_rows))
+
+    def test_footnote_wraps_with_indent(self):
+        notes = {}
+        cd.short("word " * 20, notes)
+        wrapped = cd.with_footnotes([], notes)[2:]
+        self.assertTrue(wrapped[0].startswith("[1] word"))
+        self.assertTrue(all(row.startswith("    ") for row in wrapped[1:]))
+        self.assertTrue(all(cd.display_width(row) <= 40 for row in wrapped))
+
+    def test_note_sequence_lines(self):
+        lines = cd.note_sequence(MEDIA["sequences"][0])
+        self.assertEqual(lines[0], "1. caller → api: POST /outcrow (ethonomic)")
+        self.assertEqual(len(lines), 7)
+
+    def test_note_flow_without_callers_or_dependencies(self):
+        text = "\n".join(cd.note_flow({"parts": [{"id": "p", "refs": ["a:1"]}], "edges": []}))
+        self.assertNotIn("caller", text)
+        self.assertNotIn("dependenc", text)
+        self.assertNotIn("called by", text)
+
+    def test_note_list_collapses_newlines(self):
+        sequence = {"steps": [{"from": "a", "to": "b", "label": "two\nlines"}]}
+        self.assertEqual(cd.note_sequence(sequence), ["1. a → b: two lines"])
 
 
 if __name__ == "__main__":

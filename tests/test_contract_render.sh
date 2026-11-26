@@ -126,9 +126,11 @@ summary_line="$(grep -n "Test service that stores things" "$diagram_note" | cut 
 diagrams_line="$(grep -n "^## Diagrams" "$diagram_note" | cut -d: -f1)"
 gotchas_line="$(grep -n "^## Gotchas" "$diagram_note" | cut -d: -f1)"
 assert "the note shows Diagrams after the summary and before Gotchas" '[ "$summary_line" -lt "$diagrams_line" ] && [ "$diagrams_line" -lt "$gotchas_line" ]'
-for heading in "Component flow" "Sequence: Create an item" "States: Item status" "Architecture (clean)"; do
+for heading in "Component flow" "Architecture (clean)"; do
   assert "the note has the heading $heading with a text block" '[ "$(grep -A2 -F "### $heading" "$diagram_note" | sed -n 3p)" = "\`\`\`text" ]'
 done
+assert "the sequence in the note is a numbered list" '[ "$(grep -A2 -F "### Sequence: Create an item" "$diagram_note" | sed -n 3p)" = "1. web-ui → api: POST /items" ]'
+assert "the states in the note start with the initial state" '[ "$(grep -A2 -F "### States: Item status" "$diagram_note" | sed -n 3p)" = "Start: new" ]'
 assert "the page has four SVG diagrams" 'grep -qF "<h2>Diagrams</h2>" "$page" && [ "$(grep -o "<svg" "$page" | wc -l | tr -d " ")" = "4" ]'
 assert "the page wraps diagrams for horizontal scroll" 'grep -qF ".diagram { overflow-x: auto;" "$page"'
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Subjects, shape hashes, deep dive state, ASCII drawings, and the note section of contract diagrams.
+"""Subjects, shape hashes, deep dive state, and the note section of contract diagrams.
 
 Usage: contract_diagrams.py hash <subject>      (contract JSON on stdin)
        contract_diagrams.py subject <subject>   (contract JSON on stdin)
@@ -86,10 +86,10 @@ def state_order(lifecycle):
 
 
 def state_key(lifecycle):
-    """Transitions grouped by source state in column order, each with its number (YAML index + 1)."""
+    """Transitions grouped by source state in column order, each with its number (position in this key, from 1)."""
     transitions = lifecycle.get("transitions") or []
-    numbered = [dict(t, number=i + 1) for i, t in enumerate(transitions)]
-    return [t for name in state_order(lifecycle) for t in numbered if t["from"] == name]
+    grouped = [t for name in state_order(lifecycle) for t in transitions if t["from"] == name]
+    return [dict(t, number=i + 1) for i, t in enumerate(grouped)]
 
 
 def flow_overview(flow):
@@ -124,6 +124,10 @@ def part_cards(flow):
     } for part in flow.get("parts") or []]
 
 
+def one_line(text):
+    return " ".join(str(text).split())
+
+
 def key_line(source, target, label):
     return "%s → %s: %s" % (source, target, label) if label else "%s → %s" % (source, target)
 
@@ -150,10 +154,30 @@ def short(text, notes=None, width=MAX_LABEL):
     return kept + marker
 
 
-def with_footnotes(drawing, notes):
+def wrap_by_width(text, width, indent):
+    """Wrap by display width, at a space when one fits. Continuation lines start with indent spaces."""
+    lines, rest, limit = [], text, width
+    while display_width(rest) > limit:
+        cut = used = 0
+        for ch in rest:
+            if used + display_width(ch) > limit:
+                break
+            used += display_width(ch)
+            cut += 1
+        space = rest.rfind(" ", 1, cut + 1)
+        cut = space if space > 0 else cut
+        lines.append(" " * (width - limit) + rest[:cut].rstrip())
+        rest, limit = rest[cut:].lstrip(), width - indent
+    return lines + [" " * (width - limit) + rest]
+
+
+def with_footnotes(lines, notes):
     if not notes:
-        return drawing
-    return "\n".join([drawing, "", "labels:"] + ["[%d] %s" % (n, full) for full, n in notes.items()])
+        return lines
+    footnotes = []
+    for full, number in notes.items():
+        footnotes += wrap_by_width("[%d] %s" % (number, full), NOTE_COLUMNS, 4)
+    return lines + ["", "labels:"] + footnotes
 
 
 def read_deep_dives(contract_folder, diagrams):
@@ -181,59 +205,6 @@ def read_deep_dives(contract_folder, diagrams):
     return result
 
 
-def edge_arrow(label, forward, notes):
-    body = "──%s──" % short(label, notes) if label else "──"
-    return body + "▶" if forward else "◀" + body
-
-
-def ascii_flow(flow):
-    notes = {}
-    parts = flow.get("parts") or []
-    callers = flow.get("callers") or []
-    dependencies = flow.get("dependencies") or []
-    names = {n["id"]: short(n.get("label") or n["id"]) for n in parts + callers + dependencies}
-    caller_ids = {c["id"] for c in callers}
-    dependency_ids = {d["id"] for d in dependencies}
-    part_ids = [p["id"] for p in parts]
-    left_by_part = {pid: [] for pid in part_ids}
-    right_by_part = {pid: [] for pid in part_ids}
-    inside_rows = []
-    for edge in flow.get("edges") or []:
-        source, target, label = edge["from"], edge["to"], edge.get("label")
-        outer_is_caller = source in caller_ids or target in caller_ids
-        if outer_is_caller or source in dependency_ids or target in dependency_ids:
-            outer_ids = caller_ids if outer_is_caller else dependency_ids
-            outer, other = (source, target) if source in outer_ids else (target, source)
-            if not part_ids:
-                continue
-            owner = other if other in left_by_part else part_ids[0]
-            if outer_is_caller:
-                left_by_part[owner].append((names[outer], edge_arrow(label, source == outer, notes), source == outer))
-            else:
-                right_by_part[owner].append("%s %s" % (edge_arrow(label, target == outer, notes), names[outer]))
-        else:
-            middle = " ── %s ──▶ " % short(label, notes) if label else " ──▶ "
-            inside_rows.append("inside: %s%s%s" % (names[source], middle, names[target]))
-    left_width = max([display_width(n) + 1 + display_width(b)
-                      for rows in left_by_part.values() for n, b, _ in rows] + [0])
-    inner = max([display_width(names[pid]) for pid in part_ids] + [1])
-    box_lines = [("┌" + "─" * (inner + 2) + "┐", "", "")]
-    for pid in part_ids:
-        left, right = left_by_part[pid], right_by_part[pid]
-        for row in range(max(1, len(left), len(right))):
-            label = names[pid] if row == 0 else ""
-            left_text = ""
-            if row < len(left):
-                name, body, forward = left[row]
-                extra = "─" * (left_width - display_width(name) - 1 - display_width(body))
-                body = body[:-1] + extra + body[-1] if forward else body + extra
-                left_text = "%s %s" % (name, body)
-            box_lines.append(("│ " + pad(label, inner) + " │", left_text, right[row] if row < len(right) else ""))
-    box_lines.append(("└" + "─" * (inner + 2) + "┘", "", ""))
-    lines = [(pad(left, left_width) + " " + box + " " + right).rstrip() for box, left, right in box_lines]
-    return with_footnotes("\n".join(lines + inside_rows), notes)
-
-
 def sequence_participants(steps):
     names = []
     for step in steps:
@@ -243,110 +214,98 @@ def sequence_participants(steps):
     return names
 
 
-def ascii_sequence(sequence):
+def note_flow(flow):
     notes = {}
-    steps = sequence.get("steps") or []
-    names = sequence_participants(steps)
-    if not names:
-        return ""
-    widths = [display_width(n) for n in names]
-    gaps = [(widths[i] + widths[i + 1] + 1) // 2 + 2 for i in range(len(names) - 1)]
-    spans = []
-    for step in steps:
-        low, high = sorted((names.index(step["from"]), names.index(step["to"])))
-        label_width = display_width(short(step.get("label", ""), notes))
-        if low == high and high + 1 < len(names):
-            spans.append((low, high + 1, label_width + 6))
-        elif low != high:
-            spans.append((low, high, label_width + 5))
-    for low, high, need in sorted(spans, key=lambda s: s[1] - s[0]):
-        deficit = need - sum(gaps[low:high])
-        if deficit > 0:
-            gaps[high - 1] += deficit
-    centers = [widths[0] // 2]
-    for gap in gaps:
-        centers.append(centers[-1] + gap)
-
+    overview = flow_overview(flow)
+    cards = part_cards(flow)
+    labels = {n["id"]: n.get("label") or n["id"]
+              for kind in ("parts", "callers", "dependencies") for n in flow.get(kind) or []}
+    inner = NOTE_COLUMNS - 4
     rows = []
-
-    def put(row, col, text):
-        cells = rows[row]
-        for ch in text:
-            while len(cells) <= col:
-                cells.append(" ")
-            cells[col] = ch
-            col += 1
-            if display_width(ch) == 2:
-                while len(cells) <= col:
-                    cells.append(" ")
-                cells[col] = ""
-                col += 1
-
-    def new_row():
-        rows.append([])
-        for center in centers:
-            put(len(rows) - 1, center, "│")
-        return len(rows) - 1
-
-    rows.append([])
-    for name, center, width in zip(names, centers, widths):
-        put(0, center - width // 2, name)
-    for step in steps:
-        source, target = names.index(step["from"]), names.index(step["to"])
-        label = short(step.get("label", ""), notes)
-        row = new_row()
-        if source == target:
-            put(row, centers[source], "│──┐ " + label)
-            put(new_row(), centers[source], "│◀─┘")
-            continue
-        low, high = min(source, target), max(source, target)
-        room = centers[high] - centers[low] - 1
-        if source < target:
-            body = pad("──" + label, room - 1, "─") + "▶"
-        else:
-            body = "◀" + pad("──" + label, room - 1, "─")
-        put(row, centers[low] + 1, body)
-    return with_footnotes("\n".join("".join(cells).rstrip() for cells in rows), notes)
+    for card in cards:
+        suffix = " ◀ callers" if card["id"] in overview["caller_targets"] else ""
+        rows.append(short(card["label"] + suffix, notes, inner))
+        rows += ["  ─▶ " + short(labels[target], notes, inner - 5)
+                 for source, target in overview["links"] if source == card["id"]]
+        rows += ["  ◀─ " + short(labels[source], notes, inner - 5)
+                 for source, target in overview["callbacks"] if target == card["id"]]
+    box = ["┌ parts " + "─" * (NOTE_COLUMNS - 9) + "┐"]
+    box += ["│ " + pad(row, inner) + " │" for row in rows]
+    box += ["└" + "─" * (NOTE_COLUMNS - 2) + "┘"]
+    callers, dependencies = overview["callers"], overview["dependencies"]
+    drawing = []
+    if callers:
+        drawing += ["%d %s" % (callers, "caller" if callers == 1 else "callers"), "  ▼"]
+    drawing += box
+    if dependencies:
+        drawing += ["  ▼", "%d %s" % (dependencies, "dependency" if dependencies == 1 else "dependencies")]
+    lines = ["```text"] + with_footnotes(drawing, notes) + ["```", ""]
+    for card in cards:
+        lines += ["**%s**" % one_line(card["label"]), ""]
+        for heading, entries in (("called by", card["called_by"]), ("calls", card["calls"])):
+            if entries:
+                lines += ["- %s:" % heading] + ["  - " + (": ".join(map(one_line, e)) if e[1] else one_line(e[0]))
+                                                 for e in entries]
+        lines.append("")
+    return lines[:-1]
 
 
-def ascii_states(lifecycle):
-    notes = {}
-    transitions = lifecycle.get("transitions") or []
-    from_width = max([display_width(t["from"]) for t in transitions] + [0])
-    label_width = max([display_width(short(t.get("label", ""), notes)) for t in transitions] + [0])
-    lines = ["initial: %s" % lifecycle.get("initial", "")]
-    for t in transitions:
-        lines.append("%s ──%s──▶ %s" % (pad(t["from"], from_width), pad(short(t.get("label", ""), notes), label_width, "─"), t["to"]))
-    return with_footnotes("\n".join(lines), notes)
+def note_sequence(sequence):
+    return ["%d. %s" % (number, key_line(one_line(step["from"]), one_line(step["to"]), one_line(step.get("label", ""))))
+            for number, step in enumerate(sequence.get("steps") or [], 1)]
 
 
-def box(title, inner_lines):
-    inner = max([display_width(title) + 2] + [display_width(l) for l in inner_lines])
-    top = "┌─ %s " % title
-    lines = [top + "─" * (inner + 2 - display_width(top) + 1) + "┐"]
-    lines += ["│ " + pad(l, inner) + " │" for l in inner_lines]
-    return lines + ["└" + "─" * (inner + 2) + "┘"]
-
-
-def ascii_architecture(architecture):
-    layers = architecture.get("layers") or []
-    labels = {c["id"]: short(c.get("label") or c["id"]) for layer in layers for c in layer.get("components") or []}
-    boxes = lambda group: [labels[c["id"]] for c in group.get("components") or []]
+def note_states(lifecycle):
     lines = []
-    for layer in reversed([l for l in layers if not l.get("sibling")]):
-        lines = box(layer["name"], boxes(layer) + lines)
-    for layer in [l for l in layers if l.get("sibling")]:
-        beside = box(layer["name"], boxes(layer))
-        left_width = max([display_width(l) for l in lines] + [0])
-        gap = " " if lines else ""
-        rows = range(max(len(lines), len(beside)))
-        lines = [(pad(lines[r] if r < len(lines) else "", left_width) + gap + (beside[r] if r < len(beside) else "")).rstrip()
-                 for r in rows]
-    ports = ["%s <- %s" % (labels.get(i["port"], i["port"]), labels.get(i["adapter"], i["adapter"]))
-             for i in architecture.get("implements") or []]
-    if ports:
-        lines.append("ports: " + ", ".join(ports))
-    return "\n".join(lines)
+    start = state_start(lifecycle)
+    if start:
+        lines += ["Start: %s" % one_line(start), ""]
+    for state in state_order(lifecycle):
+        outgoing = [t for t in state_key(lifecycle) if t["from"] == state]
+        if not outgoing:
+            continue
+        lines += ["**%s**" % one_line(state), ""]
+        lines += ["%d. → %s" % (t["number"], ": ".join(filter(None, (one_line(t["to"]), one_line(t.get("label", ""))))))
+                  for t in outgoing]
+        lines.append("")
+    return lines[:-1]
+
+
+def note_architecture(architecture):
+    notes = {}
+    layers = architecture.get("layers") or []
+    nested = [layer for layer in layers if not layer.get("sibling")]
+    trees = []
+
+    def component_rows(components, indent, has_nested_layer):
+        rows = []
+        for i, component in enumerate(components):
+            last = i == len(components) - 1 and not has_nested_layer
+            label = short(component.get("label") or component["id"], notes, NOTE_COLUMNS - indent - 3)
+            rows.append(" " * indent + ("└─ " if last else "├─ ") + label)
+        return rows
+
+    nested_rows = []
+    for depth, layer in enumerate(nested):
+        name_indent = max(0, 3 * depth - 3)
+        name = short(layer["name"], notes, NOTE_COLUMNS - name_indent - (3 if depth else 0))
+        nested_rows.append(" " * name_indent + ("└─ " if depth else "") + name)
+        nested_rows += component_rows(layer.get("components") or [], 3 * depth, depth < len(nested) - 1)
+    if nested_rows:
+        trees.append(nested_rows)
+    for layer in (layer for layer in layers if layer.get("sibling")):
+        title = short("%s (beside the nested layers)" % layer["name"], notes, NOTE_COLUMNS)
+        trees.append([title] + component_rows(layer.get("components") or [], 0, False))
+
+    drawing = [row for i, tree in enumerate(trees) for row in ([""] if i else []) + tree]
+    lines = ["```text"] + with_footnotes(drawing, notes) + ["```"]
+    labels = {c["id"]: one_line(c.get("label") or c["id"]) for layer in layers for c in layer.get("components") or []}
+    implements = architecture.get("implements") or []
+    if implements:
+        lines += ["", "Implements:", ""]
+        lines += ["- %s ─▶ %s" % (labels.get(i["adapter"], i["adapter"]), labels.get(i["port"], i["port"]))
+                  for i in implements]
+    return lines
 
 
 def heading_text(text):
@@ -362,18 +321,14 @@ def note_lines(diagrams, deep_dives):
         kind, _, _ = subject.partition(":")
         title = heading_text(value.get("title") or value.get("id", "")) if kind != "flow" else ""
         if kind == "flow":
-            out.append("### Component flow")
-            drawing = ascii_flow(value)
+            out += ["### Component flow", ""] + note_flow(value)
         elif kind == "sequence":
-            out.append("### Sequence: %s" % title)
-            drawing = ascii_sequence(value)
+            out += ["### Sequence: %s" % title, ""] + note_sequence(value)
         elif kind == "states":
-            out.append("### States: %s" % title)
-            drawing = ascii_states(value)
+            out += ["### States: %s" % title, ""] + note_states(value)
         else:
-            out.append("### Architecture (%s)" % heading_text(value.get("style", "")))
-            drawing = ascii_architecture(value)
-        out += ["", "```text", drawing, "```", ""]
+            out += ["### Architecture (%s)" % heading_text(value.get("style", "")), ""] + note_architecture(value)
+        out.append("")
     if deep_dives:
         out += ["### Deep dives", ""]
         for dive in deep_dives:
