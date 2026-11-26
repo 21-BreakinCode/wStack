@@ -255,10 +255,17 @@ def box(title, inner_lines):
 def ascii_architecture(architecture):
     layers = architecture.get("layers") or []
     labels = {c["id"]: short(c.get("label") or c["id"]) for layer in layers for c in layer.get("components") or []}
+    boxes = lambda group: [labels[c["id"]] for c in group.get("components") or []]
     lines = []
-    for layer in reversed(layers):
-        own = [labels[c["id"]] for c in layer.get("components") or []]
-        lines = box(layer["name"], own + lines)
+    for layer in reversed([l for l in layers if not l.get("sibling")]):
+        lines = box(layer["name"], boxes(layer) + lines)
+    for layer in [l for l in layers if l.get("sibling")]:
+        beside = box(layer["name"], boxes(layer))
+        left_width = max([display_width(l) for l in lines] + [0])
+        gap = " " if lines else ""
+        rows = range(max(len(lines), len(beside)))
+        lines = [(pad(lines[r] if r < len(lines) else "", left_width) + gap + (beside[r] if r < len(beside) else "")).rstrip()
+                 for r in rows]
     ports = ["%s <- %s" % (labels.get(i["port"], i["port"]), labels.get(i["adapter"], i["adapter"]))
              for i in architecture.get("implements") or []]
     if ports:

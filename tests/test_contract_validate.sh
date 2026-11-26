@@ -215,6 +215,10 @@ mutate_diagrams badstyle '.diagrams.architecture.style = "onion"'
 expect_error "a bad style fails" "bad architecture style: diagrams.architecture.style: onion"
 mutate_diagrams badkind '.diagrams.architecture.layers[0].components[0].kind = "thing"'
 expect_error "a bad component kind fails" "bad component kind: diagrams.architecture.layers[0].components[0]: thing"
+mutate_diagrams badsibling '.diagrams.architecture.layers[0].sibling = "yes"'
+expect_error "a string sibling flag fails" "bad sibling flag: diagrams.architecture.layers[0]: yes"
+mutate_diagrams siblingtrue '.diagrams.architecture.layers[0].sibling = true | .diagrams.architecture.layers[1].sibling = false'
+assert "boolean sibling flags pass" '[ "$rc" = "0" ]'
 mutate_diagrams badimplements '.diagrams.architecture.implements[0].port = "sql-store"'
 expect_error "an implements pair with a wrong kind fails" "implements needs an adapter and a port: diagrams.architecture.implements[0]"
 mutate_diagrams badrefform '.diagrams.flow.edges[0].refs = ["nofile"]'

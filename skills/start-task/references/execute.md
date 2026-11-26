@@ -86,7 +86,7 @@ Use this for a `contract` task. Execute writes drafts only, in the task folder. 
    - `diagrams.flow`: the `parts` are the processes and modules of the service. The `callers` come from `consumers`. The `dependencies` are network services, databases, queues, and storage. Each call is one edge, labeled with its route, topic, or protocol.
    - `diagrams.sequences`: add up to five, one for each key flow.
    - `diagrams.states`: add one state lifecycle for each record with a status field.
-   - `diagrams.architecture`: add it only for code with clean, hexagonal, or layered layers.
+   - `diagrams.architecture`: add it only for code with clean, hexagonal, or layered layers. List the layers from outer to inner. Set `sibling: true` on a layer that sits beside the others instead of around them, for example workers that import every layer.
    - Every entry that needs `refs` cites them at `verified_commit`.
 
    For a new project, keep `diagrams: {}`.

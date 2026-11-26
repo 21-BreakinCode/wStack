@@ -1,5 +1,6 @@
 """Unit tests for scripts/contract_diagrams.py: python3 tests/contract/test_contract_diagrams.py"""
 import copy
+import hashlib
 import json
 import re
 import subprocess
@@ -13,6 +14,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import contract_diagrams as cd  # noqa: E402
 
 DIAGRAMS = {}
+
+ASCII_ARCHITECTURE_SHA256 = "0f7cea8aade4d3fe4c83cc2756b30184f814b9face9292731aa9c72a0642f36d"
 
 
 def setUpModule():
@@ -211,6 +214,31 @@ class Ascii(unittest.TestCase):
         arch = {"layers": [{"name": "l", "components": [{"id": "store-port"}, {"id": "sql-store"}]}],
                 "implements": [{"adapter": "sql-store", "port": "store-port"}]}
         self.assertIn("store-port <- sql-store", cd.ascii_architecture(arch))
+
+    def test_ascii_architecture_without_siblings_is_unchanged(self):
+        text = cd.ascii_architecture(DIAGRAMS["architecture"])
+        self.assertEqual(hashlib.sha256(text.encode()).hexdigest(), ASCII_ARCHITECTURE_SHA256)
+
+    def test_ascii_architecture_sibling_sits_right_of_outer_box(self):
+        arch = copy.deepcopy(DIAGRAMS["architecture"])
+        arch["layers"].insert(1, {"name": "workers", "sibling": True, "components": [
+            {"id": "job-runner", "label": "Job runner", "kind": "other"}]})
+        lines = cd.ascii_architecture(arch).split("\n")
+        nested = cd.ascii_architecture(DIAGRAMS["architecture"]).split("\n")
+        self.assertIn("adapters", lines[0])
+        self.assertIn("┌─ workers", lines[0])
+        self.assertGreater(lines[0].index("┌─ workers"), lines[0].index("┐"))
+        self.assertEqual(lines[0][:lines[0].index("┐") + 2], nested[0][:nested[0].index("┐") + 1] + " ")
+        self.assertIn("Job runner", lines[1])
+        self.assertTrue(lines[-1].startswith("ports:"))
+
+    def test_ascii_architecture_all_siblings_sit_side_by_side(self):
+        arch = {"layers": [{"name": "alpha", "sibling": True, "components": [{"id": "a", "label": "A"}]},
+                           {"name": "beta", "sibling": True, "components": []}]}
+        lines = cd.ascii_architecture(arch).split("\n")
+        self.assertEqual(len(lines), 3)
+        self.assertTrue(lines[0].startswith("┌─ alpha"))
+        self.assertIn(" ┌─ beta", lines[0])
 
 
 class DeepDives(unittest.TestCase):

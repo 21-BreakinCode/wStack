@@ -97,6 +97,8 @@ findings="$(printf '%s' "$contract_json" | jq -r '
        | ([$layers[] | . as $layer | $layer.e.components | items("\($layer.where).components")[]]) as $components
        | (if ($arch | has("style")) and (["clean","hexagonal","layered"] | index($arch.style) | not)
           then "E bad architecture style: diagrams.architecture.style: \($arch.style)" else empty end),
+         ($layers[] | select(.e | has("sibling") and ((.sibling | type) != "boolean"))
+           | "E bad sibling flag: \(.where): \(.e.sibling)"),
          ($components | id_findings), ($components | dup_findings),
          ($components[] | entry_findings(true; true)),
          ($components[] | select(.e.kind as $kind | ["entity","use_case","port","adapter","controller","other"] | index($kind) | not)

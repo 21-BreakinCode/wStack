@@ -351,17 +351,26 @@ def svg_states(lifecycle, prefix):
 def svg_architecture(architecture, prefix):
     layers = architecture.get("layers") or []
     labels = {c["id"]: str(c.get("label") or c["id"]) for layer in layers for c in layer.get("components") or []}
-    heads = [30 + text_width(layer.get("name", ""))
-             + sum(text_width(labels[c["id"]]) + 34 for c in layer.get("components") or []) for layer in layers]
+    heads_of = lambda group: [30 + text_width(layer.get("name", ""))
+                              + sum(text_width(labels[c["id"]]) + 34 for c in layer.get("components") or []) for layer in group]
+    siblings = [layer for layer in layers if layer.get("sibling")]
+    layers = [layer for layer in layers if not layer.get("sibling")]
+    heads = heads_of(layers)
     widths, heights, inner_w, inner_h = [0] * len(layers), [0] * len(layers), 0, 0
     for depth in reversed(range(len(layers))):
         widths[depth] = inner_w = max(heads[depth], inner_w + 48 if inner_w else 0)
         heights[depth] = inner_h = LAYER_HEAD + (inner_h + 24 if inner_h else 0)
     canvas = Canvas(prefix, caption("architecture", architecture))
     pills = {}
-    for depth, layer in enumerate(layers):
-        x, y = PAD + 24 * depth, PAD + LAYER_HEAD * depth
-        canvas.rect(x, y, widths[depth], heights[depth], "layer", rx=10)
+    # Each sibling is a head-high box to the right of the nested group, top-aligned with it.
+    next_x = PAD + (widths[0] + 24 if layers else 0)
+    placed = [(layer, PAD + 24 * depth, PAD + LAYER_HEAD * depth, widths[depth], heights[depth])
+              for depth, layer in enumerate(layers)]
+    for layer, head in zip(siblings, heads_of(siblings)):
+        placed.append((layer, next_x, PAD, head, LAYER_HEAD))
+        next_x += head + 24
+    for layer, x, y, width, height in placed:
+        canvas.rect(x, y, width, height, "layer", rx=10)
         canvas.text(x + 12, y + 29, layer.get("name", ""), "layer-name", anchor="start")
         pill_x = x + 28 + text_width(layer.get("name", ""))
         for component in layer.get("components") or []:

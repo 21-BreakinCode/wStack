@@ -1,5 +1,6 @@
 """Unit tests for scripts/contract_diagrams_svg.py: python3 tests/contract/test_contract_diagrams_svg.py"""
 import copy
+import hashlib
 import json
 import re
 import subprocess
@@ -15,6 +16,8 @@ import contract_diagrams_svg as cds  # noqa: E402
 DIAGRAMS = {}
 NASTY = '<b>&"x"'
 NASTY_ESCAPED = "&lt;b&gt;&amp;&quot;x&quot;"
+
+SVG_ARCHITECTURE_SHA256 = "eca422da610b5ab5aa012fd65f8edb19fbd394aa0748f5084b8294e0548fe0b7"
 
 
 def setUpModule():
@@ -233,6 +236,31 @@ class Geometry(Base):
         for outer, inner in zip(layers, layers[1:]):
             self.assertTrue(outer[0] < inner[0] and outer[1] < inner[1])
             self.assertTrue(inner[0] + inner[2] < outer[0] + outer[2] and inner[1] + inner[3] < outer[1] + outer[3])
+
+    def test_architecture_without_siblings_is_unchanged(self):
+        text = cds.svg_architecture(DIAGRAMS["architecture"], "architecture")
+        self.assertEqual(hashlib.sha256(text.encode()).hexdigest(), SVG_ARCHITECTURE_SHA256)
+
+    def test_architecture_sibling_sits_right_of_the_nested_group(self):
+        architecture = copy.deepcopy(DIAGRAMS["architecture"])
+        architecture["layers"].insert(1, {"name": "workers", "sibling": True, "components": [
+            {"id": "job-runner", "label": "Job runner", "kind": "other"}]})
+        architecture["implements"].append({"adapter": "job-runner", "port": "store-port"})
+        text = cds.svg_architecture(architecture, "architecture")
+        ET.fromstring(text)
+        layers = rects_of_class(text, "layer")
+        self.assertEqual(len(layers), 4)
+        group, sibling = layers[0], layers[3]
+        self.assertGreater(sibling[0], group[0] + group[2])
+        self.assertEqual(sibling[1], group[1])
+        self.assert_edges_touch(text, [("sql-store", "store-port"), ("job-runner", "store-port")])
+
+    def test_architecture_all_siblings_sit_side_by_side(self):
+        architecture = {"layers": [{"name": "alpha", "sibling": True, "components": [{"id": "a", "label": "A"}]},
+                                   {"name": "beta", "sibling": True, "components": []}]}
+        first, second = rects_of_class(cds.svg_architecture(architecture, "x"), "layer")
+        self.assertGreater(second[0], first[0] + first[2])
+        self.assertEqual(second[1], first[1])
 
 
 if __name__ == "__main__":
