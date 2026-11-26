@@ -35,7 +35,7 @@ In every step below, "stop" means: outside a task, print the stderr text and sto
    - The diagram type is architecture for `flow`, sequence for `sequence:<id>`, state machine for `states:<id>`, and layers for `architecture`.
    - Use `faithful` density.
    - Draw only what the JSON holds. To get a readable picture, merge, drop, or shorten nodes and labels. Add no node, edge, or label that the JSON does not hold.
-   - For the `architecture` subject, draw a layer with `sibling: true` beside the nested layers, never as a ring around them. This matches the note and the page.
+   - For the `architecture` subject, draw a layer with `sibling: true` as its own box beside or under the nested layers, never as a ring around them. This matches the note and the page. The page puts it under them when side by side is wider than 1100 px.
    - Allowed merge. In a `flow`: if several parts call the same dependency, draw one arrow from the zone around the parts to that dependency. Add a sublabel that names those parts.
    - Allowed merge. In a `flow`: if three or more callers call the same part, draw one node for them. Its label gives the count. A sublabel or a legend names the callers.
    - Every merged node and edge still comes from the JSON. The drawing adds no fact.
