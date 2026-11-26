@@ -158,7 +158,7 @@ summary { cursor: pointer; color: var(--muted); }
 code { overflow-wrap: anywhere; }
 .diagram { margin: 12px 0; }
 .diagram .scroll { overflow-x: auto; position: relative; left: 50%; transform: translateX(-50%); width: min(1200px, calc(100vw - 32px)); }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 12px; align-items: start; }
 .diagram figcaption { font-weight: 600; margin: 0 0 6px; }
 .diagram svg { display: block; max-width: none; margin: 0 auto; }
 .diagram text { font: 13px system-ui, sans-serif; fill: var(--fg); }
