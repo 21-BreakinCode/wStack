@@ -3,9 +3,10 @@
 # List the refs of the contract whose file changed.
 # Reads the same refs as contract-refs.sh: all sections, planned, and diagrams.
 # A local ref is compared between <old_commit> and <new_commit> in repo_dir.
-# A cross-repo ref `<owner>/<repo>@<commit>:path:lines` is compared between its commit and HEAD of the local clone,
-# which is found as contract-refs.sh finds it, with the same --mapping-from. This script does not fetch.
-# Output: `changed: <ref>` when the file changed, `shift: <ref> -> <owner>/<repo>@<HEAD>:path:lines` when a
+# A cross-repo ref `<owner>/<repo>@<commit>:path:lines` is compared between its commit and the tip of the local clone,
+# which is found as contract-refs.sh finds it, with the same --mapping-from. The tip is origin/HEAD, which a fetch
+# moves, or HEAD when the clone has no origin/HEAD. This script does not fetch.
+# Output: `changed: <ref>` when the file changed, `shift: <ref> -> <owner>/<repo>@<tip>:path:lines` when a
 # cross-repo file did not change, `unchecked: <ref>: <reason>`, then a `refs:` count line.
 # Exit: 0 done, 2 error.
 set -euo pipefail
@@ -38,11 +39,11 @@ while IFS= read -r ref; do
     if ! full_commit="$(git -C "$clone" rev-parse --verify -q "$ref_commit^{commit}")"; then
       echo "unchecked: $ref: unknown commit"; unchecked=$((unchecked + 1)); continue
     fi
-    clone_head="$(git -C "$clone" rev-parse HEAD)"
-    if [ "$full_commit" = "$clone_head" ]; then
+    clone_tip="$(git -C "$clone" rev-parse --verify --quiet refs/remotes/origin/HEAD || git -C "$clone" rev-parse HEAD)"
+    if [ "$full_commit" = "$clone_tip" ]; then
       unchanged=$((unchanged + 1))
-    elif git -C "$clone" --literal-pathspecs diff --quiet "$full_commit" "$clone_head" -- "${rest%:*}"; then
-      echo "shift: $ref -> $slug@$clone_head:$rest"; shifted=$((shifted + 1))
+    elif git -C "$clone" --literal-pathspecs diff --quiet "$full_commit" "$clone_tip" -- "${rest%:*}"; then
+      echo "shift: $ref -> $slug@$clone_tip:$rest"; shifted=$((shifted + 1))
     else
       echo "changed: $ref"; changed=$((changed + 1))
     fi

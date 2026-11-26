@@ -96,6 +96,26 @@ assert "--mapping-from finds the clone for a draft" '[ $rc = 0 ] && [ "$(printf 
 run "$repo" "$draft" "$commit_a" "$commit_b" --mapping-from
 assert "--mapping-from with no path exits 2" '[ $rc = 2 ] && [[ "$err" == contract-ref-shift:* ]]'
 
+# A real clone of northwind/wharf: a fetch moves its origin/HEAD, and its HEAD stays.
+wharf_seed="$work_dir/wharf-seed"; wharf_origin="$work_dir/wharf.git"; wharf="$work_dir/ws/wharf"
+git init -q --bare -b main "$wharf_origin"
+git init -q -b main "$wharf_seed"
+printf '1\n2\n' > "$wharf_seed/dock.py"; printf '1\n2\n' > "$wharf_seed/crane.py"
+git -C "$wharf_seed" add -A; git -C "$wharf_seed" commit -q -m W1; git -C "$wharf_seed" push -q "$wharf_origin" main
+wharf_old="$(git -C "$wharf_seed" rev-parse HEAD)"
+git clone -q "$wharf_origin" "$wharf"
+printf '1\n2b\n' > "$wharf_seed/crane.py"; git -C "$wharf_seed" commit -q -am W2; git -C "$wharf_seed" push -q "$wharf_origin" main
+wharf_new="$(git -C "$wharf_seed" rev-parse HEAD)"
+git -C "$wharf" fetch -q origin main
+wharf_contract="$org_dir/Services/svc/wharf.contract.yaml"
+printf 'sections:\n  abilities:\n    items:\n      - text: One.\n        refs: ["northwind/wharf@%s:dock.py:1", "northwind/wharf@%s:crane.py:2"]\n' \
+  "$wharf_old" "$wharf_old" > "$wharf_contract"
+run "$repo" "$wharf_contract" "$commit_a" "$commit_b"
+assert "the wharf clone's HEAD did not move" '[ "$(git -C "$wharf" rev-parse HEAD)" = "$wharf_old" ]'
+assert "a cross-repo ref shifts to the clone's origin/HEAD ($out)" 'printf "%s\n" "$out" | grep -qxF "shift: northwind/wharf@$wharf_old:dock.py:1 -> northwind/wharf@$wharf_new:dock.py:1"'
+assert "a file that changed up to origin/HEAD is changed" 'printf "%s\n" "$out" | grep -qxF "changed: northwind/wharf@$wharf_old:crane.py:2"'
+assert "origin/HEAD count line" '[ "$(printf "%s\n" "$out" | tail -1)" = "refs: 1 changed, 1 shifted, 0 unchanged, 0 unchecked" ]'
+
 run "$repo" "$contract" "$commit_a" deadbeef
 assert "bad commit exits 2" '[ $rc = 2 ] && [[ "$err" == contract-ref-shift:* ]]'
 run "$repo" "$contract" "$commit_a"
