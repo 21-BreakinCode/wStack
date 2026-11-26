@@ -297,7 +297,8 @@ class StatesLayout:
     """Boxes and arrow ends of the states ladder.
 
     A forward or back arrow is a curve in the band between two columns. A down or up arrow is a straight line between
-    two neighbor rows of one column. A leg runs beside its column, on the right. A lane runs below all boxes. A top or
+    two neighbor rows of one column. A leg runs beside its column, on the right. A lane runs below all boxes, and
+    leaves or enters the last row of a column through its bottom edge. A top or
     bottom loop sits on that edge of its box. A side space is the part of a band next to a column, where legs run.
     """
 
@@ -326,21 +327,38 @@ class StatesLayout:
         self.kind = {t["number"]: kind for t, kind in self.routes}
         self.lanes = sorted((t for t, kind in self.routes if kind == "lane"),
                             key=lambda t: (self.column[t["from"]] - self.column[t["to"]], t["number"]))
+        self.place_bottom_ends()
         self.ends = collections.defaultdict(list)
         for t, kind in self.routes:
-            if kind in SIDES_OF_ROUTE:
-                self.ends[(t["from"], SIDES_OF_ROUTE[kind][0])].append((t, "from"))
-                self.ends[(t["to"], SIDES_OF_ROUTE[kind][1])].append((t, "to"))
+            for which, side in zip(("from", "to"), SIDES_OF_ROUTE.get(kind, ())):
+                if (t["number"], which) not in self.bottom_ends:
+                    self.ends[(t[which], side)].append((t, which))
         self.place_legs()
         self.place_boxes()
         self.place_ends()
+
+    def place_bottom_ends(self):
+        """The lane ends on a bottom edge, by box name, and the set of their (number, "from" or "to").
+
+        A lane end on the last row of a column uses the bottom edge of its box, so it crosses no arrow on the box
+        side. On one edge, the ends of lanes that run left come first, the shallowest leftmost, and the ends of lanes
+        that run right follow, the deepest leftmost. So the lanes of one edge nest.
+        """
+        self.bottom = collections.defaultdict(list)
+        for t in self.lanes:
+            for which in ("from", "to"):
+                if t[which] == self.stacks[self.column[t[which]]][-1]:
+                    self.bottom[t[which]].append((t, which))
+        for ends in self.bottom.values():
+            ends.sort(key=lambda end: (end[1] == "to", self.lanes.index(end[0]) * (1 if end[1] == "from" else -1)))
+        self.bottom_ends = {(t["number"], which) for ends in self.bottom.values() for t, which in ends}
 
     def place_legs(self):
         """Each leg's distance from its column, keyed by number, and the side spaces that hold the legs.
 
         A shorter leg sits nearer its column. A lane's down leg sits left of its source column, outside the band
         markers there. Its up leg sits right of its target column, outside the legs there. A deeper lane takes the
-        nearer leg on both sides.
+        nearer leg on both sides. A lane end on a bottom edge has no leg.
         """
         self.left_offset, self.right_offset = {}, {}
         self.left_space = [START_ROOM if c == 0 and self.start else SIDE_MIN for c in range(len(self.stacks))]
@@ -349,8 +367,10 @@ class StatesLayout:
         for c in range(len(self.stacks)):
             legs = sorted((t for t, kind in self.routes if kind == "leg" and self.column[t["from"]] == c),
                           key=lambda t: (abs(self.row[t["from"]] - self.row[t["to"]]), t["number"]))
-            ups = [t for t in reversed(self.lanes) if self.column[t["to"]] == c]
-            downs = [t for t in reversed(self.lanes) if self.column[t["from"]] == c]
+            ups = [t for t in reversed(self.lanes)
+                   if self.column[t["to"]] == c and (t["number"], "to") not in self.bottom_ends]
+            downs = [t for t in reversed(self.lanes)
+                     if self.column[t["from"]] == c and (t["number"], "from") not in self.bottom_ends]
             for k, t in enumerate(legs + ups):
                 self.right_offset[t["number"]] = FIRST_LEG + LEG * k
             for k, t in enumerate(downs):
@@ -364,8 +384,8 @@ class StatesLayout:
         """Each box as (x, y, w, h), and the y of the first lane.
 
         A box grows taller when a side holds more ends than END_GAP allows. A column grows wider when its vertical
-        arrows would be less than END_GAP apart. Two columns are BAND apart, plus what their side spaces need over
-        SIDE_MIN.
+        arrows or the lane ends on its bottom edge would be less than END_GAP apart. Two columns are BAND apart, plus
+        what their side spaces need over SIDE_MIN.
         """
         self.loops = {(t["from"], kind) for t, kind in self.routes if kind in ("top", "bottom")}
         self.verticals = collections.defaultdict(list)  # (column, upper row): down arrows, then up arrows
@@ -374,10 +394,11 @@ class StatesLayout:
                 self.verticals[(self.column[t["from"]], min(self.row[t["from"]], self.row[t["to"]]))].append(t)
         ends = {name: max(len(self.ends[(name, "left")]), len(self.ends[(name, "right")])) for name in self.row}
         heights = {name: max(STATE_H, END_GAP * (n + 1)) if n > 1 else STATE_H for name, n in ends.items()}
-        widths = [max([text_width(name) + 28 for name in stack]
-                      + [END_GAP * (len(self.verticals[(c, r)]) + 1) + self.loop_room(c, r)
-                         for r in range(len(stack) - 1) if self.verticals[(c, r)]])
-                  for c, stack in enumerate(self.stacks)]
+        widths = []
+        for c, stack in enumerate(self.stacks):  # the arrows through the bottom edge of each row
+            counts = [len(self.verticals[(c, r)]) for r in range(len(stack) - 1)] + [len(self.bottom[stack[-1]])]
+            widths.append(max([text_width(name) + 28 for name in stack]
+                              + [END_GAP * (n + 1) + self.loop_room(c, r) for r, n in enumerate(counts) if n]))
         top = PAD + (LOOP_DEPTH if any((stack[0], "top") in self.loops for stack in self.stacks) else 0)
         x, self.box = PAD, {}
         for c, stack in enumerate(self.stacks):
@@ -390,18 +411,27 @@ class StatesLayout:
                                     for name, (_, y, _, h) in self.box.items()] + [0])
 
     def loop_room(self, c, r):
-        """The width a loop takes on the facing edges of rows r and r + 1 of column c."""
-        upper, lower = self.stacks[c][r], self.stacks[c][r + 1]
-        return LOOP_ROOM if (upper, "bottom") in self.loops or (lower, "top") in self.loops else 0
+        """The width a loop takes on the facing edges of rows r and r + 1 of column c, or on the bottom edge of r if
+        it is the last row."""
+        stack = self.stacks[c]
+        lower_has_top_loop = r + 1 < len(stack) and (stack[r + 1], "top") in self.loops
+        return LOOP_ROOM if (stack[r], "bottom") in self.loops or lower_has_top_loop else 0
 
     def place_ends(self):
-        """The point of each side end, keyed (number, "from" or "to"). The ends spread evenly over their side."""
+        """The point of each end on a side or a bottom edge, keyed (number, "from" or "to"). The ends spread evenly
+        over their side. The ends on a bottom edge spread over the part that a loop leaves free, as vertical arrows
+        do."""
         self.end = {}
         for (name, side), ends in self.ends.items():
             x, y, width, height = self.box[name]
             for k, (t, which) in enumerate(sorted(ends, key=lambda end: self.end_order(name, end))):
                 self.end[(t["number"], which)] = (x + (width if side == "right" else 0),
                                                   y + height * (k + 1) / (len(ends) + 1))
+        for name, ends in self.bottom.items():
+            x, y, width, height = self.box[name]
+            free = width - self.loop_room(self.column[name], self.row[name])
+            for k, (t, which) in enumerate(ends):
+                self.end[(t["number"], which)] = (x + free * (k + 1) / (len(ends) + 1), y + height)
 
     def end_order(self, name, end):
         """The sort key of an end on one side of the box of name.
@@ -486,13 +516,17 @@ def leg_route(layout, t):
 
 
 def under_lane_route(layout, t):
-    """Down a leg left of the source column, along a lane below all boxes, and up a leg right of the target column.
-    Its marker sits in the middle of the lane."""
+    """Down from the source, along a lane below all boxes, and up into the target. A side end runs on a leg left of
+    the source column or right of the target column. An end on a bottom edge runs straight down. Its marker sits in
+    the middle of the lane."""
     start, end = layout.end[(t["number"], "from")], layout.end[(t["number"], "to")]
-    down_x, up_x = start[0] - layout.left_offset[t["number"]], end[0] + layout.right_offset[t["number"]]
+    source_leg, target_leg = ((t["number"], which) not in layout.bottom_ends for which in ("from", "to"))
+    down_x = start[0] - layout.left_offset[t["number"]] if source_leg else start[0]
+    up_x = end[0] + layout.right_offset[t["number"]] if target_leg else end[0]
     lane_y = layout.lane_top + LANE * layout.lanes.index(t)
-    return (rounded(start, (down_x, start[1]), (down_x, lane_y), (up_x, lane_y), (up_x, end[1]), end),
-            ((down_x + up_x) / 2, lane_y))
+    points = ([start] + ([(down_x, start[1])] if source_leg else []) + [(down_x, lane_y), (up_x, lane_y)]
+              + ([(up_x, end[1])] if target_leg else []) + [end])
+    return rounded(*points), ((down_x + up_x) / 2, lane_y)
 
 
 def loop_route(layout, t):

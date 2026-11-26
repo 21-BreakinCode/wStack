@@ -121,6 +121,11 @@ LEGS_OVER_A_ROW = [legs_over_a_row("leg-up-over-a-row", [("b", "d"), ("c", "a")]
                    legs_over_a_row("two-legs-over-a-flat-row",
                                    [("q", "e"), ("e", "x"), ("b", "d"), ("a", "c"), ("c", "a")])]
 
+# q fans out to a, b and c, those fan in to d, and d goes back to q under the boxes.
+LANE_PAST_FANS = {"id": "lane-past-fans", "initial": "q", "transitions": [
+    {"from": s, "to": t} for s, t in [("q", "a"), ("q", "b"), ("q", "c"), ("a", "d"), ("b", "d"), ("c", "d"),
+                                      ("d", "q")]]}
+
 # Back arrows by one and by two columns, and arrows both ways between two neighbor rows.
 MANY_BACK_ROUTES = {"id": "many-back", "initial": "a", "transitions": [
     {"from": s, "to": t} for s, t in [("a", "b"), ("b", "c"), ("b", "d"), ("d", "a"), ("d", "a"), ("c", "d"),
@@ -142,7 +147,7 @@ def state_fixtures():
     with_second_loop["transitions"].append({"from": "queued", "to": "queued", "label": "heartbeat"})
     return [MEDIA["states"][0], SHARED_COLUMN, TASK_STATUS, FORWARD_ONLY, TWO_LOOPS, THREE_LOOPS, MANY_BACK_ROUTES,
             NESTED_LEGS, LEGS_BOTH_WAYS, DIAGRAMS["states"][0], item_status_with_more_arrows(),
-            with_second_loop] + LEGS_OVER_A_ROW
+            with_second_loop, LANE_PAST_FANS] + LEGS_OVER_A_ROW
 
 
 def box_side(point, box):
@@ -531,6 +536,14 @@ class Geometry(Base):
         text, _, paths, _ = self.assert_clean_states(MEDIA["states"][0])
         self.assert_no_crossing(paths)
         self.assertLessEqual(view_width(text), 600)
+
+    def test_lanes_through_bottom_edges_are_uncrossed(self):
+        for lifecycle in (MANY_BACK_ROUTES, LANE_PAST_FANS):  # in MANY_BACK_ROUTES two lanes share both bottom edges
+            _, boxes, paths, _ = self.assert_clean_states(lifecycle)
+            self.assert_no_crossing(paths)
+        lane = [points for _, owner, points in paths if owner == ("d", "q")][0]
+        self.assertEqual([box_side(end, boxes[name]) for end, name in ((lane[0], "d"), (lane[-1], "q"))],
+                         ["bottom", "bottom"], "the lane leaves and enters through the bottom edges")
 
     def test_shared_column_sample_is_uncrossed(self):
         _, _, paths, _ = self.assert_clean_states(SHARED_COLUMN)
