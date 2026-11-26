@@ -501,6 +501,26 @@ def lane_pairs(implements, layers, siblings):
             if adapter and port and (adapter[1] != port[1] or abs(adapter[0] - port[0]) > 1)]
 
 
+def lane_route(adapter, port, lane, lane_count, group_right, gap):
+    # Run orthogonally through the gap beside the nested group and the free band under each pill row, so no
+    # other pill is crossed. Each such edge gets its own band and its own vertical in the gap.
+    gap_x = group_right + gap * (lane + 1) / (lane_count + 1)
+    band = 42 + 3 * lane
+    return [(adapter[0], adapter[2]), (adapter[0], adapter[1] - 12 + band), (gap_x, adapter[1] - 12 + band),
+            (gap_x, port[1] - 12 + band), (port[0], port[1] - 12 + band), (port[0], port[2])]
+
+
+def place_layers(layers, siblings, widths, heights, sibling_heads, row_h, gap):
+    placed = [(layer, PAD + 24 * depth, PAD + row_h * depth, widths[depth], heights[depth])
+              for depth, layer in enumerate(layers)]
+    # Each sibling is a head-high box to the right of the nested group, top-aligned with it.
+    next_x = PAD + (widths[0] + gap if layers else 0)
+    for layer, head in zip(siblings, sibling_heads):
+        placed.append((layer, next_x, PAD, head, row_h))
+        next_x += head + 24
+    return placed, PAD + (widths[0] if layers else 0)
+
+
 def svg_architecture(architecture, prefix):
     layers = architecture.get("layers") or []
     labels = {c["id"]: str(c.get("label") or c["id"]) for layer in layers for c in layer.get("components") or []}
@@ -519,14 +539,7 @@ def svg_architecture(architecture, prefix):
         heights[depth] = inner_h = row_h + (inner_h + 24 if inner_h else 0)
     canvas = Canvas(prefix, caption("architecture", architecture))
     pills = {}
-    # Each sibling is a head-high box to the right of the nested group, top-aligned with it.
-    next_x = PAD + (widths[0] + gap if layers else 0)
-    group_right = PAD + (widths[0] if layers else 0)
-    placed = [(layer, PAD + 24 * depth, PAD + row_h * depth, widths[depth], heights[depth])
-              for depth, layer in enumerate(layers)]
-    for layer, head in zip(siblings, heads_of(siblings)):
-        placed.append((layer, next_x, PAD, head, row_h))
-        next_x += head + 24
+    placed, group_right = place_layers(layers, siblings, widths, heights, heads_of(siblings), row_h, gap)
     for layer, x, y, width, height in placed:
         canvas.rect(x, y, width, height, "layer", rx=10)
         canvas.text(x + 12, y + 29, layer.get("name", ""), "layer-name", anchor="start")
@@ -535,7 +548,7 @@ def svg_architecture(architecture, prefix):
             width = text_width(labels[component["id"]]) + 24
             canvas.rect(pill_x, y + 12, width, 26, "pill", rx=13, node=component["id"])
             canvas.text(pill_x + width / 2, y + 29, labels[component["id"]])
-            pills[component["id"]] = (pill_x + width / 2, y + 12, y + 38, layer.get("sibling"))
+            pills[component["id"]] = (pill_x + width / 2, y + 12, y + 38)
             pill_x += width + 10
     pairs = [(pair, pills.get(pair["adapter"]), pills.get(pair["port"])) for pair in architecture.get("implements") or []]
     lane_of = {id(pair): lane for lane, pair in enumerate(crossing)}
@@ -543,16 +556,8 @@ def svg_architecture(architecture, prefix):
         if not adapter or not port:
             continue
         if id(pair) in lane_of:
-            # Run orthogonally through the gap beside the nested group and the free band under each pill row, so no
-            # other pill is crossed. Each such edge gets its own band and its own vertical in the gap.
-            lane = lane_of[id(pair)]
-            gap_x = group_right + gap * (lane + 1) / (len(crossing) + 1)
-            band = 42 + 3 * lane
-            points = [(adapter[0], adapter[2]), (adapter[0], adapter[1] - 12 + band), (gap_x, adapter[1] - 12 + band),
-                      (gap_x, port[1] - 12 + band), (port[0], port[1] - 12 + band), (port[0], port[2])]
-            canvas.path(line(*points), cls="edge impl", source=pair["adapter"], target=pair["port"])
-            continue
-        if adapter[1] < port[1]:
+            d = line(*lane_route(adapter, port, lane_of[id(pair)], len(crossing), group_right, gap))
+        elif adapter[1] < port[1]:
             d = line((adapter[0], adapter[2]), (port[0], port[1]))
         elif adapter[1] > port[1]:
             d = line((adapter[0], adapter[1]), (port[0], port[2]))

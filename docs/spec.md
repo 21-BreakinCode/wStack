@@ -495,7 +495,7 @@ The contract YAML has an optional top-level `diagrams` block. A contract with no
 
 An architecture layer can carry `sibling`, a boolean and optional. A layer with `sibling: true` is drawn beside the nested layers in both views. `contract-validate.sh` rejects any other value with `bad sibling flag`.
 
-The ASCII view cuts a label that is over 32 display columns to fit, and ends it with `…[n]`. The full labels are listed under `labels:` in the same block, so no detail is lost.
+The ASCII view cuts an arrow label over 32 display columns and ends it with `…[n]`. An arrow label is a flow edge, a sequence step, or a state transition. The full arrow labels are listed under `labels:` in the same block. A flow node name or an architecture component label is cut by display width and ends in `…` with no footnote. A wide character counts as two columns. So a wide-character name is cut at about 16 characters.
 
 Every part, edge, step, transition, and architecture component cites `refs`. `contract-refs.sh` proves them like any other ref. `contract-validate.sh` checks the shape of the block.
 
