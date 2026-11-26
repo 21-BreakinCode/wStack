@@ -60,9 +60,26 @@ def pad(text, width, fill=" "):
     return text + fill * max(0, width - display_width(text))
 
 
-def short(text):
+def short(text, notes=None):
+    """Cut text to MAX_LABEL columns. With a notes dict, a cut label ends in …[n] and its full text is kept in notes."""
     text = " ".join(str(text).split())
-    return text if len(text) <= MAX_LABEL else text[:MAX_LABEL - 1] + "…"
+    if display_width(text) <= MAX_LABEL:
+        return text
+    if notes is None:
+        return text[:MAX_LABEL - 1] + "…"
+    marker = "…[%d]" % notes.setdefault(text, len(notes) + 1)
+    kept = ""
+    for ch in text:
+        if display_width(kept + ch) + len(marker) > MAX_LABEL:
+            break
+        kept += ch
+    return kept + marker
+
+
+def with_footnotes(drawing, notes):
+    if not notes:
+        return drawing
+    return "\n".join([drawing, "", "labels:"] + ["[%d] %s" % (n, full) for full, n in notes.items()])
 
 
 def read_deep_dives(contract_folder, diagrams):
@@ -90,12 +107,13 @@ def read_deep_dives(contract_folder, diagrams):
     return result
 
 
-def edge_arrow(label, forward):
-    body = "──%s──" % short(label) if label else "──"
+def edge_arrow(label, forward, notes):
+    body = "──%s──" % short(label, notes) if label else "──"
     return body + "▶" if forward else "◀" + body
 
 
 def ascii_flow(flow):
+    notes = {}
     parts = flow.get("parts") or []
     callers = flow.get("callers") or []
     dependencies = flow.get("dependencies") or []
@@ -116,11 +134,11 @@ def ascii_flow(flow):
                 continue
             owner = other if other in left_by_part else part_ids[0]
             if outer_is_caller:
-                left_by_part[owner].append((names[outer], edge_arrow(label, source == outer), source == outer))
+                left_by_part[owner].append((names[outer], edge_arrow(label, source == outer, notes), source == outer))
             else:
-                right_by_part[owner].append("%s %s" % (edge_arrow(label, target == outer), names[outer]))
+                right_by_part[owner].append("%s %s" % (edge_arrow(label, target == outer, notes), names[outer]))
         else:
-            middle = " ── %s ──▶ " % short(label) if label else " ──▶ "
+            middle = " ── %s ──▶ " % short(label, notes) if label else " ──▶ "
             inside_rows.append("inside: %s%s%s" % (names[source], middle, names[target]))
     left_width = max([display_width(n) + 1 + display_width(b)
                       for rows in left_by_part.values() for n, b, _ in rows] + [0])
@@ -139,7 +157,7 @@ def ascii_flow(flow):
             box_lines.append(("│ " + pad(label, inner) + " │", left_text, right[row] if row < len(right) else ""))
     box_lines.append(("└" + "─" * (inner + 2) + "┘", "", ""))
     lines = [(pad(left, left_width) + " " + box + " " + right).rstrip() for box, left, right in box_lines]
-    return "\n".join(lines + inside_rows)
+    return with_footnotes("\n".join(lines + inside_rows), notes)
 
 
 def sequence_participants(steps):
@@ -152,6 +170,7 @@ def sequence_participants(steps):
 
 
 def ascii_sequence(sequence):
+    notes = {}
     steps = sequence.get("steps") or []
     names = sequence_participants(steps)
     if not names:
@@ -161,7 +180,7 @@ def ascii_sequence(sequence):
     spans = []
     for step in steps:
         low, high = sorted((names.index(step["from"]), names.index(step["to"])))
-        label_width = display_width(short(step.get("label", "")))
+        label_width = display_width(short(step.get("label", ""), notes))
         if low == high and high + 1 < len(names):
             spans.append((low, high + 1, label_width + 6))
         elif low != high:
@@ -200,7 +219,7 @@ def ascii_sequence(sequence):
         put(0, center - width // 2, name)
     for step in steps:
         source, target = names.index(step["from"]), names.index(step["to"])
-        label = short(step.get("label", ""))
+        label = short(step.get("label", ""), notes)
         row = new_row()
         if source == target:
             put(row, centers[source], "│──┐ " + label)
@@ -213,17 +232,18 @@ def ascii_sequence(sequence):
         else:
             body = "◀" + pad("──" + label, room - 1, "─")
         put(row, centers[low] + 1, body)
-    return "\n".join("".join(cells).rstrip() for cells in rows)
+    return with_footnotes("\n".join("".join(cells).rstrip() for cells in rows), notes)
 
 
 def ascii_states(lifecycle):
+    notes = {}
     transitions = lifecycle.get("transitions") or []
     from_width = max([display_width(t["from"]) for t in transitions] + [0])
-    label_width = max([display_width(short(t.get("label", ""))) for t in transitions] + [0])
+    label_width = max([display_width(short(t.get("label", ""), notes)) for t in transitions] + [0])
     lines = ["initial: %s" % lifecycle.get("initial", "")]
     for t in transitions:
-        lines.append("%s ──%s──▶ %s" % (pad(t["from"], from_width), pad(short(t.get("label", "")), label_width, "─"), t["to"]))
-    return "\n".join(lines)
+        lines.append("%s ──%s──▶ %s" % (pad(t["from"], from_width), pad(short(t.get("label", ""), notes), label_width, "─"), t["to"]))
+    return with_footnotes("\n".join(lines), notes)
 
 
 def box(title, inner_lines):

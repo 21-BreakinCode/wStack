@@ -95,10 +95,35 @@ class Ascii(unittest.TestCase):
 
     def test_ascii_truncates(self):
         flow = copy.deepcopy(DIAGRAMS["flow"])
-        flow["edges"][0]["label"] = "x" * 40
+        flow["edges"][0]["label"] = "x" * 45
         text = cd.ascii_flow(flow)
-        self.assertIn("x" * 31 + "…", text)
-        self.assertNotIn("x" * 32, text)
+        marked = [l for l in text.split("\n") if "…[1]" in l]
+        self.assertTrue(marked)
+        self.assertNotIn("x" * 32, marked[0])
+        self.assertIn("x" * 27 + "…[1]", marked[0])
+        self.assertIn("\n\nlabels:\n[1] " + "x" * 45, text)
+
+    def test_ascii_footnote_numbers(self):
+        flow = copy.deepcopy(DIAGRAMS["flow"])
+        flow["edges"][0]["label"] = "a" * 40
+        flow["edges"][1]["label"] = "b" * 40
+        text = cd.ascii_flow(flow)
+        self.assertIn("[1] " + "a" * 40 + "\n[2] " + "b" * 40, text)
+        flow["edges"][1]["label"] = "a" * 40
+        text = cd.ascii_flow(flow)
+        self.assertIn("[1] " + "a" * 40, text)
+        self.assertNotIn("[2]", text)
+
+    def test_ascii_sequence_footnote(self):
+        sequence = copy.deepcopy(DIAGRAMS["sequences"][0])
+        sequence["steps"][0]["label"] = "s" * 50
+        text = cd.ascii_sequence(sequence)
+        self.assertIn("…[1]", text)
+        self.assertTrue(text.endswith("labels:\n[1] " + "s" * 50))
+
+    def test_ascii_short_labels_have_no_footnotes(self):
+        self.assertNotIn("labels:", cd.ascii_flow(DIAGRAMS["flow"]))
+        self.assertNotIn("labels:", cd.ascii_sequence(DIAGRAMS["sequences"][0]))
 
     def test_ascii_sequence(self):
         lines = cd.ascii_sequence(DIAGRAMS["sequences"][0]).split("\n")
