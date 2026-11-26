@@ -281,6 +281,14 @@ Implements:
                         "implements": [{"adapter": "a", "port": "b"}]}
         self.assertEqual(cd.note_architecture(architecture)[-1], "- &lt;A> ─▶ b")
 
+    def test_note_headings_escape_angle_brackets(self):
+        diagrams = {"sequences": [{"id": "get", "title": "Get <id>", "steps": [{"from": "ui", "to": "api"}]}],
+                    "states": [{"id": "pod", "title": "Pod <phase>", "initial": "a",
+                                "transitions": [{"from": "a", "to": "b"}]}]}
+        lines = cd.note_lines(diagrams, [])
+        self.assertIn("### Sequence: Get &lt;id>", lines)
+        self.assertIn("### States: Pod &lt;phase>", lines)
+
 
 if __name__ == "__main__":
     unittest.main()

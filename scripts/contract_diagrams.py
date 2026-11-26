@@ -312,7 +312,7 @@ def note_architecture(architecture):
 
 
 def heading_text(text):
-    return " ".join(HEADING_UNSAFE.sub(" ", str(text)).split())
+    return note_text(HEADING_UNSAFE.sub(" ", str(text)))
 
 
 def note_lines(diagrams, deep_dives):
