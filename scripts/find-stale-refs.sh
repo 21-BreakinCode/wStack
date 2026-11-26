@@ -30,12 +30,12 @@ done
 [ "$(git -C "$repo" rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ] || usage_error "not a git work tree: $repo"
 git -C "$repo" rev-parse --verify --quiet "${base}^{commit}" >/dev/null || usage_error "unknown base: $base"
 
-git -C "$repo" diff --name-status -M "$base"...HEAD |
+git -C "$repo" -c core.quotepath=off diff --name-status -M "$base"...HEAD |
   awk -F '\t' '$1 ~ /^R/ || $1 == "D" { print $2 }' >>"$old_forms_file"
 
 while IFS= read -r old_form; do
   [ -n "$old_form" ] || continue
-  { git -C "$repo" grep -n -F -e "$old_form" -- . ':(exclude)CHANGELOG.md' ':(exclude)docs/decisions.md' ':(exclude)docs/superpowers' || true; } |
+  { git -C "$repo" -c core.quotepath=off grep -n -F -e "$old_form" -- . ':(exclude)CHANGELOG.md' ':(exclude)docs/decisions.md' ':(exclude)docs/superpowers' || true; } |
     OLD_FORM="$old_form" awk '{ i = index($0, ":"); j = index(substr($0, i + 1), ":"); print substr($0, 1, i + j - 1) ": " ENVIRON["OLD_FORM"] }' >>"$hits_file"
 done <"$old_forms_file"
 
