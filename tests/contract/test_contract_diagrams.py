@@ -240,6 +240,33 @@ class Ascii(unittest.TestCase):
         self.assertTrue(lines[0].startswith("┌─ alpha"))
         self.assertIn(" ┌─ beta", lines[0])
 
+    def test_ascii_sibling_taller_than_the_nested_group(self):
+        arch = {"layers": [{"name": "core", "components": []},
+                           {"name": "workers", "sibling": True, "components": [
+                               {"id": str(n), "label": "job %s" % n} for n in range(4)]}]}
+        lines = cd.ascii_architecture(arch).split("\n")
+        self.assertEqual(len(lines), 6)
+        self.assertTrue(lines[0].startswith("┌─ core"))
+        self.assertIn("┌─ workers", lines[0])
+        self.assertTrue(all(l.startswith(" ") and l.strip().startswith(("│", "└")) for l in lines[2:]))
+        self.assertEqual(len({cd.display_width(l) for l in lines[2:]}), 1)
+
+    def test_ascii_sibling_with_wide_characters_keeps_boxes_aligned(self):
+        arch = {"layers": [{"name": "核心", "components": [{"id": "a", "label": "訂單服務"}]},
+                           {"name": "workers", "sibling": True, "components": [{"id": "b", "label": "排程"}]}]}
+        lines = cd.ascii_architecture(arch).split("\n")
+        self.assertIn("┐ ┌─ workers", lines[0])
+        self.assertIn("│ │ 排程", lines[1])
+        self.assertEqual(len({cd.display_width(l) for l in lines}), 1)
+
+    def test_ascii_sibling_only_block_ends_with_ports_line(self):
+        arch = {"layers": [{"name": "alpha", "sibling": True, "components": [{"id": "a", "label": "A"}]},
+                           {"name": "beta", "sibling": True, "components": [{"id": "b", "label": "B"}]}],
+                "implements": [{"adapter": "a", "port": "b"}]}
+        lines = cd.ascii_architecture(arch).split("\n")
+        self.assertEqual(lines[-1], "ports: B <- A")
+        self.assertEqual(sum("ports:" in l for l in lines), 1)
+
 
 class DeepDives(unittest.TestCase):
     def test_read_deep_dives(self):

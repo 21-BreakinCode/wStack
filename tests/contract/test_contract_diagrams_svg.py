@@ -262,6 +262,45 @@ class Geometry(Base):
         self.assertGreater(second[0], first[0] + first[2])
         self.assertEqual(second[1], first[1])
 
+    def pills_of(self, names):
+        return {n: {"id": n, "label": n, "kind": "other", "refs": ["a.go:1"]} for n in names}
+
+    def wide_architecture(self):
+        pill = lambda name: {"id": name, "label": "Wide use case " + name, "kind": "use_case"}
+        return {"layers": [
+            {"name": "adapters", "components": [{"id": "http-in", "label": "HTTP in", "kind": "adapter"}]},
+            {"name": "workers", "sibling": True, "components": [
+                {"id": "job", "label": "Job", "kind": "adapter"}, {"id": "cron", "label": "Cron", "kind": "adapter"}]},
+            {"name": "application", "components": [pill(n) for n in ("uc-one", "uc-two", "uc-three", "uc-four")]},
+            {"name": "domain", "components": [{"id": "repo-port", "label": "Repo port", "kind": "port"},
+                                              {"id": "mail-port", "label": "Mail port", "kind": "port"}]}],
+            "implements": [{"adapter": "job", "port": "repo-port"}, {"adapter": "cron", "port": "mail-port"}]}
+
+    def test_sibling_implements_cross_no_other_pill(self):
+        text = cds.svg_architecture(self.wide_architecture(), "architecture")
+        boxes, edges = self.assert_edges_touch(text, [("job", "repo-port"), ("cron", "mail-port")])
+        for source, target, _, _, points in edges:
+            for name, ((bx, by, bw, bh),) in boxes.items():
+                if name in (source, target):
+                    continue
+                for (x0, y0), (x1, y1) in zip(points, points[1:]):
+                    crosses = (min(x0, x1) < bx + bw - 0.5 and max(x0, x1) > bx + 0.5
+                               and min(y0, y1) < by + bh - 0.5 and max(y0, y1) > by + 0.5)
+                    self.assertFalse(crosses, "%s->%s crosses %s" % (source, target, name))
+            lanes = {round(y, 1) for _, y in points[1:-1]}
+            self.assertGreater(len(lanes), 1)
+
+    def test_sibling_only_block_with_implements_stays_inside_view_box(self):
+        architecture = {"layers": [
+            {"name": "alpha", "sibling": True, "components": [{"id": "a", "label": "A", "kind": "adapter"}]},
+            {"name": "beta", "sibling": True, "components": [{"id": "b", "label": "B", "kind": "port"}]}],
+            "implements": [{"adapter": "a", "port": "b"}]}
+        text = cds.svg_architecture(architecture, "architecture")
+        boxes, _ = self.assert_edges_touch(text, [("a", "b")])
+        width = view_width(text)
+        for rect in rects_of_class(text, "layer"):
+            self.assertLessEqual(rect[0] + rect[2], width)
+
 
 if __name__ == "__main__":
     unittest.main()

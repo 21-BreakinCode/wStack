@@ -43,7 +43,7 @@ Judge each entry of the `diagrams` block like an item, with the entry as `Where`
 - A ref that does not show its claim is a blocking finding of kind `spec-mismatch`.
 - A flow that misses a caller in `consumers`, or a network service in `depends_on`, is a blocking finding. `Where` is `diagrams.flow`.
 - An `architecture` block for code with no clean, hexagonal, or layered layers is a blocking finding. `Where` is `diagrams.architecture`.
-- Judge a `sibling` flag like any other diagram claim. A layer drawn as a sibling or as a ring must match the code and the team docs. A mismatch is a blocking finding. `Where` is `diagrams.architecture.layers[<n>]`.
+- Judge a `sibling` flag like any other diagram claim. A layer drawn as a sibling must match the code and the team docs. A mismatch is a blocking finding. `Where` is `diagrams.architecture.layers[<n>]`.
 
 Blog: facts, tone, and links against the spec.
 

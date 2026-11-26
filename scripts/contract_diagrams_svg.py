@@ -364,6 +364,7 @@ def svg_architecture(architecture, prefix):
     pills = {}
     # Each sibling is a head-high box to the right of the nested group, top-aligned with it.
     next_x = PAD + (widths[0] + 24 if layers else 0)
+    group_right = PAD + (widths[0] if layers else 0)
     placed = [(layer, PAD + 24 * depth, PAD + LAYER_HEAD * depth, widths[depth], heights[depth])
               for depth, layer in enumerate(layers)]
     for layer, head in zip(siblings, heads_of(siblings)):
@@ -377,11 +378,25 @@ def svg_architecture(architecture, prefix):
             width = text_width(labels[component["id"]]) + 24
             canvas.rect(pill_x, y + 12, width, 26, "pill", rx=13, node=component["id"])
             canvas.text(pill_x + width / 2, y + 29, labels[component["id"]])
-            pills[component["id"]] = (pill_x + width / 2, y + 12, y + 38)
+            pills[component["id"]] = (pill_x + width / 2, y + 12, y + 38, layer.get("sibling"))
             pill_x += width + 10
-    for pair in architecture.get("implements") or []:
-        adapter, port = pills.get(pair["adapter"]), pills.get(pair["port"])
+    pairs = [(pair, pills.get(pair["adapter"]), pills.get(pair["port"])) for pair in architecture.get("implements") or []]
+    crossing = [pair for pair, adapter, port in pairs if adapter and port and adapter[3] != port[3]]
+    for pair, adapter, port in pairs:
         if not adapter or not port:
+            continue
+        if adapter[3] != port[3]:
+            # A sibling pill and a nested pill: run orthogonally through the gap beside the nested group and the free
+            # band under each pill row, so no other pill is crossed. Each such edge gets its own lanes.
+            lane = crossing.index(pair)
+            gap_x = group_right + 24 * (lane + 1) / (len(crossing) + 1)
+            band = 42 + 3 * (lane % 5)
+            sibling_end, nested_end = (adapter, port) if adapter[3] else (port, adapter)
+            points = [(sibling_end[0], sibling_end[2]), (sibling_end[0], sibling_end[1] - 12 + band),
+                      (gap_x, sibling_end[1] - 12 + band), (gap_x, nested_end[1] - 12 + band),
+                      (nested_end[0], nested_end[1] - 12 + band), (nested_end[0], nested_end[2])]
+            canvas.path(line(*(points if adapter[3] else points[::-1])), cls="edge impl",
+                        source=pair["adapter"], target=pair["port"])
             continue
         if adapter[1] < port[1]:
             d = line((adapter[0], adapter[2]), (port[0], port[1]))
