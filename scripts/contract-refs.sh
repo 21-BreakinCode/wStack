@@ -16,11 +16,9 @@ repo_dir="$1"
 contract_file="$2"
 mapping_from="${4:-$contract_file}"
 plugin_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "$plugin_root/scripts/lib/frontmatter.sh"
 source "$plugin_root/scripts/lib/contract-refs-read.sh"
 
 fail() { echo "contract-refs.sh: $1" >&2; exit 2; }
-expand_home() { local path="${1//\$HOME/$HOME}"; echo "${path/#\~/$HOME}"; }
 command -v jq >/dev/null 2>&1 || fail "jq is required but not installed"
 command -v yq >/dev/null 2>&1 || fail "yq is required but not installed"
 [ -f "$contract_file" ] || fail "no contract file: $contract_file"
@@ -30,31 +28,7 @@ contract_json="$(yq -o=json '.' "$contract_file")" || fail "contract is not vali
 verified_commit="$(jq -r '.verified_commit // "" | tostring' <<<"$contract_json")"
 [ -n "$verified_commit" ] || fail "contract has no verified_commit: $contract_file"
 
-# Find the initiation file up the folder tree; it holds workspace_root and the Service Mapping.
-org_dir="$(dirname "$mapping_from")"
-while [ ! -d "$org_dir" ]; do org_dir="$(dirname "$org_dir")"; done  # a new service's folder may not exist yet
-org_dir="$(cd "$org_dir" && pwd -P)"
-initiation_file=""
-while [ "$org_dir" != "/" ]; do
-  if [ -f "$org_dir/handover_handler__initiation.md" ]; then initiation_file="$org_dir/handover_handler__initiation.md"; break; fi
-  org_dir="$(dirname "$org_dir")"
-done
-mapping_rows=""; workspace_root=""
-if [ -n "$initiation_file" ]; then
-  mapping_rows="$(bash "$plugin_root/scripts/handover/parse-mapping.sh" "$initiation_file")" || fail "cannot read the service mapping in $initiation_file"
-  workspace_root="$(expand_home "$(fm_get "$initiation_file" workspace_root)")"
-fi
-
-clone_for() {  # <owner/repo>: print the local clone path, or nothing
-  local slug="$1" mapped_repo_path remote_url
-  while IFS='|' read -r _ mapped_repo_path _; do
-    [ -n "$mapped_repo_path" ] || continue
-    mapped_repo_path="$(expand_home "$mapped_repo_path")"
-    remote_url="$(git -C "$mapped_repo_path" remote get-url origin 2>/dev/null)" || continue
-    case "$remote_url" in *[/:]"$slug" | *[/:]"$slug.git") echo "$mapped_repo_path"; return ;; esac
-  done <<<"$mapping_rows"
-  if [ -n "$workspace_root" ] && [ -d "$workspace_root/${slug#*/}/.git" ]; then echo "$workspace_root/${slug#*/}"; fi
-}
+load_clone_mapping "$mapping_from"
 
 lines_form='^[0-9]+(-[0-9]+)?(, *[0-9]+(-[0-9]+)?)*$'
 checked=0; bad=0; unchecked=0

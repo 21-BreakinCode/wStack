@@ -42,8 +42,8 @@ run "$repo" "$contract" "$commit_a" "$commit_b"
 assert "exits 0" '[ $rc = 0 ]'
 assert "changed refs listed" 'printf "%s\n" "$out" | grep -qxF "changed: a.py:1" && printf "%s\n" "$out" | grep -qxF "changed: a.py:3"'
 assert "unchanged ref is not listed" '! printf "%s\n" "$out" | grep -qF "b.py:2"'
-assert "cross-repo ref is unchecked" 'printf "%s\n" "$out" | grep -qxF "unchecked: other/repo@abc123:x.py:1: cross-repo"'
-assert "count line" '[ "$(printf "%s\n" "$out" | tail -1)" = "refs: 2 changed, 1 unchanged, 1 unchecked" ]'
+assert "cross-repo ref with no initiation file is unchecked" 'printf "%s\n" "$out" | grep -qxF "unchecked: other/repo@abc123:x.py:1: no local clone of other/repo"'
+assert "count line" '[ "$(printf "%s\n" "$out" | tail -1)" = "refs: 2 changed, 0 shifted, 1 unchanged, 1 unchecked" ]'
 
 printf 'v1\n' > "$repo/資料.py"; git -C "$repo" add -A; git -C "$repo" commit -q -m C
 commit_c="$(git -C "$repo" rev-parse HEAD)"
@@ -52,6 +52,49 @@ wide_contract="$work_dir/wide.contract.yaml"
 printf 'sections:\n  abilities:\n    items:\n      - text: One.\n        refs: ["資料.py:1"]\n' > "$wide_contract"
 run "$repo" "$wide_contract" "$commit_c" "$(git -C "$repo" rev-parse HEAD)"
 assert "a non-ASCII file name matches its ref" 'printf "%s\n" "$out" | grep -qxF "changed: 資料.py:1"'
+
+# Cross-repo refs: an org folder with an initiation file, and a clone of northwind/ledger under workspace_root whose HEAD moved.
+org_dir="$work_dir/vault/Northwind"; ledger="$work_dir/ws/ledger"
+mkdir -p "$org_dir/Services/svc" "$work_dir/ws"
+printf -- '---\norg: Northwind\nworkspace_root: %s\n---\n\n## Service Mapping\n\n| app_name | repo_path | lifeos_subpath |\n| --- | --- | --- |\n| svc | %s | Services/svc |\n' \
+  "$work_dir/ws" "$repo" > "$org_dir/handover_handler__initiation.md"
+git init -q -b main "$ledger"
+printf '1\n2\n3\n' > "$ledger/keep.py"; printf '1\n2\n3\n' > "$ledger/move.py"
+git -C "$ledger" add -A; git -C "$ledger" commit -q -m L1
+git -C "$ledger" remote add origin git@github.com:northwind/ledger.git
+ledger_old="$(git -C "$ledger" rev-parse HEAD)"
+printf '1\n2b\n3\n' > "$ledger/move.py"; git -C "$ledger" commit -q -am L2
+ledger_head="$(git -C "$ledger" rev-parse HEAD)"
+cross_contract="$org_dir/Services/svc/svc.contract.yaml"
+cat > "$cross_contract" <<YAML
+sections:
+  abilities:
+    items:
+      - text: One.
+        refs: ["northwind/ledger@$ledger_old:keep.py:1", "northwind/ledger@${ledger_old:0:7}:keep.py:3"]
+      - text: Two.
+        refs: ["northwind/ledger@$ledger_old:move.py:2", "northwind/ledger@${ledger_head:0:7}:keep.py:2"]
+      - text: Three.
+        refs: ["northwind/ledger@deadbeef:keep.py:1", "northwind/gone@abc123:x.py:1", "b.py:2"]
+YAML
+run "$repo" "$cross_contract" "$commit_a" "$commit_b"
+assert "cross-repo run exits 0 ($err)" '[ $rc = 0 ]'
+assert "cross-repo file that did not change shifts to the clone HEAD" 'printf "%s\n" "$out" | grep -qxF "shift: northwind/ledger@$ledger_old:keep.py:1 -> northwind/ledger@$ledger_head:keep.py:1"'
+assert "a short commit shifts to the full HEAD sha" 'printf "%s\n" "$out" | grep -qxF "shift: northwind/ledger@${ledger_old:0:7}:keep.py:3 -> northwind/ledger@$ledger_head:keep.py:3"'
+assert "cross-repo file that changed is changed" 'printf "%s\n" "$out" | grep -qxF "changed: northwind/ledger@$ledger_old:move.py:2"'
+assert "cross-repo ref at the clone HEAD is not listed" '! printf "%s\n" "$out" | grep -qF "${ledger_head:0:7}:keep.py:2"'
+assert "unknown commit in the clone is unchecked" 'printf "%s\n" "$out" | grep -qxF "unchecked: northwind/ledger@deadbeef:keep.py:1: unknown commit"'
+assert "repo with no clone is unchecked" 'printf "%s\n" "$out" | grep -qxF "unchecked: northwind/gone@abc123:x.py:1: no local clone of northwind/gone"'
+assert "cross-repo count line ($out)" '[ "$(printf "%s\n" "$out" | tail -1)" = "refs: 1 changed, 2 shifted, 2 unchanged, 2 unchecked" ]'
+
+draft="$work_dir/task/contract.draft.yaml"
+mkdir -p "$(dirname "$draft")"; cp "$cross_contract" "$draft"
+run "$repo" "$draft" "$commit_a" "$commit_b"
+assert "a draft outside the org folder finds no clone" 'printf "%s\n" "$out" | grep -qxF "unchecked: northwind/ledger@$ledger_old:keep.py:1: no local clone of northwind/ledger"'
+run "$repo" "$draft" "$commit_a" "$commit_b" --mapping-from "$org_dir/Services/new-svc/new-svc.contract.yaml"
+assert "--mapping-from finds the clone for a draft" '[ $rc = 0 ] && [ "$(printf "%s\n" "$out" | tail -1)" = "refs: 1 changed, 2 shifted, 2 unchanged, 2 unchecked" ]'
+run "$repo" "$draft" "$commit_a" "$commit_b" --mapping-from
+assert "--mapping-from with no path exits 2" '[ $rc = 2 ] && [[ "$err" == contract-ref-shift:* ]]'
 
 run "$repo" "$contract" "$commit_a" deadbeef
 assert "bad commit exits 2" '[ $rc = 2 ] && [[ "$err" == contract-ref-shift:* ]]'
