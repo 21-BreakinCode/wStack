@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.10.0 - 2026-11-25
+## 0.10.0 - 2026-11-26
 
 - **feat:** A service contract can hold a `diagrams` block with four subjects: the component `flow`, `sequences`, `states`, and the `architecture` layers. The validator checks its shape. `contract-refs.sh` proves every ref in it. The vault note draws the block as ASCII, and the HTML page draws it as SVG. A contract with no `diagrams` block stays valid and renders as before.
 - **feat:** `/wstack:draw-contract [<service>] [<what to draw>]` draws a deep dive with the diagram-design plugin. A deep dive is one HTML file in the `diagrams/` folder next to the contract. The contract page links it. If the contract changed that part of the block after the drawing, the page marks it `stale`. A change that only moves cited lines does not make it stale. diagram-design is a soft dependency. Without it, deep dives are skipped with one line in `run-log.md`.
