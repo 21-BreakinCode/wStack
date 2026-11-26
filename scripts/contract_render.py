@@ -167,6 +167,9 @@ code { overflow-wrap: anywhere; }
 .diagram .svc { fill: none; stroke: var(--link); stroke-width: 1.5; }
 .diagram .edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
 .diagram .impl { stroke-dasharray: 5 4; }
+.diagram .mk { fill: var(--card); stroke: var(--link); stroke-width: 1.5; }
+.diagram .mkt { font: 600 11px system-ui, sans-serif; fill: var(--link); }
+.key { margin: 8px 0 0; padding-left: 28px; }
 .diagram .life { stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 4 4; }
 .diagram .head, .diagram .start { fill: var(--link); }
 .badge { margin-left: 6px; padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: .8rem; }

@@ -8,7 +8,7 @@ import html
 import re
 from urllib.parse import quote
 
-from contract_diagrams import display_width, flow_overview, part_cards, sequence_participants, state_columns, subject_slug, subjects
+from contract_diagrams import display_width, flow_overview, key_line, part_cards, sequence_participants, state_columns, subject_slug, subjects
 
 COLUMN_PX = 7.5  # estimated width of one display column of 13px text
 PAD = 12
@@ -17,6 +17,7 @@ SLOT = 36  # flow overview: vertical distance between two edge ends on one side 
 LANE_GAP = 10  # flow overview: space between a part and its nearest lane, and between the last lane and the zone edge
 LANE_PITCH = 8  # flow overview: distance between two lanes
 CALLBACK_GAP = 36  # flow overview: space between a callback box and the zone
+LOOP_W = 28  # sequence: width of a self-step loop
 STEP = 36  # sequence: vertical distance between two steps
 STATE_H = 32
 STATE_ROW = 76
@@ -24,6 +25,7 @@ LANE = 24  # states: vertical distance between two lanes below the boxes, and be
 LEG = 8  # states: horizontal distance between two vertical legs beside one column
 FIRST_LEG = 12  # states: distance from a box side to the nearest leg
 LAYER_HEAD = 56
+MARKER_R = 8  # radius of a step number marker
 NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
 
 
@@ -62,7 +64,7 @@ class Canvas:
     """Collects SVG elements and grows the view box to hold them. Edge labels paint last."""
 
     def __init__(self, prefix, title):
-        self.marker, self.title = "%s-arrow" % prefix, title
+        self.arrow_id, self.title = "%s-arrow" % prefix, title
         self.shapes, self.labels, self.right, self.bottom = [], [], 0.0, 0.0
 
     def grow(self, x, y):
@@ -85,18 +87,24 @@ class Canvas:
             ' class="%s"' % cls if cls else "", num(x), num(y), anchor, esc(value))
         (self.labels if cls == "lbl" else self.shapes).append(element)
 
-    def path(self, d, cls="edge", source=None, target=None, arrow=True):
+    def marker(self, x, y, number):
+        self.grow(x + MARKER_R, y + MARKER_R)
+        self.labels.append('<circle class="mk" data-n="%d" cx="%s" cy="%s" r="%d"/>' % (number, num(x), num(y), MARKER_R))
+        self.labels.append('<text class="mkt" x="%s" y="%s" text-anchor="middle">%d</text>' % (num(x), num(y + 4), number))
+
+    def path(self, d, cls="edge", source=None, target=None, arrow=True, number=None):
         numbers = [float(v) for v in NUMBER.findall(d)]
         self.grow(max(numbers[0::2]), max(numbers[1::2]))
         data = ' data-from="%s" data-to="%s"' % (esc(source), esc(target)) if source is not None else ""
-        end = ' marker-end="url(#%s)"' % esc(self.marker) if arrow else ""
+        data += ' data-n="%d"' % number if number is not None else ""
+        end = ' marker-end="url(#%s)"' % esc(self.arrow_id) if arrow else ""
         self.shapes.append('<path class="%s"%s d="%s"%s/>' % (cls, data, d, end))
 
     def svg(self):
         width, height = num(self.right + PAD), num(self.bottom + PAD)
         marker = ('<defs><marker id="%s" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" '
                   'markerUnits="userSpaceOnUse" orient="auto"><path class="head" d="M0 0 L10 5 L0 10 z"/>'
-                  '</marker></defs>' % esc(self.marker))
+                  '</marker></defs>' % esc(self.arrow_id))
         return ('<svg xmlns="http://www.w3.org/2000/svg" role="img" viewBox="0 0 %s %s" width="%s" height="%s">'
                 '<title>%s</title>%s%s</svg>') % (
             width, height, width, height, esc(self.title), marker, "".join(self.shapes + self.labels))
@@ -233,18 +241,10 @@ def svg_sequence(sequence, prefix):
         return canvas.svg()
     widths = [text_width(n) + 24 for n in names]
     gaps = [(widths[i] + widths[i + 1]) / 2 + 24 for i in range(len(names) - 1)]
-    spans = []
     for step in steps:
         low, high = sorted((names.index(step["from"]), names.index(step["to"])))
-        need = text_width(step.get("label", ""))
-        if low != high:
-            spans.append((low, high, need + 24))
-        elif high + 1 < len(names):
-            spans.append((low, high + 1, need + 52))
-    for low, high, need in sorted(spans, key=lambda s: s[1] - s[0]):
-        deficit = need - sum(gaps[low:high])
-        if deficit > 0:
-            gaps[high - 1] += deficit
+        if low == high and high + 1 < len(names):  # a self-step loop and its marker need room before the next lifeline
+            gaps[low] = max(gaps[low], LOOP_W + 2 * MARKER_R + 8)
     centers = [PAD + widths[0] / 2]
     for gap in gaps:
         centers.append(centers[-1] + gap)
@@ -257,16 +257,13 @@ def svg_sequence(sequence, prefix):
     for row, step in enumerate(steps):
         y = first_row + STEP * row
         source, target = centers[names.index(step["from"])], centers[names.index(step["to"])]
-        label = step.get("label", "")
         if source == target:
-            canvas.path(line((source, y - 10), (source + 28, y - 10), (source + 28, y + 4), (source, y + 4)),
-                        source=step["from"], target=step["to"])
-            if label:
-                canvas.text(source + 34, y + 1, label, "lbl", anchor="start")
+            canvas.path(line((source, y - 10), (source + LOOP_W, y - 10), (source + LOOP_W, y + 4), (source, y + 4)),
+                        source=step["from"], target=step["to"], number=row + 1)
+            canvas.marker(source + LOOP_W + MARKER_R + 4, y - 3, row + 1)
             continue
-        canvas.path(line((source, y), (target, y)), source=step["from"], target=step["to"])
-        if label:
-            canvas.text((source + target) / 2, y - 6, label, "lbl")
+        canvas.path(line((source, y), (target, y)), source=step["from"], target=step["to"], number=row + 1)
+        canvas.marker((source + target) / 2, y, row + 1)
     return canvas.svg()
 
 
@@ -542,6 +539,10 @@ def svg_architecture(architecture, prefix):
     return canvas.svg()
 
 
+def html_key(lines):
+    return '<ol class="key">%s</ol>' % "".join("<li>%s</li>" % esc(text) for text in lines)
+
+
 def html_section(diagrams, deep_dives):
     present = subjects(diagrams)
     if not present and not deep_dives:
@@ -551,6 +552,8 @@ def html_section(diagrams, deep_dives):
     for subject, value in present.items():
         kind = subject.partition(":")[0]
         cards = flow_cards_html(value) if kind == "flow" else ""
+        if kind == "sequence":
+            cards = html_key([key_line(s["from"], s["to"], s.get("label")) for s in value.get("steps") or []])
         out.append('<figure class="diagram"><figcaption>%s</figcaption>%s%s</figure>' % (
             esc(caption(kind, value)), draw[kind](value, subject_slug(subject)), cards))
     if deep_dives:

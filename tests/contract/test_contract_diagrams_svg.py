@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+import math
 import re
 import subprocess
 import sys
@@ -19,6 +20,10 @@ NASTY = '<b>&"x"'
 NASTY_ESCAPED = "&lt;b&gt;&amp;&quot;x&quot;"
 
 SVG_ARCHITECTURE_SHA256 = "eca422da610b5ab5aa012fd65f8edb19fbd394aa0748f5084b8294e0548fe0b7"
+
+
+def sequence_participants_of(sequence):
+    return {end for step in sequence["steps"] for end in (step["from"], step["to"])}
 
 
 def setUpModule():
@@ -198,8 +203,9 @@ class Svg(Base):
         flow, sequence, states, architecture = drawings()
         for label in ("API", "Worker", "2 callers", "2 dependencies"):
             self.assertIn(">%s<" % label, flow)
-        for label in ("web-ui", "api", "worker", "postgres", "validate the body"):
+        for label in ("web-ui", "api", "worker", "postgres"):
             self.assertIn(">%s<" % label, sequence)
+        self.assertNotIn('class="lbl"', sequence)
         for label in ("new", "queued", "done", "failed", "a retry"):
             self.assertIn(">%s<" % label, states)
         for label in ("adapters", "use-cases", "entities", "SQL store", "Store port"):
@@ -347,6 +353,34 @@ class Geometry(Base):
         self.assertEqual(rows, sorted(rows))
         loop = edges[1][4]
         self.assertGreater(max(p[0] for p in loop), centers["api"])
+
+    def test_sequence_steps_are_numbered(self):
+        for sequence in DIAGRAMS["sequences"] + MEDIA["sequences"]:
+            root = ET.fromstring(cds.svg_sequence(sequence, "s"))
+            paths = {e.get("data-n"): e for e in root.iter() if e.get("class") == "edge"}
+            circles = {e.get("data-n"): e for e in root.iter() if e.get("class") == "mk"}
+            numbers = [str(n + 1) for n in range(len(sequence["steps"]))]
+            self.assertEqual(sorted(paths), sorted(numbers))
+            self.assertEqual(sorted(circles), sorted(numbers))
+            for n, step in zip(numbers, sequence["steps"]):
+                center = (float(circles[n].get("cx")), float(circles[n].get("cy")))
+                nearest = min(math.dist(center, p) for p in path_samples(paths[n].get("d")))
+                self.assertLessEqual(nearest, 40 if step["from"] == step["to"] else 1)
+            self.assertEqual(sorted(e.text for e in root.iter() if e.get("class") == "mkt"), sorted(numbers))
+
+    def test_sequence_fits(self):
+        sequence = next(s for s in MEDIA["sequences"] if s["id"] == "ake-abuna-tray")
+        self.assertEqual(len(sequence_participants_of(sequence)), 7)
+        self.assertLessEqual(view_width(cds.svg_sequence(sequence, "s")), 900)
+
+    def test_key_escapes(self):
+        self.assertIn(NASTY_ESCAPED, cds.html_key([NASTY]))
+        self.assertTrue(cds.html_key(["a"]).startswith('<ol class="key"><li>a</li>'))
+
+    def test_section_holds_sequence_key(self):
+        section = cds.html_section(DIAGRAMS, [])
+        self.assertIn("<li>web-ui → api: ", section)
+        self.assertEqual(section.count('<ol class="key">'), len(DIAGRAMS["sequences"]))
 
     def test_states_edges_touch_their_boxes(self):
         lifecycle = DIAGRAMS["states"][0]
