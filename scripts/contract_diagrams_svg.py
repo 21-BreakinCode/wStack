@@ -146,13 +146,15 @@ class FlowLayout:
         self.overview = overview = flow_overview(flow)
         self.parts = parts = overview["parts"]
         self.labels = {n["id"]: str(n.get("label") or n["id"]) for kind in ("parts", "dependencies") for n in flow.get(kind) or []}
-        index = {part: i for i, part in enumerate(parts)}
-        self.links = sorted(overview["links"], key=lambda link: abs(index[link[0]] - index[link[1]]))
+        self.index = {part: i for i, part in enumerate(parts)}
+        self.links = sorted(overview["links"], key=lambda link: abs(self.index[link[0]] - self.index[link[1]]))
         self.left_ends = {part: [("_callers", part)] if part in overview["caller_targets"] else [] for part in parts}
-        self.right_ends = {part: [] for part in parts}
+        right_ends = {part: [] for part in parts}
         for source, target in self.links:
-            self.right_ends[source].append((source, target, "from"))
-            self.right_ends[target].append((source, target, "to"))
+            right_ends[source].append((source, target, "from"))
+            right_ends[target].append((source, target, "to"))
+        self.right_ends = {part: sorted(ends, key=lambda end: self.right_end_order(part, end))
+                           for part, ends in right_ends.items()}
         for source, target in overview["callbacks"]:
             self.left_ends[target].append((source, target))
         self.callers_text = count_label(overview["callers"], "caller", "callers") if overview["callers"] else ""
@@ -160,6 +162,14 @@ class FlowLayout:
             count_label(overview["dependencies"], "dependency", "dependencies") if overview["dependencies"] else "")
         self.callback_w = max([text_width(self.labels[d]) + 24 for d, _ in overview["callbacks"]] + [0])
         self.place(len(overview["caller_targets"]))
+
+    def right_end_order(self, part, end):
+        """Ends of lanes to a part above come first, the inner lane highest. Ends of lanes down follow, the outer lane
+        highest. So no lane runs across the end of another lane of this part."""
+        source, target, which = end
+        rank = self.links.index((source, target))
+        far = target if which == "from" else source
+        return (0, rank) if self.index[far] < self.index[part] else (1, -rank)
 
     def place(self, caller_lanes):
         wide = max([text_width(self.labels[p]) + 28 for p in self.parts]

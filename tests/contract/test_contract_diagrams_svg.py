@@ -407,6 +407,19 @@ class Geometry(Base):
                         self.assertFalse(min(p[0] for p in points) < x0 < max(p[0] for p in points)
                                          and min(y0, y1) < points[0][1] < max(y0, y1), "%s crosses the link lane" % source)
 
+    def test_flow_overview_links_do_not_cross(self):
+        def flow(parts, links):
+            return {"parts": [{"id": p} for p in parts], "callers": [{"id": "ui"}],
+                    "edges": [{"from": "ui", "to": parts[0]}] + [{"from": s, "to": t} for s, t in links.split()]}
+
+        # one part calls two or three parts, a call and its reply, a chain listed in either order, two parts call one
+        flows = [flow("abc", "ab ac"), flow("abcd", "ab ac ad"), flow("ab", "ab ba"), flow("abc", "ab bc"),
+                 flow("abc", "bc ab"), flow("abc", "ac bc"), MEDIA["flow"]]
+        for value in flows:
+            root = ET.fromstring(cds.svg_flow_overview(value, "f"))
+            self.assert_no_crossing([("%s>%s" % (e.get("data-from"), e.get("data-to")), None, path_samples(e.get("d")))
+                                     for e in root.iter() if e.get("class") == "edge"])
+
     def test_cards_list_every_edge(self):
         flow = MEDIA["flow"]
         labels = {n["id"]: n.get("label") or n["id"] for k in ("parts", "callers", "dependencies") for n in flow[k]}
