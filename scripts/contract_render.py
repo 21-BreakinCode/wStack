@@ -157,9 +157,12 @@ ul.items { padding-left: 20px; }
 ul.items li { margin: 8px 0; }
 details { margin: 4px 0; }
 summary { cursor: pointer; color: var(--muted); }
-code { overflow-wrap: anywhere; }
+code { overflow-wrap: anywhere; background: color-mix(in srgb, var(--fg) 8%, transparent); padding: 1px 4px; border-radius: 4px; }
 .diagram { margin: 12px 0; }
 .diagram .scroll { overflow-x: auto; position: relative; left: 50%; transform: translateX(-50%); width: min(1200px, calc(100vw - 32px)); }
+.part-card h4 { margin-bottom: 8px; }
+.part-card p { margin: 12px 0 4px; }
+.part-card ul { margin: 0; }
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 12px; align-items: start; }
 .diagram figcaption { font-weight: 600; margin: 0 0 6px; }
 .diagram svg { display: block; max-width: none; margin: 0 auto; }
